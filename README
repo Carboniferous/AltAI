@@ -1,0 +1,8 @@
+AltAI - An additional AI for Civ IV.
+
+Does not change the default AI - adds the ability for some/all players (incl. barbs) to use a new AI.
+
+ALTAI currently has separate worker AI, new city placement, plot selection, building, unit and tech selection.
+
+Still very much in an alpha state. (No national wonders, spies, missionaries, minimal navy and no air units). 
+Diplomacy and unit movement (except workers, settlers and their escorts) still controlled by original logic.
