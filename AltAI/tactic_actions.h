@@ -98,9 +98,15 @@ namespace AltAI
 
     struct ResearchTech
     {
-        ResearchTech() : techType(NO_TECH), depth(-1), techFlags(0), economicFlags(0), militaryFlags(0), workerFlags(0) {}
-        explicit ResearchTech(TechTypes techType_, int depth_ = 1) : techType(techType_), depth(depth_), techFlags(0), economicFlags(0), militaryFlags(0), workerFlags(0) {}
-        TechTypes techType;
+        ResearchTech() : techType(NO_TECH), targetTechType(NO_TECH), depth(-1), techFlags(0), economicFlags(0), militaryFlags(0), workerFlags(0) {}
+
+        explicit ResearchTech(TechTypes techType_, int depth_ = 1)
+            : techType(techType_), targetTechType(techType_), depth(depth_),
+              techFlags(0), economicFlags(0), militaryFlags(0), workerFlags(0)
+        {
+        }
+
+        TechTypes techType, targetTechType;
         int depth;
         int techFlags, economicFlags, militaryFlags, workerFlags;
         std::vector<BuildingTypes> possibleBuildings;

@@ -321,215 +321,214 @@ namespace AltAI
         return techs;
     }
 
-    TechTypes PlayerAnalysis::getResearchTech(TechTypes ignoreTechType)
+    ResearchTech PlayerAnalysis::getResearchTech(TechTypes ignoreTechType)
     {
-        TechTypes tacticsTech = playerTactics_->getResearchTech(ignoreTechType);
-        if (tacticsTech != NO_TECH && sanityCheckTech_(tacticsTech))
+        ResearchTech tacticsTech = playerTactics_->getResearchTech(ignoreTechType);
+        if (tacticsTech.techType != NO_TECH && sanityCheckTech_(tacticsTech.techType))
         {
-            //player_.getCvPlayer()->pushResearch(tacticsTech, true);
             return tacticsTech;
         }
 
-        CvPlayer* pPlayer = player_.getCvPlayer();
-        PlayerTypes playerType = player_.getPlayerID();
+//        CvPlayer* pPlayer = player_.getCvPlayer();
+//        PlayerTypes playerType = player_.getPlayerID();
+//
+//#ifdef ALTAI_DEBUG
+//        // debug
+//        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*pPlayer);
+//        std::ostream& os = pCivLog->getStream();
+//#endif
+//
+//        std::map<TechTypes, WorkerTechData> workerTechData = PlayerAnalysis::getWorkerTechData_();
+//
+//        std::map<TechTypes, int, std::greater<int> > workerBonusTechMap, workerImprovementTechMap;
+//        TechTypes bestBonusTech = NO_TECH, bestImprovementTech = NO_TECH;
+//        int bestBonusValue = 0;
+//        int bestImprovementValue = 0;  // not likely to have equal best values for different techs (no need for map to keep track of values)
+//
+//        typedef std::multimap<int, TechTypes, std::greater<int> > MostChosenTechsMap;
+//        MostChosenTechsMap mostChosenTechs;
+//
+//        for (std::map<TechTypes, WorkerTechData>::const_iterator ci(workerTechData.begin()), ciEnd(workerTechData.end()); ci != ciEnd; ++ci)
+//        {
+//            int thisBonusValue = 0;
+//            int thisImprovementValue = 0;
+//
+//            // new bonuses we can improve (todo? distinguish between bonus types we can access and those we can't? (bit of an edge case, as usually get the wheel quite early))
+//            for (std::map<BonusTypes, int>::const_iterator iter(ci->second.newBonusAccessCounts.begin()), endIter(ci->second.newBonusAccessCounts.end()); iter != endIter; ++iter)
+//            {
+//                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(iter->first);
+//                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
+//
+//                ResourceHappyInfo happyInfo = getResourceHappyInfo(pResourceInfo);
+//                ResourceHealthInfo healthInfo = getResourceHealthInfo(pResourceInfo);
+//
+//                thisBonusValue += 1 + happyInfo.actualHappy + healthInfo.actualHealth + 2 * unitCounts.first + unitCounts.second;
+//            }
+//
+//            // new bonuses we can connect
+//            for (std::set<BonusTypes>::const_iterator iter(ci->second.newConnectableBonuses.begin()), endIter(ci->second.newConnectableBonuses.end()); iter != endIter; ++iter)
+//            {
+//                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(*iter);
+//
+//                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
+//
+//                ResourceHappyInfo happyInfo = getResourceHappyInfo(pResourceInfo);
+//                ResourceHealthInfo healthInfo = getResourceHealthInfo(pResourceInfo);
+//
+//                thisBonusValue += 1 + happyInfo.actualHappy + healthInfo.actualHealth + 2 * unitCounts.first + unitCounts.second;
+//            }
+//
+//            // new bonuses we can potentially access through new cities (todo? - include ones from border expansions? - useful for v. early?) 
+//            for (std::set<BonusTypes>::const_iterator iter(ci->second.newPotentialWorkableBonuses.begin()), endIter(ci->second.newPotentialWorkableBonuses.end()); iter != endIter; ++iter)
+//            {
+//                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(*iter);
+//
+//                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
+//
+//                thisBonusValue += 1 + unitCounts.first;
+//            }
+//
+//            for (std::map<ImprovementTypes, std::pair<TotalOutput, int> >::const_iterator iter(ci->second.newValuedImprovements.begin()), endIter(ci->second.newValuedImprovements.end());
+//                iter != endIter; ++iter)
+//            {
+//                thisImprovementValue += iter->second.second;
+//            }
+//
+//            workerBonusTechMap.insert(std::make_pair(ci->first, thisBonusValue));
+//            mostChosenTechs.insert(std::make_pair(thisBonusValue, ci->first));
+//            workerImprovementTechMap.insert(std::make_pair(ci->first, thisImprovementValue));
+//
+//            if (thisBonusValue > bestBonusValue)
+//            {
+//                bestBonusTech = ci->first;
+//                bestBonusValue = thisBonusValue;
+//            }
+//
+//            if (thisImprovementValue > bestImprovementValue)
+//            {
+//                bestImprovementTech = ci->first;
+//                bestImprovementValue = thisImprovementValue;
+//            }
+//#ifdef ALTAI_DEBUG
+//            os << "\n" << gGlobals.getTechInfo(ci->first).getType() << ": bonus value = " << thisBonusValue << ", improvement value = " << thisImprovementValue;
+//#endif
+//        }
+//
+//        if (!mostChosenTechs.empty())
+//        {
+//            std::pair<MostChosenTechsMap::const_iterator, MostChosenTechsMap::const_iterator> itPair = mostChosenTechs.equal_range(mostChosenTechs.begin()->first);
+//
+//            std::vector<TechTypes> possibleTechs;
+//            for (; itPair.first != itPair.second; ++itPair.first)
+//            {
+//                possibleTechs.push_back(itPair.first->second);
+//            }
+//
+//            if (possibleTechs.size() > 1)
+//            {
+//                int bestImprovementValueOfBonusTechs = 0;
+//                TechTypes bestImprovementTechOfBonusTechs = NO_TECH;
+//
+//                for (size_t i = 0, count = possibleTechs.size(); i < count; ++i)
+//                {
+//                    std::map<TechTypes, int, std::greater<int> >::const_iterator ci(workerImprovementTechMap.find(possibleTechs[i]));
+//                    if (ci != workerImprovementTechMap.end())
+//                    {
+//                        if (ci->second > bestImprovementValueOfBonusTechs)
+//                        {
+//                            bestImprovementValueOfBonusTechs = ci->second;
+//                            bestImprovementTechOfBonusTechs = possibleTechs[i];
+//                        }
+//                    }
+//
+//                }
+//                if (bestImprovementTechOfBonusTechs != NO_TECH)
+//                {
+//                    bestBonusTech = bestImprovementTechOfBonusTechs;
+//                }
+//                else
+//                {
+//                    bestBonusTech = possibleTechs[0];
+//                }
+//            }
+//            else
+//            {
+//                bestBonusTech = possibleTechs[0];
+//            }
+//        }
+//
+//        if (bestBonusTech != NO_TECH)
+//        {
+//#ifdef ALTAI_DEBUG
+//            os << "\nBest worker tech (bonuses) = " << gGlobals.getTechInfo(bestBonusTech).getType() << ": bonus value = " << bestBonusValue;
+//#endif
+//        }
+//
+//        if (bestImprovementTech != NO_TECH)
+//        {
+//#ifdef ALTAI_DEBUG
+//            os << "\nBest worker tech (improvements) = " << gGlobals.getTechInfo(bestImprovementTech).getType() << ": improvement value = " << bestImprovementValue;
+//#endif
+//        }
+//
+//        if (bestBonusTech != NO_TECH && sanityCheckTech_(bestBonusTech))
+//        {
+//            const CvTechInfo& techInfo = gGlobals.getTechInfo(bestBonusTech);
+//            std::vector<TechTypes> orTechs = getOrTechs(getTechInfo(bestBonusTech));
+//            bool haveOrTech = false;
+//            int bestOrBonusValue = 0, bestOrImprovementValue = 0;
+//            TechTypes bestOrBonusTech = NO_TECH, bestOrImprovementTech = NO_TECH;
+//            if (orTechs.size() > 1)
+//            {
+//                for (int i = 0, count = orTechs.size(); i < count; ++i)
+//                {
+//                    if (CvTeamAI::getTeam(player_.getTeamID()).isHasTech(orTechs[i]))
+//                    {
+//                        haveOrTech = true;
+//                        break;
+//                    }
+//                    else
+//                    {
+//                        int thisOrBonusValue = workerBonusTechMap[orTechs[i]];
+//                        if (thisOrBonusValue > bestOrBonusValue)
+//                        {
+//                            bestOrBonusTech = orTechs[i];
+//                        }
+//                        int thisOrImprovementValue = workerImprovementTechMap[orTechs[i]];
+//                        if (thisOrImprovementValue > bestOrImprovementValue)
+//                        {
+//                            bestOrImprovementTech = orTechs[i];
+//                        }
+//                    }
+//                }
+//            }
+//
+//            if (!haveOrTech)
+//            {
+//                if (bestOrBonusTech != NO_TECH)
+//                {
+//                    if (sanityCheckTech_(bestOrBonusTech))
+//                    {
+//                        pPlayer->pushResearch(bestOrBonusTech);
+//                    }
+//                }
+//                else if (bestOrImprovementTech != NO_TECH)
+//                {
+//                    if (sanityCheckTech_(bestOrImprovementTech))
+//                    {
+//                        pPlayer->pushResearch(bestOrImprovementTech);
+//                    }
+//                }
+//            }
+//            return sanityCheckTech_(bestBonusTech) ? bestBonusTech : NO_TECH;
+//
+//        }
+//        else if (bestImprovementTech != NO_TECH && bestImprovementValue > 10000 * pPlayer->getNumCities())
+//        {
+//            return sanityCheckTech_(bestImprovementTech) ? bestImprovementTech : NO_TECH;
+//        }
 
-#ifdef ALTAI_DEBUG
-        // debug
-        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*pPlayer);
-        std::ostream& os = pCivLog->getStream();
-#endif
-
-        std::map<TechTypes, WorkerTechData> workerTechData = PlayerAnalysis::getWorkerTechData_();
-
-        std::map<TechTypes, int, std::greater<int> > workerBonusTechMap, workerImprovementTechMap;
-        TechTypes bestBonusTech = NO_TECH, bestImprovementTech = NO_TECH;
-        int bestBonusValue = 0;
-        int bestImprovementValue = 0;  // not likely to have equal best values for different techs (no need for map to keep track of values)
-
-        typedef std::multimap<int, TechTypes, std::greater<int> > MostChosenTechsMap;
-        MostChosenTechsMap mostChosenTechs;
-
-        for (std::map<TechTypes, WorkerTechData>::const_iterator ci(workerTechData.begin()), ciEnd(workerTechData.end()); ci != ciEnd; ++ci)
-        {
-            int thisBonusValue = 0;
-            int thisImprovementValue = 0;
-
-            // new bonuses we can improve (todo? distinguish between bonus types we can access and those we can't? (bit of an edge case, as usually get the wheel quite early))
-            for (std::map<BonusTypes, int>::const_iterator iter(ci->second.newBonusAccessCounts.begin()), endIter(ci->second.newBonusAccessCounts.end()); iter != endIter; ++iter)
-            {
-                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(iter->first);
-                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
-
-                ResourceHappyInfo happyInfo = getResourceHappyInfo(pResourceInfo);
-                ResourceHealthInfo healthInfo = getResourceHealthInfo(pResourceInfo);
-
-                thisBonusValue += 1 + happyInfo.actualHappy + healthInfo.actualHealth + 2 * unitCounts.first + unitCounts.second;
-            }
-
-            // new bonuses we can connect
-            for (std::set<BonusTypes>::const_iterator iter(ci->second.newConnectableBonuses.begin()), endIter(ci->second.newConnectableBonuses.end()); iter != endIter; ++iter)
-            {
-                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(*iter);
-
-                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
-
-                ResourceHappyInfo happyInfo = getResourceHappyInfo(pResourceInfo);
-                ResourceHealthInfo healthInfo = getResourceHealthInfo(pResourceInfo);
-
-                thisBonusValue += 1 + happyInfo.actualHappy + healthInfo.actualHealth + 2 * unitCounts.first + unitCounts.second;
-            }
-
-            // new bonuses we can potentially access through new cities (todo? - include ones from border expansions? - useful for v. early?) 
-            for (std::set<BonusTypes>::const_iterator iter(ci->second.newPotentialWorkableBonuses.begin()), endIter(ci->second.newPotentialWorkableBonuses.end()); iter != endIter; ++iter)
-            {
-                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(*iter);
-
-                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
-
-                thisBonusValue += 1 + unitCounts.first;
-            }
-
-            for (std::map<ImprovementTypes, std::pair<TotalOutput, int> >::const_iterator iter(ci->second.newValuedImprovements.begin()), endIter(ci->second.newValuedImprovements.end());
-                iter != endIter; ++iter)
-            {
-                thisImprovementValue += iter->second.second;
-            }
-
-            workerBonusTechMap.insert(std::make_pair(ci->first, thisBonusValue));
-            mostChosenTechs.insert(std::make_pair(thisBonusValue, ci->first));
-            workerImprovementTechMap.insert(std::make_pair(ci->first, thisImprovementValue));
-
-            if (thisBonusValue > bestBonusValue)
-            {
-                bestBonusTech = ci->first;
-                bestBonusValue = thisBonusValue;
-            }
-
-            if (thisImprovementValue > bestImprovementValue)
-            {
-                bestImprovementTech = ci->first;
-                bestImprovementValue = thisImprovementValue;
-            }
-#ifdef ALTAI_DEBUG
-            os << "\n" << gGlobals.getTechInfo(ci->first).getType() << ": bonus value = " << thisBonusValue << ", improvement value = " << thisImprovementValue;
-#endif
-        }
-
-        if (!mostChosenTechs.empty())
-        {
-            std::pair<MostChosenTechsMap::const_iterator, MostChosenTechsMap::const_iterator> itPair = mostChosenTechs.equal_range(mostChosenTechs.begin()->first);
-
-            std::vector<TechTypes> possibleTechs;
-            for (; itPair.first != itPair.second; ++itPair.first)
-            {
-                possibleTechs.push_back(itPair.first->second);
-            }
-
-            if (possibleTechs.size() > 1)
-            {
-                int bestImprovementValueOfBonusTechs = 0;
-                TechTypes bestImprovementTechOfBonusTechs = NO_TECH;
-
-                for (size_t i = 0, count = possibleTechs.size(); i < count; ++i)
-                {
-                    std::map<TechTypes, int, std::greater<int> >::const_iterator ci(workerImprovementTechMap.find(possibleTechs[i]));
-                    if (ci != workerImprovementTechMap.end())
-                    {
-                        if (ci->second > bestImprovementValueOfBonusTechs)
-                        {
-                            bestImprovementValueOfBonusTechs = ci->second;
-                            bestImprovementTechOfBonusTechs = possibleTechs[i];
-                        }
-                    }
-
-                }
-                if (bestImprovementTechOfBonusTechs != NO_TECH)
-                {
-                    bestBonusTech = bestImprovementTechOfBonusTechs;
-                }
-                else
-                {
-                    bestBonusTech = possibleTechs[0];
-                }
-            }
-            else
-            {
-                bestBonusTech = possibleTechs[0];
-            }
-        }
-
-        if (bestBonusTech != NO_TECH)
-        {
-#ifdef ALTAI_DEBUG
-            os << "\nBest worker tech (bonuses) = " << gGlobals.getTechInfo(bestBonusTech).getType() << ": bonus value = " << bestBonusValue;
-#endif
-        }
-
-        if (bestImprovementTech != NO_TECH)
-        {
-#ifdef ALTAI_DEBUG
-            os << "\nBest worker tech (improvements) = " << gGlobals.getTechInfo(bestImprovementTech).getType() << ": improvement value = " << bestImprovementValue;
-#endif
-        }
-
-        if (bestBonusTech != NO_TECH && sanityCheckTech_(bestBonusTech))
-        {
-            const CvTechInfo& techInfo = gGlobals.getTechInfo(bestBonusTech);
-            std::vector<TechTypes> orTechs = getOrTechs(getTechInfo(bestBonusTech));
-            bool haveOrTech = false;
-            int bestOrBonusValue = 0, bestOrImprovementValue = 0;
-            TechTypes bestOrBonusTech = NO_TECH, bestOrImprovementTech = NO_TECH;
-            if (orTechs.size() > 1)
-            {
-                for (int i = 0, count = orTechs.size(); i < count; ++i)
-                {
-                    if (CvTeamAI::getTeam(player_.getTeamID()).isHasTech(orTechs[i]))
-                    {
-                        haveOrTech = true;
-                        break;
-                    }
-                    else
-                    {
-                        int thisOrBonusValue = workerBonusTechMap[orTechs[i]];
-                        if (thisOrBonusValue > bestOrBonusValue)
-                        {
-                            bestOrBonusTech = orTechs[i];
-                        }
-                        int thisOrImprovementValue = workerImprovementTechMap[orTechs[i]];
-                        if (thisOrImprovementValue > bestOrImprovementValue)
-                        {
-                            bestOrImprovementTech = orTechs[i];
-                        }
-                    }
-                }
-            }
-
-            if (!haveOrTech)
-            {
-                if (bestOrBonusTech != NO_TECH)
-                {
-                    if (sanityCheckTech_(bestOrBonusTech))
-                    {
-                        pPlayer->pushResearch(bestOrBonusTech);
-                    }
-                }
-                else if (bestOrImprovementTech != NO_TECH)
-                {
-                    if (sanityCheckTech_(bestOrImprovementTech))
-                    {
-                        pPlayer->pushResearch(bestOrImprovementTech);
-                    }
-                }
-            }
-            return sanityCheckTech_(bestBonusTech) ? bestBonusTech : NO_TECH;
-
-        }
-        else if (bestImprovementTech != NO_TECH && bestImprovementValue > 10000 * pPlayer->getNumCities())
-        {
-            return sanityCheckTech_(bestImprovementTech) ? bestImprovementTech : NO_TECH;
-        }
-
-        return NO_TECH;
+        return ResearchTech();
     }
 
     std::map<TechTypes, PlayerAnalysis::WorkerTechData> PlayerAnalysis::getWorkerTechData_()

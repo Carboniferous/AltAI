@@ -278,7 +278,7 @@ namespace AltAI
 #endif
         }
 
-        for (PlotDataIter iter(cityData.plotOutputs.begin()), endIter(cityData.plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(cityData.plotOutputs.begin()), endIter(cityData.plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->controlled && (!ignoreExisting || iter->improvementType == NO_IMPROVEMENT))
             {

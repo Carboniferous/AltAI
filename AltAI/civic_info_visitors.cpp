@@ -72,7 +72,7 @@ namespace AltAI
             {
                 for (size_t i = 0, count = node.improvementTypeAndYieldModifiers.size(); i < count; ++i)
                 {
-                    for (PlotDataIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot() && iter->improvementType == node.improvementTypeAndYieldModifiers[i].first)
                         {
@@ -90,7 +90,7 @@ namespace AltAI
 
                 for (size_t i = 0, count = node.featureTypeAndHappyChanges.size(); i < count; ++i)
                 {
-                    for (PlotDataIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot() && iter->featureType == node.featureTypeAndHappyChanges[i].first)
                         {
@@ -108,7 +108,7 @@ namespace AltAI
 
                 if (node.improvementUpgradeRateModifier > 0)
                 {
-                    for (PlotDataIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot() && !iter->upgradeData.upgrades.empty())
                         {
@@ -152,7 +152,7 @@ namespace AltAI
 
                 if (!isEmpty(node.extraSpecialistCommerce))
                 {
-                    for (PlotDataIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         if (!iter->isActualPlot())
                         {
@@ -170,7 +170,7 @@ namespace AltAI
                         }
                     }
 
-                    for (PlotDataIter iter(data_.freeSpecOutputs.begin()), endIter(data_.freeSpecOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.freeSpecOutputs.begin()), endIter(data_.freeSpecOutputs.end()); iter != endIter; ++iter)
                     {
                         if (isAdding_)
                         {
@@ -324,7 +324,7 @@ namespace AltAI
         {
             for (size_t i = 0, count = node.improvementTypeAndYieldModifiers.size(); i < count; ++i)
             {
-                for (PlotDataConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                for (PlotDataListConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                 {
                     if (iter->isActualPlot() && iter->improvementType == node.improvementTypeAndYieldModifiers[i].first)
                     {
@@ -335,7 +335,7 @@ namespace AltAI
 
             for (size_t i = 0, count = node.featureTypeAndHappyChanges.size(); i < count; ++i)
             {
-                for (PlotDataConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                for (PlotDataListConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                 {
                     if (iter->isActualPlot() && iter->featureType == node.featureTypeAndHappyChanges[i].first)
                     {
@@ -346,7 +346,7 @@ namespace AltAI
 
             if (node.improvementUpgradeRateModifier > 0)
             {
-                for (PlotDataConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                for (PlotDataListConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                 {
                     if (iter->isActualPlot() && !iter->upgradeData.upgrades.empty())
                     {

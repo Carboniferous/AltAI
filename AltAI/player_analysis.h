@@ -46,7 +46,7 @@ namespace AltAI
             return pMapAnalysis_;
         }
 
-        TechTypes getResearchTech(TechTypes ignoreTechType = NO_TECH);
+        ResearchTech getResearchTech(TechTypes ignoreTechType = NO_TECH);
 
         void recalcTechDepths();
         int getTechResearchDepth(TechTypes techType) const;

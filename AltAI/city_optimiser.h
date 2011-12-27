@@ -33,7 +33,7 @@ namespace AltAI
         template <typename F>
             OptState optimise(TotalOutputPriority outputPriorities, TotalOutputWeights outputWeights, GrowthType growthType, bool debug = false);
 
-        OptState optimiseFoodProduction(bool debug = false);
+        OptState optimiseFoodProduction(UnitTypes unitType, bool debug = false);
 
         const boost::shared_ptr<CityData>& getOutput() const { return data_; }
         Range getTargetYield() const { return targetYield_; }
@@ -55,6 +55,7 @@ namespace AltAI
         std::pair<TotalOutput, TotalOutputWeights> maxOutputs_;
         int foodPerPop_;
         Range targetYield_;
+        bool isFoodProduction_;
  
         void calibrate_(bool debug = false);
         void setTargetYieldSurplus_(GrowthType growthType);
@@ -72,6 +73,9 @@ namespace AltAI
 
         template <class ValueAdaptor>
             std::pair<int, SwapData> juggle_(ValueAdaptor adaptor, const SwapData& swapData, bool debug = false);
+
+        template <class ValueAdaptor>
+            void handleRounding_(ValueAdaptor adaptor, bool debug = false);
     };
 
     struct PlotAssignmentSettings

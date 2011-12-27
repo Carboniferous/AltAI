@@ -912,7 +912,7 @@ namespace AltAI
         //const boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(data.owner)->getAnalysis()->getMapAnalysis();
         PlotsAndImprovements results;
 
-        for (PlotDataConstIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot() && iter->controlled && (ignoreExisting || iter->improvementType == NO_IMPROVEMENT))
             {
@@ -938,7 +938,7 @@ namespace AltAI
         const boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(data.owner)->getAnalysis()->getMapAnalysis();
         std::vector<std::pair<XYCoords, boost::tuple<FeatureTypes, ImprovementTypes, PlotYield> > > results;
 
-        for (PlotDataConstIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot() && iter->controlled && (ignoreExisting || iter->improvementType == NO_IMPROVEMENT))
             {

@@ -1178,7 +1178,7 @@ void CvUnitAI::AI_settleMove()
                     {
                         pDestPlot = getPathEndTurnPlot();
                         GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->logSettlerMission(NULL, pDestPlot, pDestPlot->getFoundValue(getOwnerINLINE()), iPathTurns, true);
-	        		    getGroup()->pushMission(MISSION_MOVE_TO, pDestPlot->getX_INLINE(), pDestPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_FOUND, pDestPlot);
+	        		    getGroup()->pushMission(MISSION_MOVE_TO, pDestPlot->getX_INLINE(), pDestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_FOUND, pDestPlot);
                         return;
                     }
                 }
@@ -1190,7 +1190,7 @@ void CvUnitAI::AI_settleMove()
             {
                 pDestPlot = getPathEndTurnPlot();
                 GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->logSettlerMission(NULL, pDestPlot, pDestPlot->getFoundValue(getOwnerINLINE()), iPathTurns, true);
-	        	getGroup()->pushMission(MISSION_MOVE_TO, pDestPlot->getX_INLINE(), pDestPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_FOUND, pDestPlot);
+	        	getGroup()->pushMission(MISSION_MOVE_TO, pDestPlot->getX_INLINE(), pDestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_FOUND, pDestPlot);
                 return;
             }
         }

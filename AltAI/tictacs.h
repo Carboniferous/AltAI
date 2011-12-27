@@ -12,7 +12,8 @@ namespace AltAI
     {
         explicit PlayerTactics(Player& player_) : player(player_) {}
         void init();
-        TechTypes getResearchTech(TechTypes ignoreTechType = NO_TECH);
+        ResearchTech getResearchTech(TechTypes ignoreTechType = NO_TECH);
+        ResearchTech getResearchTechData(TechTypes techType) const;
 
         void updateBuildingTactics();
         void updateTechTactics();

@@ -236,8 +236,11 @@ namespace AltAI
         {
             return os << "(NO_TECH)";
         }
-
         os << " can research: " << gGlobals.getTechInfo(node.techType).getType() << " (depth = " << node.depth << ")";
+        if (node.targetTechType != NO_TECH)
+        {
+            os << " target tech = " << gGlobals.getTechInfo(node.targetTechType).getType();
+        }
         if (node.techFlags)
         {
             streamTechFlags(os, node.techFlags);

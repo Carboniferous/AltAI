@@ -7,6 +7,7 @@
 #include "CvStructs.h"
 
 #include "./unit.h"
+#include "./tactic_actions.h"
 
 class CvPlayer;
 class CvCity;
@@ -89,6 +90,7 @@ namespace AltAI
         void logBestResearchTech(TechTypes techType) const;
         void logPushResearchTech(TechTypes techType) const;
         int getTechResearchDepth(TechTypes techType) const;
+        ResearchTech getCurrentResearchTech() const;
 
         void logStuckSelectionGroup(CvUnit* pHeadUnit) const;
 
@@ -119,6 +121,8 @@ namespace AltAI
         boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis_;
         boost::shared_ptr<CivHelper> pCivHelper_;
         boost::shared_ptr<SettlerManager> pSettlerManager_;
+
+        ResearchTech researchTech_;
 
         std::vector<std::pair<CivicOptionTypes, std::vector<std::pair<CivicTypes, TotalOutput> > > > bestCivics_;
 

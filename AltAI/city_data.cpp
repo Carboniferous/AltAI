@@ -222,7 +222,7 @@ namespace AltAI
         calcCityOutput_();
         cityPlotOutput.actualOutput = cityPlotOutput.output = makeOutput(cityPlotOutput.plotYield, cityPlotOutput.commerce, yieldModifier_, commerceModifier_, commercePercent_);
 
-        for (PlotDataIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             iter->actualOutput = iter->output = makeOutput(iter->plotYield, iter->commerce, yieldModifier_, commerceModifier_, commercePercent_);
             if (!iter->upgradeData.upgrades.empty())
@@ -231,7 +231,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
         {
             iter->actualOutput = iter->output = makeOutput(iter->plotYield, iter->commerce, yieldModifier_, commerceModifier_, commercePercent_);
         }
@@ -414,7 +414,7 @@ namespace AltAI
     int CityData::getFood() const
     {
         int actualYield = cityPlotOutput.actualOutput[YIELD_FOOD];
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -422,7 +422,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -444,7 +444,7 @@ namespace AltAI
         if (includeOnlyOwnedPlots)
         {
             int count = 0;
-            for (PlotDataConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
+            for (PlotDataListConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
             {
                 // if this is true, plot is not controlled by us and is controlled by someone else (not us or it wouldn't be unworkable)
                 if (!iter->cultureData.cultureSourcesMap.empty())
@@ -476,7 +476,7 @@ namespace AltAI
         os << "\n" << cityPlotOutput.coords.iX << ", " << cityPlotOutput.coords.iY;
         cityPlotOutput.cultureData.debug(os);
 
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot())
             {
@@ -485,7 +485,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot())
             {
@@ -500,7 +500,7 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
 
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot())
             {
@@ -509,7 +509,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot())
             {
@@ -539,7 +539,7 @@ namespace AltAI
         // add trade routes
         totalOutput += makeOutput(tradeRouteHelper->getTradeYield(), yieldModifier_, commerceModifier_, commercePercent_);
 
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -547,7 +547,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -587,7 +587,7 @@ namespace AltAI
 
         totalPlotYield += tradeYield;
 
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -595,7 +595,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -610,7 +610,7 @@ namespace AltAI
     {
         GreatPersonOutputMap greatPersonOutputMap(cityGreatPersonOutput);
 
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked && iter->greatPersonOutput.output != 0)
             {
@@ -625,7 +625,7 @@ namespace AltAI
         // doesn't include city generated gpp (i.e. non-variable sources)
         std::set<UnitTypes> unitTypes;
 
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->greatPersonOutput.output != 0)
             {
@@ -725,7 +725,7 @@ namespace AltAI
         const int timeHorizon = pPlayerAnalysis->getTimeHorizon();
         std::vector<std::pair<ImprovementTypes, XYCoords> > upgrades;
 
-        for (PlotDataIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (!iter->upgradeData.upgrades.empty())
             {
@@ -754,7 +754,7 @@ namespace AltAI
     int CityData::getNumPossibleSpecialists(SpecialistTypes specialistType) const
     {
         int specialistCount = 0;
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (!iter->isActualPlot() && (SpecialistTypes)iter->coords.iY == specialistType)
             {
@@ -791,7 +791,7 @@ namespace AltAI
     {
         // todo - include assignment of plots to city in count (only our plots should count)
         int improvementCount = 0;
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot() && iter->improvementType == improvementType)
             {
@@ -838,7 +838,7 @@ namespace AltAI
 
     PlotData CityData::findPlot(XYCoords coords) const
     {
-        for (PlotDataConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->coords == coords)
             {

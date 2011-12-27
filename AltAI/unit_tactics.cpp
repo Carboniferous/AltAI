@@ -90,16 +90,16 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         // debug
-        //boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
-        //std::ostream& os = pCivLog->getStream();
-        //os << "\n(selectExpansionUnitTactics) checking: " << constructItem;
+        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
+        std::ostream& os = pCivLog->getStream();
+        os << "\n(selectExpansionUnitTactics) checking: " << constructItem;
 #endif
         ConstructItem selectedConstructItem(NO_UNIT);
 
         // todo - need to include units which we also need resources for
         if (couldConstructUnit(player, 2, player.getAnalysis()->getUnitInfo(constructItem.unitType)))
         {
-            if (player.getMaxResearchRate() > 20 && !player.getSettlerManager()->getBestCitySites(120, 1).empty() ||
+            if (player.getMaxResearchRate() > 20 && !player.getSettlerManager()->getBestCitySites(140, 1).empty() ||
                 player.getMaxResearchRate() > 40 && !player.getSettlerManager()->getBestCitySites(80, 1).empty())
             {
                 if (constructItem.economicFlags & EconomicFlags::Output_Settler)
@@ -135,9 +135,9 @@ namespace AltAI
                 selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Unit_Transport;
             }
 
+            const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(constructItem.unitType);
             if (!constructItem.possibleBuildTypes.empty())
-            {
-                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(constructItem.unitType);
+            {                
                 boost::shared_ptr<MapAnalysis> pMapAnalysis = player.getAnalysis()->getMapAnalysis();
                 CityIter cityIter(*player.getCvPlayer());
                 CvCity* pCity;
@@ -191,27 +191,33 @@ namespace AltAI
                     for (std::map<BuildTypes, int>::const_iterator ci(selectedBuildTypes.begin()), ciEnd(selectedBuildTypes.end()); ci != ciEnd; ++ci)
                     {
 #ifdef ALTAI_DEBUG
-                        //os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
+                        os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
 #endif
                         selectedConstructItem.possibleBuildTypes.insert(*ci);
                     }
                 }
-                else  // check upcoming techs for new build types
+                else
                 {
-                    const std::list<ResearchTech>& selectedTechs = player.getAnalysis()->getPlayerTactics()->selectedTechTactics_;
-                    for (std::list<ResearchTech>::const_iterator ci(selectedTechs.begin()), ciEnd(selectedTechs.end()); ci != ciEnd; ++ci)
+                    // check upcoming techs for new build types
+                    ResearchTech currentResearchTech = player.getCurrentResearchTech();
+                    std::vector<ImprovementTypes> possibleImprovements = currentResearchTech.possibleImprovements;
+
+                    if (currentResearchTech.techType != NO_TECH && currentResearchTech.targetTechType != currentResearchTech.techType)
                     {
-                        for (size_t i = 0, count = ci->possibleImprovements.size(); i < count; ++i)
+                        currentResearchTech = player.getAnalysis()->getPlayerTactics()->getResearchTechData(currentResearchTech.targetTechType);
+                        std::copy(currentResearchTech.possibleImprovements.begin(), currentResearchTech.possibleImprovements.end(), std::back_inserter(possibleImprovements));
+                    }
+
+                    for (size_t i = 0, count = possibleImprovements.size(); i < count; ++i)
+                    {
+                        BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i]);
+                        if (unitInfo.getBuilds(buildType))
                         {
-                            BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(ci->possibleImprovements[i]);
-                            if (unitInfo.getBuilds(buildType))
-                            {
-#ifdef ALTAI_DEBUG
-                                //os << "\nAdding tech selected build type: " << gGlobals.getBuildInfo(GameDataAnalysis::getBuildTypeForImprovementType(ci->possibleImprovements[i])).getType();
-#endif
-                                // add 1 as a count - TODO - source this better (store info in TechTactics?)
-                                selectedBuildTypes.insert(std::make_pair(GameDataAnalysis::getBuildTypeForImprovementType(ci->possibleImprovements[i]), 1));
-                            }
+    #ifdef ALTAI_DEBUG
+                            os << "\nAdding tech selected build type: " << gGlobals.getBuildInfo(GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i])).getType();
+    #endif
+                            // add 1 as a count - TODO - source this better (store info in TechTactics?)
+                            selectedBuildTypes.insert(std::make_pair(GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i]), 1));
                         }
                     }
 
@@ -219,9 +225,9 @@ namespace AltAI
                     {
                         for (std::map<BuildTypes, int>::const_iterator ci(selectedBuildTypes.begin()), ciEnd(selectedBuildTypes.end()); ci != ciEnd; ++ci)
                         {
-#ifdef ALTAI_DEBUG
-                            //os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
-#endif
+    #ifdef ALTAI_DEBUG
+                            os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
+    #endif
                             selectedConstructItem.possibleBuildTypes.insert(*ci);
                         }
                     }
@@ -241,6 +247,9 @@ namespace AltAI
             }
             selectedConstructItem.militaryFlagValuesMap = constructItem.militaryFlagValuesMap;
             selectedConstructItem.unitType = constructItem.unitType;
+#ifdef ALTAI_DEBUG
+            os << "\nSelected build item: " << selectedConstructItem;
+#endif
         }
 
         return selectedConstructItem;

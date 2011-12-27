@@ -275,7 +275,15 @@ namespace AltAI
         }
         else
         {
-            opt.optimiseFoodProduction(true);
+            int productionModifier = pCity_->getProductionUnit() == NO_UNIT ? 0 : CvPlayerAI::getPlayer(pCity_->getOwner()).getProductionModifier(pCity_->getProductionUnit());
+            if (productionModifier != 0)
+            {
+                pCityData_->changeYieldModifier(makeYield(0, productionModifier, 0));
+            }
+            opt.optimiseFoodProduction(pCity_->getProductionUnit(), true);
+#ifdef ALTAI_DEBUG
+            pCityData_->debugBasicData(os);
+#endif
         }
 
         std::map<SpecialistTypes, int> specCounts;
@@ -283,7 +291,7 @@ namespace AltAI
         // city plot is not in plot data list
         pCity_->setWorkingPlot(CITY_HOME_PLOT, pCity_->getPopulation() > 0 && pCity_->canWork(pCity_->getCityIndexPlot(CITY_HOME_PLOT)));
 
-        for (PlotDataConstIter iter(pCityData_->plotOutputs.begin()), endIter(pCityData_->plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(pCityData_->plotOutputs.begin()), endIter(pCityData_->plotOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -309,7 +317,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataConstIter iter(pCityData_->freeSpecOutputs.begin()), endIter(pCityData_->freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(pCityData_->freeSpecOutputs.begin()), endIter(pCityData_->freeSpecOutputs.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {

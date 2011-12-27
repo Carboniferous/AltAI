@@ -3,6 +3,7 @@
 #include "./tactic_streams.h"
 #include "./tech_tactics.h"
 #include "./building_tactics.h"
+#include "./city_tactics.h"
 #include "./unit_tactics.h"
 #include "./building_tactics_visitors.h"
 #include "./tech_tactics_visitors.h"
@@ -46,13 +47,25 @@ namespace AltAI
         selectUnitTactics();
     }
 
-    TechTypes PlayerTactics::getResearchTech(TechTypes ignoreTechType)
+    ResearchTech PlayerTactics::getResearchTech(TechTypes ignoreTechType)
     {
         if (selectedTechTactics_.empty() || gGlobals.getGame().getGameTurn() == 0)
         {
             selectTechTactics();
         }
         return AltAI::getResearchTech(*this, ignoreTechType);
+    }
+
+    ResearchTech PlayerTactics::getResearchTechData(TechTypes techType) const
+    {
+        for (std::list<ResearchTech>::const_iterator ci(selectedTechTactics_.begin()), ciEnd(selectedTechTactics_.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->techType == techType)
+            {
+                return *ci;
+            }
+        }
+        return ResearchTech();
     }
 
     ConstructItem PlayerTactics::getBuildItem(const City& city)

@@ -14,5 +14,5 @@ namespace AltAI
     ResearchTech selectWorkerTechTactics(const Player& player, const ResearchTech& researchTech);
     ResearchTech selectExpansionTechTactics(const Player& player, const ResearchTech& researchTech);
 
-    TechTypes getResearchTech(const PlayerTactics& playerTactics, TechTypes ignoreTechType = NO_TECH);
+    ResearchTech getResearchTech(const PlayerTactics& playerTactics, TechTypes ignoreTechType = NO_TECH);
 }

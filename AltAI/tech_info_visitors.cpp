@@ -56,7 +56,7 @@ namespace AltAI
             {
                 if (!isEmpty(node.modifier))
                 {
-                    for (PlotDataIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot() && iter->improvementType == node.improvementType)
                         {
@@ -78,7 +78,7 @@ namespace AltAI
             {
                 if (node.enablesWaterWork)
                 {
-                    for (PlotDataIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot())
                         {

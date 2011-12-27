@@ -80,6 +80,7 @@ namespace AltAI
     void ResearchTech::write(FDataStreamBase* pStream) const
     {
         pStream->Write(techType);
+        //pStream->Write(tarfetTechType);
         pStream->Write(depth);
         pStream->Write(techFlags);
         pStream->Write(economicFlags);
@@ -97,6 +98,7 @@ namespace AltAI
     void ResearchTech::read(FDataStreamBase* pStream)
     {
         pStream->Read((int*)&techType);
+        //pStream->Read((int*)&targetTechType);
         pStream->Read((int*)&depth);
         pStream->Read(&techFlags);
         pStream->Read(&economicFlags);

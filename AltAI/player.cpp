@@ -1014,7 +1014,30 @@ namespace AltAI
 
     TechTypes Player::getResearchTech(TechTypes ignoreTechType)
     {
-        return pPlayerAnalysis_->getResearchTech(ignoreTechType);
+        ResearchTech researchTech = pPlayerAnalysis_->getResearchTech(ignoreTechType);
+        if (ignoreTechType == NO_TECH)
+        {
+            researchTech_ = researchTech;
+        }
+        return researchTech.techType;
+    }
+
+    ResearchTech Player::getCurrentResearchTech() const
+    {
+        TechTypes currentResearchTech = pPlayer_->getCurrentResearch();
+        if (currentResearchTech == NO_TECH)
+        {
+            return ResearchTech();
+        }
+
+        if (researchTech_.techType == currentResearchTech)
+        {
+            return researchTech_;
+        }
+        else
+        {
+            return pPlayerAnalysis_->getPlayerTactics()->getResearchTechData(currentResearchTech);
+        }
     }
 
     std::pair<int, int> Player::getCityRank(IDInfo city, OutputTypes outputType) const

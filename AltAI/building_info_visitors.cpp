@@ -70,7 +70,7 @@ namespace AltAI
                 // find 'plots' which represent specialists and update their outputs
                 for (size_t i = 0, count = node.specialistTypesAndYields.size(); i < count; ++i)
                 {
-                    for (PlotDataIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         // TODO - double check everything is in correct units here
                         if (!iter->isActualPlot() && (SpecialistTypes)iter->coords.iY == node.specialistTypesAndYields[i].first)
@@ -135,7 +135,7 @@ namespace AltAI
                     }
 
                     // update plot yields
-                    for (PlotDataIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot())
                         {
@@ -421,7 +421,7 @@ namespace AltAI
                         return true;
                     }
 
-                    for (PlotDataConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot())
                         {
@@ -442,7 +442,7 @@ namespace AltAI
         {
             for (size_t i = 0, count = node.specialistTypesAndYields.size(); i < count; ++i)
             {
-                for (PlotDataConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                for (PlotDataListConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
                 {
                     if (!iter->isActualPlot() && (SpecialistTypes)iter->coords.iY == node.specialistTypesAndYields[i].first)
                     {

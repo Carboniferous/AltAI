@@ -36,8 +36,8 @@ namespace AltAI
     struct HurryData;
 
     typedef std::list<PlotData> PlotDataList;
-    typedef PlotDataList::const_iterator PlotDataConstIter;
-    typedef PlotDataList::iterator PlotDataIter;
+    typedef PlotDataList::const_iterator PlotDataListConstIter;
+    typedef PlotDataList::iterator PlotDataListIter;
 
     struct CityData : boost::enable_shared_from_this<CityData>
     {

@@ -5752,8 +5752,8 @@ void CvPlot::updateWorkingCity()
 
         // AltAI - at least one should not be null - plot owner may be NO_PLAYER if city is being captured - so use the old working city
         // the owner of the city must have owned the plot
-        PlayerTypes playerType = (PlayerTypes)(m_eOwner == NO_PLAYER ? pOldWorkingCity->getOwner() : m_eOwner);
-        if (GET_PLAYER(playerType).isUsingAltAI())
+        PlayerTypes playerType = (PlayerTypes)(m_eOwner == NO_PLAYER && pOldWorkingCity ? pOldWorkingCity->getOwner() : m_eOwner);
+        if (playerType != NO_PLAYER && GET_PLAYER(playerType).isUsingAltAI())
         {
             GC.getGame().getAltAI()->getPlayer(playerType)->setWorkingCityOverride(this, pOldWorkingCity, pBestCity);
         }

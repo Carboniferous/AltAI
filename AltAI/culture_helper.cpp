@@ -36,7 +36,7 @@ namespace AltAI
 
         updatePlot_(data.cityPlotOutput, culturalLevelChange, data.pCity, cultureOutput);
 
-        PlotDataIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end());
+        PlotDataListIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end());
         while (iter != endIter)
         {
             if (iter->isActualPlot())
@@ -48,7 +48,7 @@ namespace AltAI
                     if (!(includeUnclaimedPlots && iter->controlled))
                     {
                         changedPlotsData.push_back(std::make_pair(iter->cultureData.ownerAndCultureTrumpFlag.first, iter->coords));
-                        PlotDataIter removeIter(iter++);
+                        PlotDataListIter removeIter(iter++);
                         data.unworkablePlots.splice(data.unworkablePlots.begin(), data.plotOutputs, removeIter);
                     }
                 }
@@ -75,7 +75,7 @@ namespace AltAI
                 if (thisPlotChanged)
                 {
                     changedPlotsData.push_back(std::make_pair(iter->cultureData.ownerAndCultureTrumpFlag.first, iter->coords));
-                    PlotDataIter removeIter(iter++);
+                    PlotDataListIter removeIter(iter++);
                     data.plotOutputs.splice(data.plotOutputs.begin(), data.unworkablePlots, removeIter);
                 }
                 else

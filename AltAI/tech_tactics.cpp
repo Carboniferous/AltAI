@@ -46,7 +46,8 @@ namespace AltAI
             }
             
             explicit TechSelectionHelper(ResearchTech researchTech_) : researchTech(researchTech_), isReligiousTech(false), featureProduction(0),
-                workerScore(0), religionScore(0), bonusScore(0), processScore(0), buildingScore(0), unitScore(0), totalScore(0), techValue(0)
+                workerScore(0), religionScore(0), bonusScore(0), processScore(0), buildingScore(0), unitScore(0), freeTechScore(0), 
+                totalScore(0), techValue(0)
             {
             }
 
@@ -75,7 +76,7 @@ namespace AltAI
 
             std::map<BuildingTypes, TotalOutput> possibleBuildingOutputs;
 
-            int workerScore, religionScore, bonusScore, processScore, buildingScore, unitScore, totalScore, techValue;
+            int workerScore, religionScore, bonusScore, processScore, buildingScore, unitScore, freeTechScore, totalScore, techValue;
 
             int getImprovementsTotalValue() const
             {
@@ -244,6 +245,27 @@ namespace AltAI
                 }
             }
 
+            void processFreeTechTech(TechSelectionHelper& techSelectionHelper)
+            {
+                const std::list<ResearchTech>& researchTechs = playerTactics.selectedTechTactics_;
+                const CvTeamAI& team = CvTeamAI::getTeam(player.getTeamID());
+                int maxCost = 0;
+
+                for (std::list<ResearchTech>::const_iterator ci(researchTechs.begin()), ciEnd(researchTechs.end()); ci != ciEnd; ++ci)
+                {
+                    if (ci->depth == 1)
+                    {
+                        int cost = team.getResearchLeft(ci->techType);
+                        if (cost > maxCost)
+                        {
+                            maxCost = cost;
+                        }
+                    }
+                }
+
+                techSelectionHelper.freeTechScore = maxCost;
+            }
+
             void processWorkerTech(TechSelectionHelper& techSelectionHelper)
             {
 #ifdef ALTAI_DEBUG
@@ -314,7 +336,7 @@ namespace AltAI
 
                     ResearchTech::WorkerTechDataMap::const_iterator workerIter = techSelectionHelper.researchTech.workerTechDataMap.find(pCity->getIDInfo());
 
-                    if (!workerIter->second->removableFeatureCounts.empty())
+                    if (workerIter != techSelectionHelper.researchTech.workerTechDataMap.end() && !workerIter->second->removableFeatureCounts.empty())
                     {
                         int featureProduction = 0;
                         for (std::map<FeatureTypes, int>::const_iterator featureCountIter(workerIter->second->removableFeatureCounts.begin()),
@@ -542,6 +564,11 @@ namespace AltAI
                         processReligiousTech(techSelectionHelper);
                     }
 
+                    if (ci->techFlags & TechFlags::Free_Tech)
+                    {
+                        processFreeTechTech(techSelectionHelper);
+                    }
+
                     techSelectionData.insert(std::make_pair(ci->techType, techSelectionHelper));
                 }
 
@@ -642,7 +669,8 @@ namespace AltAI
                     // Do we have any resource required?
                     iter->second.unitScore = iter->second.getUnitsScore();
 
-                    iter->second.totalScore = iter->second.workerScore + iter->second.religionScore + iter->second.bonusScore + iter->second.processScore + iter->second.buildingScore + iter->second.unitScore;
+                    iter->second.totalScore = iter->second.workerScore + iter->second.religionScore + iter->second.bonusScore + iter->second.freeTechScore +
+                        iter->second.processScore + iter->second.buildingScore + iter->second.unitScore;
 
                     iter->second.techValue = 100 * iter->second.totalScore / totalTechCost;
                     if (iter->second.techValue > bestTechValue)
@@ -658,6 +686,7 @@ namespace AltAI
                     civLog << "\nScores: worker = " << iter->second.workerScore << ", religion = " << iter->second.religionScore
                            << ", bonus = " << iter->second.bonusScore << ", process = " << iter->second.processScore
                            << ", buildings = " << iter->second.buildingScore << ", units = " << iter->second.unitScore
+                           << ", free techs = " << iter->second.freeTechScore
                            << ", tech score = " << iter->second.totalScore << ", value = " << iter->second.techValue;
 #endif
                 }
@@ -675,6 +704,7 @@ namespace AltAI
                 // choose first tech on path
                 if (selection.techType != NO_TECH && chooseOrTech())
                 {
+                    selection.targetTechType = bestTech;
 #ifdef ALTAI_DEBUG
                     civLog << "\nChosen or tech: " << gGlobals.getTechInfo(selection.techType).getType();
 #endif
@@ -1101,10 +1131,15 @@ namespace AltAI
             }
         }
 
+        if (researchTech.techFlags & TechFlags::Free_Tech || researchTech.techFlags & TechFlags::Free_GP)
+        {
+            return researchTech;
+        }
+
         return ResearchTech();
     }
 
-    TechTypes getResearchTech(const PlayerTactics& playerTactics, TechTypes ignoreTechType)
+    ResearchTech getResearchTech(const PlayerTactics& playerTactics, TechTypes ignoreTechType)
     {
         TechSelectionData selectionData(playerTactics);
 
@@ -1116,6 +1151,6 @@ namespace AltAI
         selectionData.scoreTechs();
         selectionData.debug();
 
-        return selectionData.getSelection().techType;
+        return selectionData.getSelection();
     }
 }

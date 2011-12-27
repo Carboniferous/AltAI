@@ -631,7 +631,6 @@ namespace AltAI
         return minDistance;
     }
 
-
     void SettlerManager::debugDotMap() const
     {
 #ifdef ALTAI_DEBUG
