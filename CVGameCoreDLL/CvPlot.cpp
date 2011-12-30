@@ -9114,6 +9114,7 @@ bool CvPlot::isLayoutStateDifferent() const
 
 	// done
 	return !bSame;
+    // WTF? what was wrong with: return m_bLayoutStateWorked != isBeingWorked();
 }
 
 void CvPlot::setLayoutStateToCurrent()

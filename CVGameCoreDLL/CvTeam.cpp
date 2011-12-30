@@ -5005,6 +5005,16 @@ void CvTeam::setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, b
 
 					if (bFirstBonus)
 					{
+                        // AltAI
+                        AltAI::PlayerIter playerIter;
+                        while (const CvPlayerAI* player = playerIter())
+                        {
+                            if (player->isUsingAltAI() && player->getTeam() != m_eID)
+                            {
+                                GC.getGame().getAltAI()->getPlayer(player->getID())->notifyFirstToTechDiscovered(isHasMet(player->getTeam()) ? m_eID : NO_TEAM, eIndex);
+                            }
+                        }
+
 						for (iI = 0; iI < MAX_PLAYERS; iI++)
 						{
 							if (GET_PLAYER((PlayerTypes)iI).isAlive())

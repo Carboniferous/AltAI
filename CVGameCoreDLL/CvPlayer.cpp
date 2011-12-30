@@ -364,7 +364,7 @@ void CvPlayer::init(PlayerTypes eID)
             probability = 100 - ((140 * usingAltAICount) / initCount);
         }
 
-        if (GC.getGameINLINE().getSorenRandNum(100, "AltAI") < probability)
+        if (usingAltAICount < 3 && GC.getGameINLINE().getSorenRandNum(100, "AltAI") < probability)
         {
             m_bUsingAltAI = true;
         }

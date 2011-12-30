@@ -19,6 +19,91 @@ namespace AltAI
             "Peak", "Hills", "Land", "Ocean"
         };
 
+        int makeKey(int plotType, int terrainType, int featureType, int bonusType, int waterType, int riverMask, int cityType)
+        {
+            static const int numPlotTypes = ::NUM_PLOT_TYPES;
+            static const int numTerrainTypes = 1 + gGlobals.getNumTerrainInfos();
+            static const int numFeatureTypes = 1 + gGlobals.getNumFeatureInfos();  // for NO_FEATURE
+            static const int numBonusTypes = 1 + gGlobals.getNumBonusInfos();  // for NO_BONUS
+            static const int numWaterTypes = 4;
+            static const int numRiverMaskTypes = 16;
+
+            return plotType + numPlotTypes *
+                (terrainType + numTerrainTypes *
+                    (featureType + numFeatureTypes *
+                        (bonusType + numBonusTypes *
+                            (waterType + numWaterTypes * 
+                                (riverMask + numRiverMaskTypes *
+                                    (cityType))))));
+
+            /*return plotType + (numPlotTypes *
+                        terrainType + (numTerrainTypes * 
+                            featureType + (numFeatureTypes * 
+                                bonusType + (numBonusTypes * 
+                                    waterType + (numWaterTypes * 
+                                        riverMask + (numRiverMaskTypes *
+                                            cityType))))));*/
+        }
+
+        bool testKeyUniqueness()
+        {
+            static const int numPlotTypes = ::NUM_PLOT_TYPES;
+            static const int numTerrainTypes = gGlobals.getNumTerrainInfos();
+            static const int numFeatureTypes = 1 + gGlobals.getNumFeatureInfos();  // for NO_FEATURE
+            static const int numBonusTypes = 1 + gGlobals.getNumBonusInfos();  // for NO_BONUS
+            static const int numWaterTypes = 4;
+            static const int numRiverMaskTypes = 16;
+            static const int numCityTypes = 2;
+
+            typedef std::map<int, std::vector<boost::tuple<int, int, int, int, int, int, int> > > KeyMap;
+            KeyMap keyMap;
+
+            std::vector<int> keys(numPlotTypes * numTerrainTypes * numFeatureTypes * numBonusTypes * numWaterTypes * numRiverMaskTypes, 0);
+
+            for (int i = 0; i < numPlotTypes; ++i)
+            {
+                for (int j = 0; j < numTerrainTypes; ++j)
+                {
+                    for (int k = 0; k < numFeatureTypes; ++k)
+                    {
+                        for (int l = 0; l < numBonusTypes; ++l)
+                        {
+                            for (int m = 0; m < numWaterTypes; ++m)
+                            {
+                                for (int n = 0; n < numRiverMaskTypes; ++n)
+                                {
+                                    for (int p = 0; p < numCityTypes; ++p)
+                                    {
+                                        keyMap[makeKey(i, j, k, l, m, n, p)].push_back(boost::make_tuple(i, j, k, l, m, n, p));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            const CvPlayerAI& player = CvPlayerAI::getPlayer((PlayerTypes)0);
+            std::ostream& os = CivLog::getLog(player)->getStream();
+            bool unique = true;
+
+            for (KeyMap::const_iterator ci(keyMap.begin()), ciEnd(keyMap.end()); ci != ciEnd; ++ci)
+            {
+                if (ci->second.size() > 1)
+                {
+                    unique = false;
+                    os << "\nKey: " << ci->first;
+                    for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+                    {
+                        os << "(" << boost::get<0>(ci->second[i]) << ", " << boost::get<1>(ci->second[i]) << ", " << boost::get<2>(ci->second[i])
+                           << ", " << boost::get<3>(ci->second[i]) << ", " << boost::get<4>(ci->second[i]) << ", " << boost::get<5>(ci->second[i])
+                           << ", " << boost::get<6>(ci->second[i]) << ") ";
+                    }
+                }
+            }
+            return unique;
+        }
+
         struct PlotInfoRequestData
         {
             PlayerTypes playerID;
@@ -552,6 +637,9 @@ namespace AltAI
 {
     PlotInfo::PlotInfo(const CvPlot* pPlot, PlayerTypes playerType) : pPlot_(pPlot), playerType_(playerType), key_(-1)
     {
+#ifdef ALTAI_DEBUG
+        static bool test = testKeyUniqueness();
+#endif
         bool hasFreshWaterAccess = hasFreshWaterAccess_();
 
         int riverMask = makeRiverMask_();
@@ -633,47 +721,34 @@ namespace AltAI
 
     int PlotInfo::makeKey_(bool hasFreshWaterAccess, int riverMask) const
     {
-        static const int numPlotTypes = 1 + ::NUM_PLOT_TYPES;
-        static const int numTerrainTypes = 2 + gGlobals.getNumTerrainInfos();
-        static const int numFeatureTypes = 2 + gGlobals.getNumFeatureInfos();  // for NO_FEATURE
-        static const int numBonusTypes = 2 + gGlobals.getNumBonusInfos();  // for NO_BONUS
+        //static const int numPlotTypes = 1 + ::NUM_PLOT_TYPES;
+        //static const int numTerrainTypes = 2 + gGlobals.getNumTerrainInfos();
+        //static const int numFeatureTypes = 2 + gGlobals.getNumFeatureInfos();  // for NO_FEATURE
+        //static const int numBonusTypes = 2 + gGlobals.getNumBonusInfos();  // for NO_BONUS
 
         TeamTypes teamID = PlayerIDToTeamID(playerType_);
 
-        int plotType = 1 + pPlot_->getPlotType();  // Peak, Hills, (Flat)land, Ocean
-        int terrainType = 2 + pPlot_->getTerrainType();  // Grass, Plains, Desert, Tundra, Snow, Coast, Ocean, Peak, Hill
-        // 2 + makes value > 0 and key +ve
-        int featureType = 2 + pPlot_->getFeatureType();  // Ice, Jungle, Oasis, FloodPlains, Forest, Fallout
+        int plotType = pPlot_->getPlotType();  // Peak, Hills, (Flat)land, Ocean
+        int terrainType = pPlot_->getTerrainType();  // Grass, Plains, Desert, Tundra, Snow, Coast, Ocean, Peak, Hill
+        // 1 + for NO_FEATURE
+        int featureType = 1 + pPlot_->getFeatureType();  // Ice, Jungle, Oasis, FloodPlains, Forest, Fallout
         
         // this call only gets resources the team in question can know about legitimately
-        int bonusType = 2 + pPlot_->getBonusType(teamID);
+        int bonusType = 1 + pPlot_->getBonusType(teamID);
 
         bool isLake = plotType == ::PLOT_OCEAN && pPlot_->isLake();
         bool isRiver = pPlot_->getRiverCrossingCount() > 0;
-        int waterType = 1 + (isLake ? 3 : (isRiver ? 2 : (hasFreshWaterAccess ? 1 : 0)));
-        const int numWaterTypes = 5;
+        int waterType = isLake ? 3 : (isRiver ? 2 : (hasFreshWaterAccess ? 1 : 0));
+        //const int numWaterTypes = 4;
 
-        const int numRiverMaskTypes = 16;
+        //const int numRiverMaskTypes = 16;
 
-        int cityType = pPlot_->isCity() ? 2 : 1;
-        const int numCityTypes = 3;
+        int cityType = pPlot_->isCity() ? 1 : 0;
+        //const int numCityTypes = 2;
 
         FAssertMsg(!(isLake && isRiver), "Plot is river and lake?");
 
-        //int key = numPlotTypes * (plotType + 
-        //                numTerrainTypes * (terrainType + 
-        //                    numFeatureTypes * (featureType + 
-        //                        numBonusTypes * (bonusType + 
-        //                            numWaterTypes * (waterType +
-        //                                numRiverMaskTypes * (1 + riverMask +
-        //                                    numCityTypes * cityType))))));
-        int key = plotType + (numPlotTypes *
-                        terrainType + (numTerrainTypes * 
-                            featureType + (numFeatureTypes * 
-                                bonusType + (numBonusTypes * 
-                                    waterType + (numWaterTypes * 
-                                        (1 + riverMask) + (numRiverMaskTypes *
-                                            cityType))))));
+        int key = makeKey(plotType, terrainType, featureType, bonusType, waterType, riverMask, cityType);
 
         {
             /*if (XYCoords(pPlot_->getX(), pPlot_->getY()) == XYCoords(54, 39) || key == 5389245)

@@ -104,6 +104,77 @@ namespace AltAI
         return NULL;
     }
 
+    CvPlot* SettlerManager::getBestPlot(const CvUnitAI* pUnit, int subAreaID)
+    {
+        SettlerDestinationMap::iterator iter = settlerDestinationMap_.find(pUnit->getIDInfo());
+        XYCoords currentDestination(-1, -1);
+        int currentValue = 0;
+        if (iter != settlerDestinationMap_.end())
+        {
+            currentDestination = iter->second.second;
+            currentValue = iter->second.first;
+        }
+
+        std::map<int, XYCoords, std::greater<int> >::const_iterator bestMatchIter = bestSites_.end();
+
+        for (std::map<int, XYCoords, std::greater<int> >::const_iterator ci(bestSites_.begin()), ciEnd(bestSites_.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->first < 50)
+            {
+                break;
+            }
+
+            CvPlot* pLoopPlot = gGlobals.getMap().plot(ci->second.iX, ci->second.iY);
+
+            if (pLoopPlot->getSubArea() == subAreaID)
+            {
+                // do we know where we are going?
+                if (currentDestination != XYCoords(-1, -1))
+                {
+                    // not significantly worse than last time
+                    if (ci->first * 120 > currentValue * 100)
+                    {
+                        if (currentDestination == ci->second)
+                        {
+                            bestMatchIter = ci;
+                            break;
+                        }
+                        else if (bestMatchIter == bestSites_.end())
+                        {
+                            bestMatchIter = ci;
+                        }
+                        // closer than before
+                        else if (stepDistance(ci->second.iX, ci->second.iY, currentDestination.iX, currentDestination.iY) < 
+                            stepDistance(bestMatchIter->second.iX, bestMatchIter->second.iY, currentDestination.iX, currentDestination.iY)
+                            && ci->first * 120 > currentValue * 100) 
+                        {
+                            bestMatchIter = ci;
+                        }
+                    }
+                }
+                else
+                {
+                    int distance = getStepDistanceToClosestCity_(pLoopPlot, true);
+                    if (distance == MAX_INT || distance < 8)
+                    {
+                        settlerDestinationMap_[pUnit->getIDInfo()] = *ci;
+                        return pLoopPlot;
+                    }
+                }
+            }
+        }
+
+        if (bestMatchIter != bestSites_.end())
+        {
+            settlerDestinationMap_[pUnit->getIDInfo()] = *bestMatchIter;
+            return gGlobals.getMap().plot(bestMatchIter->second.iX, bestMatchIter->second.iY);
+        }
+        else
+        {
+            return NULL;
+        }
+    }
+
     void SettlerManager::analysePlotValues()
     {
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
@@ -676,5 +747,13 @@ namespace AltAI
         MapLog::getLog(player)->init();
         MapLog::getLog(player)->logMap(coordMap);
 #endif
+    }
+
+    void SettlerManager::write(FDataStreamBase* pStream) const
+    {
+    }
+
+    void SettlerManager::read(FDataStreamBase* pStream)
+    {
     }
 }

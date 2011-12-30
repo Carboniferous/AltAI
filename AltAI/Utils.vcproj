@@ -563,6 +563,12 @@
 				RelativePath=".\building_tactics_visitors.h">
 			</File>
 			<File
+				RelativePath=".\city_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\city_tactics.h">
+			</File>
+			<File
 				RelativePath=".\tactic_actions.cpp">
 			</File>
 			<File

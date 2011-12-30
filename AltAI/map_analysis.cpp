@@ -175,17 +175,18 @@ namespace AltAI
         PlotInfo plotInfo(pPlot, player_.getPlayerID());
         int key = plotInfo.getKey();
 
-        {
-            /*if (key == 5389245)
+        { // debug
+            if (key == 187)
             {
                 std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-                os << "\nPlot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " has key = " << key;
-            }*/
-            /*if (XYCoords(pPlot->getX(), pPlot->getY()) == XYCoords(54, 39))
+                os << "\nPlot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " has key = " << key << "\n";
+            }
+
+            if (XYCoords(pPlot->getX(), pPlot->getY()) == XYCoords(54, 44) || XYCoords(pPlot->getX(), pPlot->getY()) == XYCoords(58, 18))
             {
                 std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-                os << "\n(54, 39) plot info = " << plotInfo.getInfo();
-            }*/
+                os << "\nPlot" << XYCoords(pPlot->getX(), pPlot->getY()) << ", key = " << key << ", has plot info = " << plotInfo.getInfo() << "\n";
+            }
         }
 
         PlotInfoMap::iterator iter = plotInfoMap_.find(key);

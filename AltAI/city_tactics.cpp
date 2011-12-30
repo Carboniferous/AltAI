@@ -1348,7 +1348,7 @@ namespace AltAI
                             }
                         }
 
-                        if (!possibleSettlers.empty() && existingSettlersCount < 1 + (player.getSettlerManager()->getBestCitySites(140, 4).size() / 2) && setConstructItem(*possibleSettlers.begin()))
+                        if (!possibleSettlers.empty() && maxResearchRate > 30 && existingSettlersCount < 1 + (player.getSettlerManager()->getBestCitySites(140, 4).size() / 2) && setConstructItem(*possibleSettlers.begin()))
                         {
 #ifdef ALTAI_DEBUG
                             os << "\n(getConstructItem) Returning settler unit: " << gGlobals.getUnitInfo(*possibleSettlers.begin()).getType() << selection;
@@ -1388,7 +1388,7 @@ namespace AltAI
                         }
 
                         // less than two settlers
-                        if (!possibleSettlers.empty() && existingSettlersCount < 1 + (player.getSettlerManager()->getBestCitySites(100, 4).size() / 2) && setConstructItem(*possibleSettlers.begin()))
+                        if (!possibleSettlers.empty() && maxResearchRate > 40 && existingSettlersCount < 1 + (player.getSettlerManager()->getBestCitySites(100, 4).size() / 2) && setConstructItem(*possibleSettlers.begin()))
                         {
 #ifdef ALTAI_DEBUG
                             os << "\n(getConstructItem) Returning settler unit: " << gGlobals.getUnitInfo(*possibleSettlers.begin()).getType() << selection;

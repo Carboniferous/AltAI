@@ -77,7 +77,7 @@ namespace AltAI
         std::vector<int> getBestCitySites(int minValue, int count);
         std::set<BonusTypes> getBonusesForSites(int siteCount) const;
 
-        CvPlot* getBestPlot(CvUnit* pUnit, int subAreaID) const;
+        CvPlot* getBestPlot(CvUnitAI* pUnit, int subAreaID) const;
 
         void logCitySites() const;
 
@@ -91,6 +91,7 @@ namespace AltAI
         void logPushResearchTech(TechTypes techType) const;
         int getTechResearchDepth(TechTypes techType) const;
         ResearchTech getCurrentResearchTech() const;
+        void notifyFirstToTechDiscovered(TeamTypes teamType, TechTypes techType);
 
         void logStuckSelectionGroup(CvUnit* pHeadUnit) const;
 

@@ -94,6 +94,10 @@ namespace AltAI
     {
         std::map<FeatureTypes, int> removableFeatureCounts;
         std::vector<CityImprovementManager::PlotImprovementData> newImprovements;
+
+        // save/load functions
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
     };
 
     struct ResearchTech

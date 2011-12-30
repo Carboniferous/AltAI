@@ -99,8 +99,8 @@ namespace AltAI
         // todo - need to include units which we also need resources for
         if (couldConstructUnit(player, 2, player.getAnalysis()->getUnitInfo(constructItem.unitType)))
         {
-            if (player.getMaxResearchRate() > 20 && !player.getSettlerManager()->getBestCitySites(140, 1).empty() ||
-                player.getMaxResearchRate() > 40 && !player.getSettlerManager()->getBestCitySites(80, 1).empty())
+            if (player.getMaxResearchRate() > 40 && !player.getSettlerManager()->getBestCitySites(140, 1).empty() ||
+                player.getMaxResearchRate() > 60 && !player.getSettlerManager()->getBestCitySites(80, 1).empty())
             {
                 if (constructItem.economicFlags & EconomicFlags::Output_Settler)
                 {
@@ -211,7 +211,7 @@ namespace AltAI
                     for (size_t i = 0, count = possibleImprovements.size(); i < count; ++i)
                     {
                         BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i]);
-                        if (unitInfo.getBuilds(buildType))
+                        if (buildType != NO_BUILD && unitInfo.getBuilds(buildType))
                         {
     #ifdef ALTAI_DEBUG
                             os << "\nAdding tech selected build type: " << gGlobals.getBuildInfo(GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i])).getType();

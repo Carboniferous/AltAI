@@ -107,6 +107,9 @@ namespace AltAI
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
 
+        static void writeImprovements(FDataStreamBase* pStream, const std::vector<PlotImprovementData>& improvements);
+        static void readImprovements(FDataStreamBase* pStream, std::vector<PlotImprovementData>& improvements);
+
     private:
         void markFeaturesToKeep_(DotMapItem& dotMapItem) const;
         void markPlotsWhichNeedIrrigation_();

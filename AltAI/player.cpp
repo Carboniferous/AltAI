@@ -320,18 +320,22 @@ namespace AltAI
 
     void Player::movePlayerUnit(CvUnitAI* pUnit, CvPlot* pPlot)
     {
+#ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*pPlayer_)->getStream();
 
         os << "\nPlayer: " << pUnit->getOwner() << " moves unit: " << pUnit->getUnitInfo().getType()
             << " to: " << XYCoords(pPlot->getX(), pPlot->getY());
+#endif
     }
 
     void Player::hidePlayerUnit(CvUnitAI* pUnit, CvPlot* pOldPlot)
     {
+#ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*pPlayer_)->getStream();
 
         os << "\nPlayer: " << pUnit->getOwner() << " moves unit: " << pUnit->getUnitInfo().getType()
             << " at: " << XYCoords(pOldPlot->getX(), pOldPlot->getY()) << " out of view";
+#endif
     }
 
     const CvPlayer* Player::getCvPlayer() const
@@ -648,9 +652,11 @@ namespace AltAI
         return additionalBuilds;
     }
 
-    CvPlot* Player::getBestPlot(CvUnit* pUnit, int subAreaID) const
+    CvPlot* Player::getBestPlot(CvUnitAI* pUnit, int subAreaID) const
     {
-        bool foundUntargetedPlot = false;
+        CvPlot* pPlot = pSettlerManager_->getBestPlot(pUnit, subAreaID);
+
+        /*bool foundUntargetedPlot = false;
         std::vector<CvPlot*> ignorePlots;
 
         CvPlot* pPlot = pSettlerManager_->getBestPlot(subAreaID, ignorePlots);
@@ -673,11 +679,12 @@ namespace AltAI
                     foundUntargetedPlot = true;
                 }
             }
-        }
-
+        }*/
+#ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
         os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " getBestPlot() returning: ";
-        if (foundUntargetedPlot)
+        //if (foundUntargetedPlot)
+        if (pPlot)
         {
             os << XYCoords(pPlot->getX(), pPlot->getY());
         }
@@ -685,8 +692,9 @@ namespace AltAI
         {
             os << " null";
         }
-
-        return foundUntargetedPlot ? pPlot : NULL;
+#endif
+        //return foundUntargetedPlot ? pPlot : NULL;
+        return pPlot;
     }
 
     int Player::getMaxResearchRate(std::pair<int, int> fixedIncomeAndExpenses) const
@@ -973,6 +981,11 @@ namespace AltAI
         os << "\nNotifying religion founded: " << gGlobals.getReligionInfo(religionType).getType() << (isOurs ? " by us " : " by someone else ");
 #endif
         //getAnalysis()->getPlayerTactics()->unselectTechReligionTactics((TechTypes)(gGlobals.getReligionInfo(religionType).getTechPrereq()));
+    }
+
+    void Player::notifyFirstToTechDiscovered(TeamTypes teamType, TechTypes techType)
+    {
+        pPlayerAnalysis_->getPlayerTactics()->updateFirstToTechTactics(techType);
     }
 
     void Player::setCityDirty(IDInfo city)

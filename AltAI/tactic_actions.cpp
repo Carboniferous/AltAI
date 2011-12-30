@@ -77,10 +77,22 @@ namespace AltAI
         }
     }
 
+    void WorkerTechCityData::write(FDataStreamBase* pStream) const
+    {
+        writeMap(pStream, removableFeatureCounts);
+        CityImprovementManager::writeImprovements(pStream, newImprovements);
+    }
+
+    void WorkerTechCityData::read(FDataStreamBase* pStream)
+    {
+        readMap<FeatureTypes, int, int, int>(pStream, removableFeatureCounts);
+        CityImprovementManager::readImprovements(pStream, newImprovements);
+    }
+
     void ResearchTech::write(FDataStreamBase* pStream) const
     {
         pStream->Write(techType);
-        //pStream->Write(tarfetTechType);
+        pStream->Write(targetTechType);
         pStream->Write(depth);
         pStream->Write(techFlags);
         pStream->Write(economicFlags);
@@ -92,13 +104,24 @@ namespace AltAI
         writeVector(pStream, possibleCivics);
         writeVector(pStream, possibleBonuses);
         writeVector(pStream, possibleImprovements);
+        writeVector(pStream, possibleRemovableFeatures);
         writeVector(pStream, possibleProcesses);
+
+        pStream->Write(workerTechDataMap.size());
+        for (WorkerTechDataMap::const_iterator ci(workerTechDataMap.begin()), ciEnd(workerTechDataMap.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->second)
+            {
+                ci->first.write(pStream);
+                ci->second->write(pStream);
+            }
+        }
     }
 
     void ResearchTech::read(FDataStreamBase* pStream)
     {
         pStream->Read((int*)&techType);
-        //pStream->Read((int*)&targetTechType);
+        pStream->Read((int*)&targetTechType);
         pStream->Read((int*)&depth);
         pStream->Read(&techFlags);
         pStream->Read(&economicFlags);
@@ -110,7 +133,19 @@ namespace AltAI
         readVector<CivicTypes, int>(pStream, possibleCivics);
         readVector<BonusTypes, int>(pStream, possibleBonuses);
         readVector<ImprovementTypes, int>(pStream, possibleImprovements);
+        readVector<FeatureTypes, int>(pStream, possibleRemovableFeatures);
         readVector<ProcessTypes, int>(pStream, possibleProcesses);
+
+        size_t size;
+        pStream->Read(&size);
+        workerTechDataMap.clear();
+        for (size_t i = 0; i < size; ++i)
+        {
+            IDInfo city;
+            city.read(pStream);
+            WorkerTechDataMap::iterator iter = workerTechDataMap.insert(std::make_pair(city, boost::shared_ptr<WorkerTechCityData>(new WorkerTechCityData()))).first;
+            iter->second->read(pStream);
+        }
     }
 
     void ConstructItem::write(FDataStreamBase* pStream) const

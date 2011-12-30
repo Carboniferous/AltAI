@@ -947,30 +947,38 @@ namespace AltAI
     void CityImprovementManager::write(FDataStreamBase* pStream) const
     {
         city_.write(pStream);
-
-        size_t count = improvements_.size();
-        pStream->Write(count);
-        for (size_t i = 0; i < count; ++i)
-        {
-            XYCoords coords = boost::get<0>(improvements_[i]);
-            pStream->Write(coords.iX);
-            pStream->Write(coords.iY);
-            pStream->Write(boost::get<1>(improvements_[i]));
-            pStream->Write(boost::get<2>(improvements_[i]));
-            boost::get<3>(improvements_[i]).write(pStream);
-            boost::get<4>(improvements_[i]).write(pStream);
-            pStream->Write(boost::get<5>(improvements_[i]));
-            pStream->Write(boost::get<6>(improvements_[i]));
-        }
+        writeImprovements(pStream, improvements_);
     }
 
     void CityImprovementManager::read(FDataStreamBase* pStream)
     {
         city_.read(pStream);
+        readImprovements(pStream, improvements_);
+    }
 
+    void CityImprovementManager::writeImprovements(FDataStreamBase* pStream, const std::vector<CityImprovementManager::PlotImprovementData>& improvements)
+    {
+        size_t count = improvements.size();
+        pStream->Write(count);
+        for (size_t i = 0; i < count; ++i)
+        {
+            XYCoords coords = boost::get<0>(improvements[i]);
+            pStream->Write(coords.iX);
+            pStream->Write(coords.iY);
+            pStream->Write(boost::get<1>(improvements[i]));
+            pStream->Write(boost::get<2>(improvements[i]));
+            boost::get<3>(improvements[i]).write(pStream);
+            boost::get<4>(improvements[i]).write(pStream);
+            pStream->Write(boost::get<5>(improvements[i]));
+            pStream->Write(boost::get<6>(improvements[i]));
+        }
+    }
+
+    void CityImprovementManager::readImprovements(FDataStreamBase* pStream, std::vector<CityImprovementManager::PlotImprovementData>& improvements)
+    {
         size_t count = 0;
         pStream->Read(&count);
-        improvements_.clear();
+        improvements.clear();
 
         for (size_t i = 0; i < count; ++i)
         {
@@ -996,7 +1004,7 @@ namespace AltAI
             int improvementFlags = 0;
             pStream->Read(&improvementFlags);
 
-            improvements_.push_back(boost::make_tuple(coords, featureType, improvementType, plotYield, totalOutput, improvementState, improvementFlags));
+            improvements.push_back(boost::make_tuple(coords, featureType, improvementType, plotYield, totalOutput, improvementState, improvementFlags));
         }
     }
 

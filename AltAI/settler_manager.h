@@ -18,8 +18,14 @@ namespace AltAI
 
         CvPlot* getBestPlot(int subAreaID, const std::vector<CvPlot*>& ignorePlots) const;
 
+        CvPlot* getBestPlot(const CvUnitAI* pUnit, int subAreaID);
+
         std::set<BonusTypes> getBonusesForSites(int siteCount) const;
         std::set<ImprovementTypes> getImprovementTypesForSites(int siteCount) const;
+
+        // save/load functions
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
 
     private:
 
@@ -40,5 +46,8 @@ namespace AltAI
         DotMap dotMap_;
         std::map<int, XYCoords, std::greater<int> > bestSites_;
         std::set<XYCoords> excludedCoords_;
+
+        typedef std::map<IDInfo, std::pair<int, XYCoords> > SettlerDestinationMap;
+        SettlerDestinationMap settlerDestinationMap_;
     };
 }

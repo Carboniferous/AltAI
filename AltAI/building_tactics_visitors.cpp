@@ -383,8 +383,9 @@ namespace AltAI
 
     TotalOutput getProjectedEconomicImpact(const Player& player, const City& city, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int selectedEconomicFlags)
     {
+#ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-
+#endif
         boost::shared_ptr<CityData> pCityData = city.getCityData()->clone();
         CitySimulation simulation(city.getCvCity(), pCityData, city.getConstructItem());
 
@@ -393,8 +394,9 @@ namespace AltAI
         
         TotalOutput baseOutput = pCityData->getActualOutput();
         baseOutput[OUTPUT_GOLD] -= pCityData->maintenanceHelper->getMaintenance();
+#ifdef ALTAI_DEBUG
         os << "\nbaseOutput = " << baseOutput << " city output = " << pCityData->cityPlotOutput.actualOutput << " maintenance = " << pCityData->maintenanceHelper->getMaintenance();
-
+#endif
         updateRequestData(city.getCvCity(), *pCityData, pBuildingInfo);
         pCityData->buildingHelper->changeNumRealBuildings(pBuildingInfo->getBuildingType());
         pCityData->recalcOutputs();
@@ -403,27 +405,32 @@ namespace AltAI
         //simulation.getCityOptimiser()->debug(os, false);
         TotalOutput newOutput = pCityData->getActualOutput();
         newOutput[OUTPUT_GOLD] -= pCityData->maintenanceHelper->getMaintenance();
-        
+#ifdef ALTAI_DEBUG        
         os << "\nnew baseOutput = " << newOutput << " city output = " << pCityData->cityPlotOutput.actualOutput << " maintenance = " << pCityData->maintenanceHelper->getMaintenance();
 
         os << "\nDelta output = " << newOutput - baseOutput;
-
+#endif
         const int cost = player.getCvPlayer()->getProductionNeeded(pBuildingInfo->getBuildingType());
         // TODO - use correct yield modifiers for trait specific speedups (e.g. libs for creative)
         const int approxBuildTurns = std::max<int>(1, 100 * cost / city.getMaxOutputs()[OUTPUT_PRODUCTION]);
-        os << "\nCost = " << cost << ", approx build T = " << approxBuildTurns;
 
+#ifdef ALTAI_DEBUG
+        os << "\nCost = " << cost << ", approx build T = " << approxBuildTurns;
+#endif
         ProjectedEconomicImpactVisitor visitor(player, city, pCityData, selectedEconomicFlags);
         boost::apply_visitor(visitor, pBuildingInfo->getInfo());
 
         TotalOutput projectedOutput = visitor.getOutputDelta() + newOutput - baseOutput;
-        os << "\nprojectedOutput = " << projectedOutput;
 
+#ifdef ALTAI_DEBUG
+        os << "\nprojectedOutput = " << projectedOutput;
+#endif
         // TODO - use t-horizon logic here
         projectedOutput = std::max<int>(0, 50 - approxBuildTurns) * projectedOutput;
 
+#ifdef ALTAI_DEBUG
         os << " scaled = " << projectedOutput;
-
+#endif
         return projectedOutput;
     }
 }

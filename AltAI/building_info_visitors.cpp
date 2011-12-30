@@ -829,8 +829,10 @@ namespace AltAI
                 boost::shared_ptr<BuildingInfo> pBuildingInfo = pPlayerAnalysis->getBuildingInfo(buildingType);
                 if (!pBuildingInfo)
                 {
+#ifdef ALTAI_DEBUG
                     std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(playerType))->getStream();
                     os << "\nSkipping conditional building: " << gGlobals.getBuildingInfo(buildingType).getType();
+#endif
                     continue;
                 }
 

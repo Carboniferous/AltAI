@@ -19,6 +19,8 @@ namespace AltAI
         void updateTechTactics();
         void updateUnitTactics();
 
+        void updateFirstToTechTactics(TechTypes techType);
+
         void selectTechTactics();
         void selectUnitTactics();
         void selectBuildingTactics();
