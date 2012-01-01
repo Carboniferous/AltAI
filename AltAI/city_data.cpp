@@ -161,10 +161,10 @@ namespace AltAI
 
                         if (upgradeImprovementType != NO_IMPROVEMENT)
 			            {
-                            PlotInfo plotInfo(pLoopPlot, player.getID());
-                            plot.upgradeData = PlotData::UpgradeData(timeHorizon, getUpgradedImprovementsData(plotInfo.getInfo(),
-                                player.getID(), improvementType, pLoopPlot->getUpgradeTimeLeft(improvementType, player.getID()), 
-                                timeHorizon, player.getImprovementUpgradeRate()));
+                            const PlotInfo::PlotInfoNode& plotInfo = pMapAnalysis->getPlotInfoNode(pLoopPlot);
+                            plot.upgradeData = PlotData::UpgradeData(timeHorizon,
+                                getUpgradedImprovementsData(plotInfo, player.getID(), improvementType, pLoopPlot->getUpgradeTimeLeft(improvementType, player.getID()), 
+                                    timeHorizon, player.getImprovementUpgradeRate()));
 
                             plot.output += plot.upgradeData.getExtraOutput(yieldModifier_, commerceModifier_, commercePercent_);
                         }

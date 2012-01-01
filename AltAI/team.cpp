@@ -15,7 +15,10 @@ namespace AltAI
     {
         for (size_t i = 0, count = players_.size(); i < count; ++i)
         {
-            players_[i]->pushPlotEvent(pPlotEvent);
+            if (players_[i]->getCvPlayer()->isUsingAltAI())
+            {
+                players_[i]->pushPlotEvent(pPlotEvent);
+            }
         }
     }
 }

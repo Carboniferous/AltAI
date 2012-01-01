@@ -108,10 +108,13 @@ namespace AltAI
 
     void MapAnalysis::reinitDotMap()
     {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
         const CvMap& theMap = gGlobals.getMap();
         TeamTypes teamType = player_.getTeamID();
 
-        plotInfoMap_.clear();
+        //plotInfoMap_.clear();
         plotValues_.plotValueMap.clear();
         plotValues_.keysValueMap.clear();
 
@@ -129,7 +132,22 @@ namespace AltAI
                 PlotInfoMap::iterator iter = plotInfoMap_.find(key);
                 if (iter == plotInfoMap_.end())
                 {
+#ifdef ALTAI_DEBUG
+                    os << "\nAdding plot key to plot info map: key = " << key << ", coords = " << XYCoords(pPlot->getX(), pPlot->getY())
+                       << "\n" << plotInfo.getInfo();
+#endif
                     iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;
+                    keyInfoMap_[XYCoords(pPlot->getX(), pPlot->getY())] = key;
+                }
+                else
+                {
+                    if (!(plotInfo.getInfo() == iter->second))
+                    {
+#ifdef ALTAI_DEBUG
+                        os << "\nInconsistent plot keys:\n" << plotInfo.getInfo() << "\n" << iter->second;
+#endif
+                        iter->second = plotInfo.getInfo();
+                    }
                 }
     
                 updateKeysValueMap_(key, plotInfo);
@@ -175,24 +193,27 @@ namespace AltAI
         PlotInfo plotInfo(pPlot, player_.getPlayerID());
         int key = plotInfo.getKey();
 
-        { // debug
-            if (key == 187)
-            {
-                std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-                os << "\nPlot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " has key = " << key << "\n";
-            }
+#ifdef ALTAI_DEBUG
+        //{ // debug
+        //    if (key == 187)
+        //    {
+        //        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        //        os << "\nPlot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " has key = " << key << "\n";
+        //    }
 
-            if (XYCoords(pPlot->getX(), pPlot->getY()) == XYCoords(54, 44) || XYCoords(pPlot->getX(), pPlot->getY()) == XYCoords(58, 18))
-            {
-                std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-                os << "\nPlot" << XYCoords(pPlot->getX(), pPlot->getY()) << ", key = " << key << ", has plot info = " << plotInfo.getInfo() << "\n";
-            }
-        }
+        //    if (XYCoords(pPlot->getX(), pPlot->getY()) == XYCoords(54, 44) || XYCoords(pPlot->getX(), pPlot->getY()) == XYCoords(58, 18))
+        //    {
+        //        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        //        os << "\nPlot" << XYCoords(pPlot->getX(), pPlot->getY()) << ", key = " << key << ", has plot info = " << plotInfo.getInfo() << "\n";
+        //    }
+        //}
+#endif
+        keyInfoMap_[coords] = key;
 
         PlotInfoMap::iterator iter = plotInfoMap_.find(key);
         if (iter == plotInfoMap_.end())
         {
-            iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;
+            iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;    
         }
 
 #ifdef ALTAI_DEBUG
@@ -300,10 +321,12 @@ namespace AltAI
         const int oldKey = plotInfo.getKeyWithFeature(oldFeatureType);  // can be NO_FEATURE
         const int subAreaID = pPlot->getSubArea();
 
+        keyInfoMap_[coords] = key;
+
         PlotInfoMap::iterator iter = plotInfoMap_.find(key);
         if (iter == plotInfoMap_.end())
         {
-            iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;
+            iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;            
         }
 
 #ifdef ALTAI_DEBUG
@@ -351,11 +374,43 @@ namespace AltAI
         }
     }
 
+    void MapAnalysis::updatePlotBonus(const CvPlot* pPlot, BonusTypes bonusType)
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
+        XYCoords coords(pPlot->getX(), pPlot->getY());
+        // update key for this plot and add to plotInfoMap_ if required
+        PlotInfo plotInfo(pPlot, player_.getPlayerID());
+
+        const int key = plotInfo.getKey();
+        keyInfoMap_[coords] = key;
+        PlotInfoMap::iterator plotIter = plotInfoMap_.find(key);
+#ifdef ALTAI_DEBUG
+        os << "\n(MapAnalysis::updatePlotBonus) Checking plot: " << coords << " for bonus type: " << gGlobals.getBonusInfo(bonusType).getType();
+#endif
+        if (plotIter == plotInfoMap_.end())
+        {
+            plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo()));
+        }
+        else
+        {
+#ifdef ALTAI_DEBUG
+            if (!(plotIter->second == plotInfo.getInfo()))
+            {
+                os << "\nInconsistent plot keys for coords: " << coords << " key = " << key
+                    << "\n" << plotIter->second << "\n" << plotInfo.getInfo();
+            }
+#endif
+        }
+    }
+
     void MapAnalysis::updatePlotCulture(const CvPlot* pPlot, bool remove)
     {
         XYCoords coords(pPlot->getX(), pPlot->getY());
-        PlotInfo plotInfo(pPlot, player_.getPlayerID());
-        const int key = plotInfo.getKey();
+
+        const PlotInfo::PlotInfoNode& plotInfo = getPlotInfoNode(pPlot);
+        const int key = keyInfoMap_[coords];
         const int subAreaID = pPlot->getSubArea();
 
 #ifdef ALTAI_DEBUG
@@ -406,7 +461,7 @@ namespace AltAI
         else
         {
             // if we are here, means we own the plot (unowned plots should be added through updatePlotRevealed)
-            if (hasPossibleYield(plotInfo.getInfo(), player_.getPlayerID()))
+            if (hasPossibleYield(plotInfo, player_.getPlayerID()))
             {
                 for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
                 {
@@ -627,21 +682,43 @@ namespace AltAI
     {
     }
 
-    PlotInfo::PlotInfoNode MapAnalysis::getPlotInfoNode(const CvPlot* pPlot) const
+    const PlotInfo::PlotInfoNode& MapAnalysis::getPlotInfoNode(const CvPlot* pPlot)
     {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
+        XYCoords coords(pPlot->getX(), pPlot->getY());
+        KeyInfoMap::const_iterator keyIter = keyInfoMap_.find(coords);
+
+        if (keyIter != keyInfoMap_.end())
+        {
+            PlotInfoMap::const_iterator iter = plotInfoMap_.find(keyIter->second);
+            if (iter != plotInfoMap_.end())
+            {
+#ifdef ALTAI_DEBUG
+                PlotInfo plotInfo(pPlot, player_.getPlayerID());
+                int key = plotInfo.getKey();
+                if (key != keyIter->second || !(iter->second == plotInfo.getInfo()))
+                {
+                    os << "\nInconsistent plot keys for coords: " << coords << " keys = " << key << ", " << keyIter->second
+                       << "\n" << iter->second << "\n" << plotInfo.getInfo();
+                }
+#endif
+                return iter->second;
+            }
+        }
+
+        // Add key and plotInfo data 
         PlotInfo plotInfo(pPlot, player_.getPlayerID());
         int key = plotInfo.getKey();
 
-        PlotInfoMap::const_iterator iter = plotInfoMap_.find(key);
-        if (iter != plotInfoMap_.end())
-        {
-            return iter->second;
-        }
-        else
-        {
-            // TODO this is really an error - probably due to the plot not being revealed yet
-            return PlotInfo::PlotInfoNode();
-        }
+#ifdef ALTAI_DEBUG
+        os << "\nAdding key and plot info data for: " << coords << " key = " << key << ", plotInfo = \n" << plotInfo.getInfo();
+#endif
+        keyInfoMap_[coords] = key;
+
+        PlotInfoMap::iterator iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;
+        return iter->second;
     }
 
     void MapAnalysis::debug(std::ostream& os) const
@@ -1376,11 +1453,11 @@ namespace AltAI
         //setWorkingCity(pPlot, getCity(origAssignedCity), getCity(bestCity));
 #ifdef ALTAI_DEBUG
         {
-            PlotInfo plotInfo(pPlot, player_.getPlayerID());
+            const PlotInfo::PlotInfoNode& plotInfo = getPlotInfoNode(pPlot);
 
             std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
             os << "\nCoords = " << (*plotsIter)->coords
-                << " (yield = " << getYield(plotInfo.getInfo(), player_.getPlayerID(), pPlot->getImprovementType(), pPlot->getFeatureType(), pPlot->getRouteType()) << ") ";
+                << " (yield = " << getYield(plotInfo, player_.getPlayerID(), pPlot->getImprovementType(), pPlot->getFeatureType(), pPlot->getRouteType()) << ") ";
             for (size_t k = 0, count = deltas.size(); k < count; ++k)
             {
                 if (k > 0) os << ", ";

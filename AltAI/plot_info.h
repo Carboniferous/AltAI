@@ -31,12 +31,21 @@ namespace AltAI
         struct NullNode
         {
             NullNode() {}
+            bool operator == (const NullNode&) const
+            {
+                return true;
+            }
         };
 
         struct HasTech
         {
             explicit HasTech(TechTypes techType_) : techType(techType_) {}
             TechTypes techType;
+
+            bool operator == (const HasTech& other) const
+            {
+                return techType == other.techType;
+            }
         };
 
         // farms: HasTech(Agriculture) and IsFreshWater or HasTech(CivilService) and hasFreshWaterAccess or HasTech(Biology)
@@ -51,6 +60,8 @@ namespace AltAI
         struct BuildOrCondition
         {
             std::vector<BuildCondition> conditions;
+
+            bool operator == (const BuildOrCondition& other) const;
         };
 
         struct BaseNode;
@@ -62,6 +73,8 @@ namespace AltAI
             FeatureRemovedNode() {}
             PlotYield yield, bonusYield;
             std::vector<ImprovementNode> improvementNodes;
+
+            bool operator == (const FeatureRemovedNode& other) const;
         };
 
         struct UpgradeNode
@@ -74,6 +87,8 @@ namespace AltAI
             std::vector<std::pair<CivicTypes, PlotYield> > civicYields;
             std::vector<std::pair<TechTypes, std::pair<RouteTypes, PlotYield> > > routeYields;
             std::vector<UpgradeNode> upgradeNode;  // empty if no further upgrade
+
+            bool operator == (const UpgradeNode& other) const;
         };
 
         typedef boost::variant<NullNode,
@@ -100,6 +115,8 @@ namespace AltAI
             FeatureTypes featureType;
             PlotInfoNode featureRemovedNode;  // NullNode or FeatureRemovedNode
             std::vector<ImprovementNode> improvementNodes;
+
+            bool operator == (const BaseNode& other) const;
         };
 
         struct ImprovementNode
@@ -112,6 +129,8 @@ namespace AltAI
             std::vector<std::pair<CivicTypes, PlotYield> > civicYields;
             std::vector<std::pair<TechTypes, std::pair<RouteTypes, PlotYield> > > routeYields;
             std::vector<UpgradeNode> upgradeNode;  // empty if no upgrade
+
+            bool operator == (const ImprovementNode& other) const;
         };
 
         const PlotInfoNode& getInfo() const;

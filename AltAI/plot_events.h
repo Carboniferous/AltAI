@@ -1,8 +1,6 @@
 #pragma once
 
-#include "boost/shared_ptr.hpp"
-
-class CvPlot;
+#include "./utils.h"
 
 namespace AltAI
 {
@@ -24,5 +22,16 @@ namespace AltAI
     private:
         const CvPlot* pPlot_;
         bool terrainOnly_;
+    };
+
+    class RevealBonusEvent : public IPlotEvent
+    {
+    public:
+        RevealBonusEvent(const CvPlot* pPlot, BonusTypes bonusType);
+        virtual void handle(MapAnalysis& mapAnalysis);
+
+    private:
+        const CvPlot* pPlot_;
+        BonusTypes bonusType_;
     };
 }

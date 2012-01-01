@@ -596,10 +596,10 @@ namespace AltAI
         // add the actual improvement build
         additionalBuilds.push_back(buildType);
 
-        const PlotInfo node = PlotInfo(pPlot, pPlayer_->getID());
+        const PlotInfo::PlotInfoNode& node = getAnalysis()->getMapAnalysis()->getPlotInfoNode(pPlot);
 
         // todo - check route yield changes actually only apply to improvments
-        std::vector<std::pair<RouteTypes, PlotYield> > routeYieldChanges = getRouteYieldChanges(node.getInfo(), pPlayer_->getID(), improvementType, willRemoveFeature ? NO_FEATURE : featureType);
+        std::vector<std::pair<RouteTypes, PlotYield> > routeYieldChanges = getRouteYieldChanges(node, pPlayer_->getID(), improvementType, willRemoveFeature ? NO_FEATURE : featureType);
         RouteTypes bestRouteType = NO_ROUTE;
         int bestRouteValue = 0;
         std::vector<BuildTypes> availableRouteBuildTypes;

@@ -11,4 +11,13 @@ namespace AltAI
     {
         mapAnalysis.updatePlotRevealed(pPlot_);
     }
+
+    RevealBonusEvent::RevealBonusEvent(const CvPlot* pPlot, BonusTypes bonusType) : pPlot_(pPlot), bonusType_(bonusType)
+    {
+    }
+
+    void RevealBonusEvent::handle(MapAnalysis& mapAnalysis)
+    {
+        mapAnalysis.updatePlotBonus(pPlot_, bonusType_);
+    }
 }

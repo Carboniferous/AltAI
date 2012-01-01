@@ -25,8 +25,10 @@
 // AltAI headers
 #include "game.h"
 #include "player.h"
+#include "team.h"
 #include "city.h"
 #include "iters.h"
+#include "plot_events.h"
 
 // Public Functions...
 
@@ -5533,6 +5535,12 @@ void CvTeam::processTech(TechTypes eTech, int iChange)
 			{
 				pLoopPlot->updateYield();
 				pLoopPlot->setLayoutDirty(true);
+
+                // AltAI
+                if (pLoopPlot->isRevealed(m_eID, false))
+                {
+                    GC.getGame().getAltAI()->getTeam(m_eID)->pushPlotEvent(boost::shared_ptr<AltAI::IPlotEvent>(new AltAI::RevealBonusEvent(pLoopPlot, eBonus)));
+                }
 			}
 		}
 	}

@@ -934,7 +934,7 @@ namespace AltAI
 
                 if (otherUnitInfo.getProductionCost() >= 0 && otherUnitInfo.getCombat() > 0 && unitInfo.getDomainType() == otherUnitInfo.getDomainType())
 				{
-					if (otherUnitInfo.getUnitAIType(UNITAI_CITY_DEFENSE) || otherUnitInfo.getUnitAIType(UNITAI_COUNTER))
+					if (otherUnitInfo.getUnitAIType(UNITAI_CITY_DEFENSE) || (otherUnitInfo.getUnitAIType(UNITAI_COUNTER) && !otherUnitInfo.isNoDefensiveBonus()))
 					{
 						RemainingLevelsAndPromotions defencePromotions = getCityDefencePromotions(defaultUnit, i);
 

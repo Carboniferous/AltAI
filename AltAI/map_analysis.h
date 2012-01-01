@@ -60,11 +60,12 @@ namespace AltAI
         void updatePlotCulture(const CvPlot* pPlot, bool remove);
         void updatePlotCanFound(const CvPlot* pPlot, bool remove);
         void updateResourceData(const std::vector<BonusTypes>& revealedBonusTypes);
+        void updatePlotBonus(const CvPlot* pPlot, BonusTypes bonusType);
 
         void debugResourceData() const;
         int getControlledResourceCount(BonusTypes bonusType) const;
 
-        PlotInfo::PlotInfoNode getPlotInfoNode(const CvPlot* pPlot) const;
+        const PlotInfo::PlotInfoNode& getPlotInfoNode(const CvPlot* pPlot);
         const Player& getPlayer() const { return player_; }
 
         //void analysePlotValues();
@@ -135,6 +136,11 @@ namespace AltAI
 
         //std::map<int, std::vector<XYCoords> > plotGroupCounts_;
 
+        // value is plot key
+        typedef std::map<XYCoords, int> KeyInfoMap;
+        KeyInfoMap keyInfoMap_;
+
+        // key is plot key
         typedef std::map<int, PlotInfo::PlotInfoNode> PlotInfoMap;
         PlotInfoMap plotInfoMap_;
 

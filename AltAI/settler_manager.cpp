@@ -259,7 +259,7 @@ namespace AltAI
         const MapAnalysis::PlotValues& plotValues = pMapAnalysis_->getPlotValues();
 
         CvPlot* pPlot = theMap.plot(ci->first.iX, ci->first.iY);
-        PlotInfo::PlotInfoNode plotInfoNode = pMapAnalysis_->getPlotInfoNode(pPlot);
+        const PlotInfo::PlotInfoNode& plotInfoNode = pMapAnalysis_->getPlotInfoNode(pPlot);
 
         DotMapItem dotMapItem(ci->first, getPlotCityYield(plotInfoNode, playerType_));
 
@@ -301,8 +301,6 @@ namespace AltAI
                 //    os << "\nFound duplicate plot: " << *si;
                 //}
 
-                PlotInfo plotInfo(pLoopPlot, playerType_);
-
                 DotMapItem::PlotData plotData;
                 plotData.coords = *si;
                 boost::tie(plotData.neighbourCityCount, plotData.workedByNeighbour) = getNeighbourCityData_(pLoopPlot);
@@ -337,12 +335,6 @@ namespace AltAI
                 {
                     dotMapItem.bonusTypes.insert(bonusType);
                     plotData.bonusType = bonusType;
-
-                    //if (plotData.possibleImprovements.size() == 1)
-                    //{
-                    //    std::vector<std::pair<PlotYield, ImprovementTypes> > possibleImprovements(getYields(plotInfo.getInfo(), playerType_, 0));
-                    //    //FAssertMsg(plotData.possibleImprovements.size() == possibleImprovements.size(), "Not enough improvements?")
-                    //}
                 }
 
                 dotMapItem.plotData.insert(plotData);

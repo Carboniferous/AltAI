@@ -769,7 +769,9 @@ namespace AltAI
                            << " at: " << pPlot->getX() << ", " << pPlot->getY();
                     }
 #endif
-                    PlotYield thisYield = getYield(PlotInfo(pPlot, pPlot->getOwner()).getInfo(), pPlot->getOwner(), improvementType, pPlot->getFeatureType(), pPlot->getRouteType());
+                    boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getAnalysis()->getMapAnalysis();
+
+                    PlotYield thisYield = getYield(pMapAnalysis->getPlotInfoNode(pPlot), pPlot->getOwner(), improvementType, pPlot->getFeatureType(), pPlot->getRouteType());
                     improvements_[i] = boost::make_tuple(coords, pPlot->getFeatureType(), improvementType, thisYield, TotalOutput(), Built, markPlotAsPartOfIrrigationChain ? IrrigationChainPlot : 0);
                     
                 }
@@ -788,7 +790,9 @@ namespace AltAI
 
         if (!foundPlot)
         {
-            PlotYield thisYield = getYield(PlotInfo(pPlot, pPlot->getOwner()).getInfo(), pPlot->getOwner(), improvementType, pPlot->getFeatureType(), pPlot->getRouteType());
+            boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getAnalysis()->getMapAnalysis();
+
+            PlotYield thisYield = getYield(pMapAnalysis->getPlotInfoNode(pPlot), pPlot->getOwner(), improvementType, pPlot->getFeatureType(), pPlot->getRouteType());
             improvements_.push_back(
                 boost::make_tuple(coords, pPlot->getFeatureType(), improvementType, thisYield, TotalOutput(), CityImprovementManager::Built, markPlotAsPartOfIrrigationChain ? IrrigationChainPlot : 0));
 

@@ -630,6 +630,55 @@ namespace AltAI
 
             return headNode;
         }  
+
+        template <typename NodeType> bool nodesAreEqual(const NodeType& first, const NodeType& second)
+        {
+            if (first.yield != second.yield || first.bonusYield != second.bonusYield || first.buildConditions.size() != second.buildConditions.size() ||
+                first.techYields.size() != second.techYields.size() || first.civicYields.size() != second.civicYields.size() || first.routeYields.size() != second.routeYields.size())
+            {
+                return false;
+            }
+
+            for (size_t i = 0, count = first.buildConditions.size(); i < count; ++i)
+            {
+                if (!(first.buildConditions[i] == second.buildConditions[i]))
+                {
+                    return false;
+                }
+            }
+
+            for (size_t i = 0, count = first.techYields.size(); i < count; ++i)
+            {
+                if (first.techYields[i].first != second.techYields[i].first || first.techYields[i].second != second.techYields[i].second)
+                {
+                    return false;
+                }
+            }
+
+            for (size_t i = 0, count = first.civicYields.size(); i < count; ++i)
+            {
+                if (first.civicYields[i].first != second.civicYields[i].first || first.civicYields[i].second != second.civicYields[i].second)
+                {
+                    return false;
+                }
+            }
+
+            for (size_t i = 0, count = first.routeYields.size(); i < count; ++i)
+            {
+                if (first.routeYields[i].first != second.routeYields[i].first || first.routeYields[i].second.first != second.routeYields[i].second.first ||
+                    first.routeYields[i].second.second != second.routeYields[i].second.second)
+                {
+                    return false;
+                }
+            }
+
+            if (first.upgradeNode != second.upgradeNode)
+            {
+                return false;
+            }
+
+            return true;
+        }
     }
 }
 
@@ -653,6 +702,73 @@ namespace AltAI
 
         key_ = makeKey_(hasFreshWaterAccess, riverMask);
         init_(hasFreshWaterAccess);
+    }
+
+    bool PlotInfo::BuildOrCondition::operator == (const PlotInfo::BuildOrCondition& other) const
+    {
+        if (conditions.size() != other.conditions.size())
+        {
+            return false;
+        }
+
+        for (size_t i = 0, count = conditions.size(); i < count; ++i)
+        {
+            if (!(conditions[i] == other.conditions[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool PlotInfo::ImprovementNode::operator == (const PlotInfo::ImprovementNode& other) const
+    {
+        return nodesAreEqual(*this, other);
+    }
+
+    bool PlotInfo::FeatureRemovedNode::operator == (const PlotInfo::FeatureRemovedNode& other) const
+    {
+        if (yield != other.yield || bonusYield != other.bonusYield || improvementNodes.size() != other.improvementNodes.size())
+        {
+            return false;
+        }
+
+        for (size_t i = 0, count = improvementNodes.size(); i < count; ++i)
+        {
+            if (!(improvementNodes[i] == other.improvementNodes[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool PlotInfo::UpgradeNode::operator == (const PlotInfo::UpgradeNode& other) const
+    {
+        return nodesAreEqual(*this, other);
+    }
+
+    bool PlotInfo::BaseNode::operator == (const PlotInfo::BaseNode& other) const
+    {
+        if (isImpassable != other.isImpassable || isFreshWater != other.isFreshWater || hasPotentialFreshWaterAccess != other.hasPotentialFreshWaterAccess ||
+            yield != other.yield || bonusYield != other.bonusYield || tech != other.tech ||
+            plotType != other.plotType || terrainType != other.terrainType || bonusType != other.bonusType || featureType != other.featureType ||
+            improvementNodes.size() != other.improvementNodes.size() || !(featureRemovedNode == featureRemovedNode))
+        {
+            return false;
+        }
+
+        for (size_t i = 0, count = improvementNodes.size(); i < count; ++i)
+        {
+            if (!(improvementNodes[i] == other.improvementNodes[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     int PlotInfo::makeRiverMask_() const

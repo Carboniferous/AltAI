@@ -55,33 +55,34 @@ namespace AltAI
         std::list<ResearchTech>::iterator iter(possibleTechTactics_.begin()), iterEnd(possibleTechTactics_.end());
         while (iter != iterEnd)
         {
-            if (iter->techFlags & TechFlags::Free_Tech)
+            if (iter->techType == techType)
             {
-                iter->techFlags &= ~TechFlags::Free_Tech;
+                if (iter->techFlags & TechFlags::Free_Tech)
+                {
+                    iter->techFlags &= ~TechFlags::Free_Tech;
 #ifdef ALTAI_DEBUG
-                os << "\n(updateFirstToTechTactics) Removing free tech flag from research tech tactic: " << *iter;
+                    os << "\n(updateFirstToTechTactics) Removing free tech flag from research tech tactic: " << *iter;
 #endif
-            }
+                }
 
-            if (iter->techFlags & TechFlags::Free_GP)
-            {
-                iter->techFlags &= ~TechFlags::Free_GP;
+                if (iter->techFlags & TechFlags::Free_GP)
+                {
+                    iter->techFlags &= ~TechFlags::Free_GP;
 #ifdef ALTAI_DEBUG
-                os << "\n(updateFirstToTechTactics) Removing free GP flag from research tech tactic: " << *iter;
+                    os << "\n(updateFirstToTechTactics) Removing free GP flag from research tech tactic: " << *iter;
 #endif
-            }
+                }
 
-            if (iter->isEmpty())
-            {
+                if (iter->isEmpty())
+                {
 #ifdef ALTAI_DEBUG
-                os << "\n(updateFirstToTechTactics) Removing research tech tactic: " << *iter;
+                    os << "\n(updateFirstToTechTactics) Removing research tech tactic: " << *iter;
 #endif
-                possibleTechTactics_.erase(iter++);
+                    possibleTechTactics_.erase(iter++);
+                    continue;
+                }
             }
-            else
-            {
-                ++iter;
-            }
+            ++iter;
         }
     }
 

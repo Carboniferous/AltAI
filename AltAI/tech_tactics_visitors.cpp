@@ -193,29 +193,32 @@ namespace AltAI
 
         void operator() (const TechInfo::FirstToNode& node)
         {
-            if (node.foundReligion)
+            if (gGlobals.getGame().countKnownTechNumTeams(researchTech_.techType) == 0)
             {
-                for (int i = 0, count = gGlobals.getNumReligionInfos(); i < count; ++i)
+                if (node.foundReligion)
                 {
-                    const CvReligionInfo& religionInfo = gGlobals.getReligionInfo((ReligionTypes)i);
-                    TechTypes religionTech = (TechTypes)religionInfo.getTechPrereq();
-                    if (religionTech == researchTech_.techType)
+                    for (int i = 0, count = gGlobals.getNumReligionInfos(); i < count; ++i)
                     {
-                        if (!gGlobals.getGame().isReligionSlotTaken((ReligionTypes)i))
+                        const CvReligionInfo& religionInfo = gGlobals.getReligionInfo((ReligionTypes)i);
+                        TechTypes religionTech = (TechTypes)religionInfo.getTechPrereq();
+                        if (religionTech == researchTech_.techType)
                         {
-                            researchTech_.economicFlags |= EconomicFlags::Output_Culture;
+                            if (!gGlobals.getGame().isReligionSlotTaken((ReligionTypes)i))
+                            {
+                                researchTech_.economicFlags |= EconomicFlags::Output_Culture;
+                            }
+                            break;
                         }
-                        break;
                     }
                 }
-            }
-            if (node.freeTechCount > 0)
-            {
-                researchTech_.techFlags |= TechFlags::Free_Tech;
-            }
-            if (node.freeUnitClass != NO_UNITCLASS)
-            {
-                researchTech_.techFlags |= TechFlags::Free_GP;
+                if (node.freeTechCount > 0)
+                {
+                    researchTech_.techFlags |= TechFlags::Free_Tech;
+                }
+                if (node.freeUnitClass != NO_UNITCLASS)
+                {
+                    researchTech_.techFlags |= TechFlags::Free_GP;
+                }
             }
         }
 
