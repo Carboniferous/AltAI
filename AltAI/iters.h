@@ -90,26 +90,32 @@ namespace AltAI
             const int thisX = x, thisY = y;
 
             bool done = false;
-            if (y < yRange)
+            if (x < xRange)
             {
-                ++y;
+                ++x;
             }
             else
             {
-                if (x < xRange)
+                if (y < yRange)
                 {
-                    y = -yRange;
-                    ++x;
-                    if (y == 0 && x == 0)
-                    {
-                        ++x;
-                    }
+                    ++y;
+                    x = -xRange;
+                }
+                else if (y == yRange)
+                {
+                    ++y;
                 }
                 else
                 {
                     done = true;
                 }
             }
+
+            if (y == 0 && x == 0)
+            {
+                ++x;
+            }
+
             return IterPlot(done ? NULL : plotXY(pPlot->getX(), pPlot->getY(), thisX, thisY), done);
         }
 

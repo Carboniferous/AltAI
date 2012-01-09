@@ -94,6 +94,9 @@ namespace AltAI
             }
             citiesToInit_.clear();
 
+            // handle plot updates
+            //pPlayerAnalysis_->getMapAnalysis()->update();
+
             calcMaxResearchRate_();
 
             for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
@@ -912,6 +915,8 @@ namespace AltAI
 
         pPlayerAnalysis_->recalcTechDepths();
 
+        pPlayerAnalysis_->getMapAnalysis()->reinitDotMap();
+
         // store tech requirement against buildings - so need to update these (before updating tech tactics)
         pPlayerAnalysis_->getPlayerTactics()->updateBuildingTactics();
         // similarly for units (potentially)
@@ -961,7 +966,7 @@ namespace AltAI
 
     void Player::pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pPlotEvent)
     {
-        getAnalysis()->getMapAnalysis()->update(pPlotEvent);
+        getAnalysis()->getMapAnalysis()->pushPlotEvent(pPlotEvent);
     }
 
     void Player::updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType)
@@ -1006,7 +1011,7 @@ namespace AltAI
 
     void Player::updatePlotValues()
     {
-        pPlayerAnalysis_->getMapAnalysis()->reinitDotMap();
+        //pPlayerAnalysis_->getMapAnalysis()->reinitDotMap();
         pSettlerManager_->analysePlotValues();
     }
 

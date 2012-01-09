@@ -4634,79 +4634,21 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
 				}
 			}
 
-            // AltAI
+            // AltAI - store each team's view of this plot's current ownership
             PlayerTypes oldOwner = (PlayerTypes)m_eOwner;
-
+            std::map<TeamTypes, PlayerTypes> previousRevealedOwnersMap;
             if (GC.getGame().getAltAI()->isInit())
             {
-                if (oldOwner == NO_PLAYER)
+                AltAI::TeamIDIter teamIter;
+                TeamTypes teamType = NO_TEAM;
+                while ((teamType = teamIter()) != NO_TEAM)
                 {
-                    AltAI::TeamIDIter teamIter;
-                    TeamTypes teamType = NO_TEAM;
-                    while ((teamType = teamIter()) != NO_TEAM)
-                    {
-                        if (isVisible(teamType, false)) // must be able to see the plot (not just know about it)
-                        {
-                            AltAI::PlayerIDIter playerIter(teamType);
-                            PlayerTypes playerType = NO_PLAYER;
-                            while ((playerType = playerIter()) != NO_PLAYER)
-                            {
-                                if (playerType != eNewValue)
-                                {
-                                    // update any other player that can see this plot except the new owner that this plot is not available any more
-                                    if (GET_PLAYER(playerType).isUsingAltAI())
-                                    {
-                                        GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotCulture(this, true);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                else if (isVisible(getTeam(), false)) // tell the old owner it's gone (if they can see it!)
-                {
-                    if (GET_PLAYER(oldOwner).isUsingAltAI())
-                    {
-                        GC.getGame().getAltAI()->getPlayer(oldOwner)->updatePlotCulture(this, true);
-                    }
+                    previousRevealedOwnersMap[teamType] = getRevealedOwner(teamType, false);
                 }
             }
 
             // actually switch the owner
 			m_eOwner = eNewValue;
-
-            // AltAI
-            if (GC.getGame().getAltAI()->isInit())
-            {
-                if (eNewValue == NO_PLAYER)
-                {
-                    AltAI::TeamIDIter teamIter;
-                    TeamTypes teamType = NO_TEAM;
-                    while ((teamType = teamIter()) != NO_TEAM)
-                    {
-                        if (isVisible(teamType, false)) // must be able to see the plot (not just know about it)
-                        {
-                            AltAI::PlayerIDIter playerIter(teamType);
-                            PlayerTypes playerType = NO_PLAYER;
-                            while ((playerType = playerIter()) != NO_PLAYER)
-                            {
-                                if (GET_PLAYER(playerType).isUsingAltAI())
-                                {
-                                    // update any player that can see this plot that this plot is now available
-                                    GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotCulture(this, false);
-                                }
-                            }
-                        }
-                    }
-                }
-                else  // just update the new owner
-                {
-                    if (GET_PLAYER((PlayerTypes)m_eOwner).isUsingAltAI())
-                    {
-                        GC.getGame().getAltAI()->getPlayer((PlayerTypes)m_eOwner)->updatePlotCulture(this, false);
-                    }
-                }
-            }
 
 			setWorkingCityOverride(NULL);
 			updateWorkingCity();
@@ -4773,6 +4715,32 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
 			{
 				verifyUnitValidPlot();
 			}
+
+            // AltAI
+            if (GC.getGame().getAltAI()->isInit())
+            {
+                AltAI::TeamIDIter teamIter;
+                TeamTypes teamType = NO_TEAM;
+                while ((teamType = teamIter()) != NO_TEAM)
+                {
+                    // has this team's view of this plot's ownership changed?
+                    PlayerTypes plotOwner = getRevealedOwner(teamType, false);
+                    if (previousRevealedOwnersMap[teamType] != plotOwner)
+                    {
+                        AltAI::PlayerIDIter playerIter(teamType);
+                        PlayerTypes playerType = NO_PLAYER;
+                        while ((playerType = playerIter()) != NO_PLAYER)
+                        {
+                            if (GET_PLAYER(playerType).isUsingAltAI())
+                            {
+                                // if we own this plot, or think no-one owns it, add it - otherwise remove it as we think someone else owns it
+                                bool addPlot = plotOwner == NO_PLAYER || plotOwner == playerType;
+                                GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotCulture(this, !addPlot);
+                            }
+                        }
+                    }
+                }
+            }
 
 			if (isOwned())
 			{
@@ -7010,6 +6978,9 @@ void CvPlot::updateRevealedOwner(TeamTypes eTeam)
 	FAssertMsg(eTeam >= 0, "eTeam is expected to be non-negative (invalid Index)");
 	FAssertMsg(eTeam < MAX_TEAMS, "eTeam is expected to be within maximum bounds (invalid Index)");
 
+    // AltAI
+    PlayerTypes currentRevealedOwner = getRevealedOwner(eTeam, false);
+
 	bRevealed = false;
 
 	if (!bRevealed)  // utterly pointless test
@@ -7040,6 +7011,22 @@ void CvPlot::updateRevealedOwner(TeamTypes eTeam)
 	if (bRevealed)
 	{
 		setRevealedOwner(eTeam, getOwnerINLINE());
+
+        // AltAI
+        if (currentRevealedOwner != getOwnerINLINE() && GC.getGame().getAltAI()->isInit())
+        {
+            AltAI::PlayerIDIter playerIter(eTeam);
+            PlayerTypes playerType = NO_PLAYER;
+            while ((playerType = playerIter()) != NO_PLAYER)
+            {
+                if (GET_PLAYER(playerType).isUsingAltAI())
+                {
+                    // if we own this plot, or think no-one owns it, add it - otherwise remove it as we think someone else owns it
+                    bool addPlot = getOwnerINLINE() == NO_PLAYER || getOwnerINLINE() == playerType;
+                    GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotCulture(this, !addPlot);
+                }
+            }
+        }
 	}
 }
 
@@ -7302,7 +7289,6 @@ void CvPlot::setRevealed(TeamTypes eTeam, bool bNewValue, bool bTerrainOnly, Tea
                 {
                     // todo - this is ugly - sort out team/player AI use
                     GC.getGame().getAltAI()->getTeam(eTeam)->pushPlotEvent(boost::shared_ptr<AltAI::IPlotEvent>(new AltAI::RevealPlotEvent(this, bTerrainOnly)));
-                    break;
                 }
             }
 		}

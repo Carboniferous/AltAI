@@ -54,7 +54,9 @@ namespace AltAI
 
         void reinitDotMap();
         
-        void update(const boost::shared_ptr<IPlotEvent>& event);
+        void pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pEvent);
+        void update();
+
         void updatePlotRevealed(const CvPlot* pPlot);
         void updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType);
         void updatePlotCulture(const CvPlot* pPlot, bool remove);
@@ -115,11 +117,10 @@ namespace AltAI
         void updateResourceData_(const CvPlot* pPlot);
 
         void addDotMapPlot_(const CvPlot* pPlot, const PlotInfo& plotInfo);
-        //DotMapItem analysePlotValue_(PlotValues::SubAreaPlotValueMap::const_iterator ci);
-        //void findBestCitySites_();
         void updateKeysValueMap_(int key, const PlotInfo& plotInfo);
-        //std::pair<int, int> getNeighbourCityData_(const CvPlot* pPlot) const;
-        //int getAverageDistanceToOtherCities_(const CvPlot* pPlot) const;
+
+        void updatePlotValueKey_(const CvPlot* pPlot, int oldKey, int newKey);
+        void removePlotValuePlot_(const CvPlot* pPlot);
 
         void setWorkingCity_(IDInfo possibleCity, XYCoords coords, IDInfo assignedCity);
 
@@ -144,7 +145,7 @@ namespace AltAI
         typedef std::map<int, PlotInfo::PlotInfoNode> PlotInfoMap;
         PlotInfoMap plotInfoMap_;
 
-        PlotValues plotValues_;
+        PlotValues plotValues_, previousPlotValues_;
 
         typedef std::set<DotMapItem> DotMap;
         DotMap dotMap_;
@@ -155,6 +156,8 @@ namespace AltAI
 
         typedef std::set<CityImprovementManager> CitiesImprovements;
         CitiesImprovements citiesImprovements_;
+
+        std::vector<boost::shared_ptr<IPlotEvent> > plotEvents_;
 
         void addSharedPlotToCity_(IDInfo city, XYCoords coords, IDInfo otherCity);
         void deleteSharedCity_(IDInfo city, IDInfo sharedCity);

@@ -28,7 +28,8 @@ namespace AltAI
             bool isPinned, isSelected, improvementMakesBonusValid;
             bool operator < (const PlotData& other) const { return coords < other.coords; }
             PlotYield getPlotYield() const { return workedImprovement == -1 ? PlotYield() : possibleImprovements[workedImprovement].first; }
-            PlotYield getPlotYield(int index) const { return index == -1 ? PlotYield() : possibleImprovements[index].first; }
+
+            PlotYield getPlotYield(int index) const { return (index == -1 || possibleImprovements.empty()) ? PlotYield() : possibleImprovements[index].first; }
             ImprovementTypes getWorkedImprovement() const { return workedImprovement == -1 ? NO_IMPROVEMENT : possibleImprovements[workedImprovement].second; }
             ImprovementTypes getWorkedImprovement(int index) const { return index == -1 ? NO_IMPROVEMENT : possibleImprovements[index].second; }
         };
