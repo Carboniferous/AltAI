@@ -16,6 +16,7 @@ namespace AltAI
     class MapAnalysis : public boost::enable_shared_from_this<MapAnalysis>
     {
     public:
+        static const int DotMapTechDepth = 3;
 
         struct AreaDetail
         {
@@ -60,7 +61,6 @@ namespace AltAI
         void updatePlotRevealed(const CvPlot* pPlot);
         void updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType);
         void updatePlotCulture(const CvPlot* pPlot, bool remove);
-        void updatePlotCanFound(const CvPlot* pPlot, bool remove);
         void updateResourceData(const std::vector<BonusTypes>& revealedBonusTypes);
         void updatePlotBonus(const CvPlot* pPlot, BonusTypes bonusType);
 
@@ -69,9 +69,6 @@ namespace AltAI
 
         const PlotInfo::PlotInfoNode& getPlotInfoNode(const CvPlot* pPlot);
         const Player& getPlayer() const { return player_; }
-
-        //void analysePlotValues();
-        //std::vector<int> getBestCitySites(int minValue, int count);
 
         const PlotValues& getPlotValues() const;
 
@@ -90,7 +87,6 @@ namespace AltAI
         CityImprovementManager& getImprovementManager(IDInfo city);
 
         void debug(std::ostream& os) const;
-        //void debugDotMap() const;
         void debugSharedPlots() const;
 
         IDInfo setWorkingCity(const CvPlot* pPlot, const CvCity* pOldCity, const CvCity* pNewCity);
@@ -116,8 +112,8 @@ namespace AltAI
 
         void updateResourceData_(const CvPlot* pPlot);
 
-        void addDotMapPlot_(const CvPlot* pPlot, const PlotInfo& plotInfo);
-        void updateKeysValueMap_(int key, const PlotInfo& plotInfo);
+        void addDotMapPlot_(const CvPlot* pPlot, const PlotInfo::PlotInfoNode& plotInfo);
+        void updateKeysValueMap_(int key, const PlotInfo::PlotInfoNode& plotInfo);
 
         void updatePlotValueKey_(const CvPlot* pPlot, int oldKey, int newKey);
         void removePlotValuePlot_(const CvPlot* pPlot);
@@ -135,8 +131,6 @@ namespace AltAI
         typedef ResourcesMap::const_iterator ResourcesMapConstIter;
         ResourcesMap resourcesMap_;
 
-        //std::map<int, std::vector<XYCoords> > plotGroupCounts_;
-
         // value is plot key
         typedef std::map<XYCoords, int> KeyInfoMap;
         KeyInfoMap keyInfoMap_;
@@ -144,6 +138,9 @@ namespace AltAI
         // key is plot key
         typedef std::map<int, PlotInfo::PlotInfoNode> PlotInfoMap;
         PlotInfoMap plotInfoMap_;
+
+        std::pair<int, PlotInfoMap::iterator> addPlotInfo_(const CvPlot* pPlot);
+        std::pair<int, PlotInfoMap::iterator> updatePlotInfo_(const CvPlot* pPlot);
 
         PlotValues plotValues_, previousPlotValues_;
 
@@ -156,8 +153,6 @@ namespace AltAI
 
         typedef std::set<CityImprovementManager> CitiesImprovements;
         CitiesImprovements citiesImprovements_;
-
-        std::vector<boost::shared_ptr<IPlotEvent> > plotEvents_;
 
         void addSharedPlotToCity_(IDInfo city, XYCoords coords, IDInfo otherCity);
         void deleteSharedCity_(IDInfo city, IDInfo sharedCity);

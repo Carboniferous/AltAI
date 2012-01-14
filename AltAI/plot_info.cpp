@@ -25,7 +25,7 @@ namespace AltAI
             static const int numTerrainTypes = 1 + gGlobals.getNumTerrainInfos();
             static const int numFeatureTypes = 1 + gGlobals.getNumFeatureInfos();  // for NO_FEATURE
             static const int numBonusTypes = 1 + gGlobals.getNumBonusInfos();  // for NO_BONUS
-            static const int numWaterTypes = 4;
+            static const int numWaterTypes = 5;
             static const int numRiverMaskTypes = 16;
 
             return plotType + numPlotTypes *
@@ -51,7 +51,7 @@ namespace AltAI
             static const int numTerrainTypes = gGlobals.getNumTerrainInfos();
             static const int numFeatureTypes = 1 + gGlobals.getNumFeatureInfos();  // for NO_FEATURE
             static const int numBonusTypes = 1 + gGlobals.getNumBonusInfos();  // for NO_BONUS
-            static const int numWaterTypes = 4;
+            static const int numWaterTypes = 5;
             static const int numRiverMaskTypes = 16;
             static const int numCityTypes = 2;
 
@@ -672,7 +672,7 @@ namespace AltAI
                 }
             }
 
-            if (first.upgradeNode != second.upgradeNode)
+            if (!(first.upgradeNode == second.upgradeNode))
             {
                 return false;
             }
@@ -752,7 +752,8 @@ namespace AltAI
 
     bool PlotInfo::BaseNode::operator == (const PlotInfo::BaseNode& other) const
     {
-        if (isImpassable != other.isImpassable || isFreshWater != other.isFreshWater || hasPotentialFreshWaterAccess != other.hasPotentialFreshWaterAccess ||
+        // note - don't compare: hasPotentialFreshWaterAccess, as this can differ, but only matters if the improvement node for farms and their build conditions differ
+        if (isImpassable != other.isImpassable || isFreshWater != other.isFreshWater || 
             yield != other.yield || bonusYield != other.bonusYield || tech != other.tech ||
             plotType != other.plotType || terrainType != other.terrainType || bonusType != other.bonusType || featureType != other.featureType ||
             improvementNodes.size() != other.improvementNodes.size() || !(featureRemovedNode == featureRemovedNode))
@@ -854,8 +855,10 @@ namespace AltAI
 
         bool isLake = plotType == ::PLOT_OCEAN && pPlot_->isLake();
         bool isRiver = pPlot_->getRiverCrossingCount() > 0;
-        int waterType = isLake ? 3 : (isRiver ? 2 : (hasFreshWaterAccess ? 1 : 0));
-        //const int numWaterTypes = 4;
+        bool hasFreshWater = pPlot_->isFreshWater();
+        // sea will be 0, lakes: 1, potential fresh water: 2, adjacent to fresh water: 3 (can't be a water plot), riverside: 4
+        int waterType = isLake ? 4 : (isRiver ? 3 : (hasFreshWater ? 2 : (hasFreshWaterAccess ? 1 : 0)));
+        //const int numWaterTypes = 5;
 
         //const int numRiverMaskTypes = 16;
 

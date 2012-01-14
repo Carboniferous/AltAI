@@ -750,10 +750,9 @@ namespace AltAI
     void PlayerAnalysis::updateTechDepths_()
     {
 #ifdef ALTAI_DEBUG
-        // debug
-        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player_.getCvPlayer());
-        std::ostream& os = pCivLog->getStream();
-        os << "\nTech depths = ";
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nTech depths:";
+        std::multimap<int, TechTypes> techDepthsMap;
 #endif
         const int count = gGlobals.getNumTechInfos();
         techDepths_.resize(count);
@@ -762,13 +761,24 @@ namespace AltAI
         {
             techDepths_[i] = calculateTechResearchDepth((TechTypes)i, player_.getPlayerID());
 #ifdef ALTAI_DEBUG
-            os << gGlobals.getTechInfo((TechTypes)i).getType() << "=" << techDepths_[i] << ", ";
-            if (!(i % 10))
-            {
-                os << "\n";
-            }
+            techDepthsMap.insert(std::make_pair(techDepths_[i], (TechTypes)i));
 #endif
         }
+#ifdef ALTAI_DEBUG
+        int currentDepth = -1, techCount = 0;
+        for (std::multimap<int, TechTypes>::const_iterator ci(techDepthsMap.begin()), ciEnd(techDepthsMap.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->first != currentDepth)
+            {
+                os << "\ndepth = " << ci->first << " ";
+                currentDepth = ci->first;
+                techCount = 0;
+            }
+
+            os << gGlobals.getTechInfo(ci->second).getType() << ", ";
+            if (!(++techCount % 10)) os << "\n\t";
+        }
+#endif
     }
 
     void PlayerAnalysis::write(FDataStreamBase* pStream) const

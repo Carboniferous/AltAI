@@ -320,14 +320,22 @@ namespace AltAI
                 std::map<XYCoords, PlotYield>::const_iterator yi(extraYieldsMap.find(*si));
                 MapAnalysis::PlotValues::KeysValueMap::const_iterator ki(plotValues.keysValueMap.find(mi->first));
 
-                for (size_t i = 0, count = ki->second.size(); i < count; ++i)
+                if (ki != plotValues.keysValueMap.end())
                 {
-                    plotData.possibleImprovements.push_back(ki->second[i]);
-
-                    if (yi != extraYieldsMap.end())  // add any extra yields on
+                    for (size_t i = 0, count = ki->second.size(); i < count; ++i)
                     {
-                        plotData.possibleImprovements.rbegin()->first += yi->second;
+                        plotData.possibleImprovements.push_back(ki->second[i]);
+
+                        if (yi != extraYieldsMap.end())  // add any extra yields on
+                        {
+                            plotData.possibleImprovements.rbegin()->first += yi->second;
+                        }
                     }
+                }
+                else
+                {
+                    std::ostream& os = ErrorLog::getLog(CvPlayerAI::getPlayer(playerType_))->getStream();
+                    os << "\n(analysePlotValue_): Failed to find plot key: " << mi->first << " for coords: " << *si;
                 }
                 
                 BonusTypes bonusType = boost::get<PlotInfo::BaseNode>(pMapAnalysis_->getPlotInfoNode(pLoopPlot)).bonusType;

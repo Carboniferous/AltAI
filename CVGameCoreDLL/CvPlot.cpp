@@ -4716,31 +4716,31 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
 				verifyUnitValidPlot();
 			}
 
-            // AltAI
-            if (GC.getGame().getAltAI()->isInit())
-            {
-                AltAI::TeamIDIter teamIter;
-                TeamTypes teamType = NO_TEAM;
-                while ((teamType = teamIter()) != NO_TEAM)
-                {
-                    // has this team's view of this plot's ownership changed?
-                    PlayerTypes plotOwner = getRevealedOwner(teamType, false);
-                    if (previousRevealedOwnersMap[teamType] != plotOwner)
-                    {
-                        AltAI::PlayerIDIter playerIter(teamType);
-                        PlayerTypes playerType = NO_PLAYER;
-                        while ((playerType = playerIter()) != NO_PLAYER)
-                        {
-                            if (GET_PLAYER(playerType).isUsingAltAI())
-                            {
-                                // if we own this plot, or think no-one owns it, add it - otherwise remove it as we think someone else owns it
-                                bool addPlot = plotOwner == NO_PLAYER || plotOwner == playerType;
-                                GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotCulture(this, !addPlot);
-                            }
-                        }
-                    }
-                }
-            }
+            //// AltAI - done in updateRevealedOwner instead
+            //if (GC.getGame().getAltAI()->isInit())
+            //{
+            //    AltAI::TeamIDIter teamIter;
+            //    TeamTypes teamType = NO_TEAM;
+            //    while ((teamType = teamIter()) != NO_TEAM)
+            //    {
+            //        // has this team's view of this plot's ownership changed?
+            //        PlayerTypes plotOwner = getRevealedOwner(teamType, false);
+            //        if (previousRevealedOwnersMap[teamType] != plotOwner)
+            //        {
+            //            AltAI::PlayerIDIter playerIter(teamType);
+            //            PlayerTypes playerType = NO_PLAYER;
+            //            while ((playerType = playerIter()) != NO_PLAYER)
+            //            {
+            //                if (GET_PLAYER(playerType).isUsingAltAI())
+            //                {
+            //                    // if we own this plot, or think no-one owns it, add it - otherwise remove it as we think someone else owns it
+            //                    bool addPlot = plotOwner == NO_PLAYER || plotOwner == playerType;
+            //                    GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotCulture(this, !addPlot);
+            //                }
+            //            }
+            //        }
+            //    }
+            //}
 
 			if (isOwned())
 			{
