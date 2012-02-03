@@ -20,7 +20,8 @@ namespace AltAI
 
     void ResearchTech::merge(const ResearchTech& other)
     {
-        if (other.techType != techType)
+        // can only merge if NO_TECH set yet or techs match
+        if (other.techType != techType && !(other.techType == NO_TECH || techType == NO_TECH))
         {
             return;
         }
@@ -49,6 +50,11 @@ namespace AltAI
             {
                 iter->second->removableFeatureCounts = ci->second->removableFeatureCounts;
             }
+        }
+
+        if (techType == NO_TECH && other.techType != NO_TECH)
+        {
+            techType = other.techType; 
         }
     }
 

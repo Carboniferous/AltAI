@@ -348,6 +348,20 @@ int joinSubArea(FAStarNode* parent, FAStarNode* node, int data, const void* poin
 int joinIrrigatableArea(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 int plotGroupValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 int countPlotGroup(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+// AltAI
+struct SubAreaStepFlags
+{
+    SubAreaStepFlags() : flags(None) {}
+    enum Flags
+    {
+        None = 0, Team_Territory = (1 << 0), Unowned_Territory = (1 << 1), Friendly_Territory = (1 << 2)
+    };
+    int flags;
+};
+
+// AltAI
+int subAreaStepDestValid(int iToX, int iToY, const void* pointer, FAStar* finder);
+int subAreaStepValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 
 int baseYieldToSymbol(int iNumYieldTypes, int iYieldStack);
 

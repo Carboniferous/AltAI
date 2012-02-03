@@ -70,7 +70,7 @@ namespace AltAI
         void setWorkingCityOverride(const CvPlot* pPlot, const CvCity* pOldCity, const CvCity* pNewCity);
 
         void setCityDirty(IDInfo city);
-        void updateSharedPlots();
+        void updateCityData();
 
         void updatePlotValues();
         const boost::shared_ptr<SettlerManager>& getSettlerManager() const;
@@ -94,6 +94,7 @@ namespace AltAI
         void notifyFirstToTechDiscovered(TeamTypes teamType, TechTypes techType);
 
         void logStuckSelectionGroup(CvUnit* pHeadUnit) const;
+        void logInvalidUnitBuild(const CvUnit* pUnit, BuildTypes buildType) const;
 
         int getMaxResearchRate() const;
         int getMaxResearchRateWithProcesses() const;

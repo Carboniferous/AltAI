@@ -34,6 +34,9 @@ namespace AltAI
             void debug(std::ostream& os) const;
         };
 
+        // turns, pop, delta output
+        typedef boost::tuple<int, int, TotalOutput> CityGrowthLadder;
+
         explicit PlayerAnalysis(Player& player);
 
         void init();
@@ -85,6 +88,10 @@ namespace AltAI
 
         SpecialistTypes getBestSpecialist(OutputTypes outputType) const;
 
+        void analyseCities();
+        void analyseCity(const CvCity* pCity);
+        std::vector<CityGrowthLadder> getCityGrowthLadder(IDInfo city) const;
+
         // save/load functions
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
@@ -108,7 +115,7 @@ namespace AltAI
         void analyseTechs_();
         void analyseCivics_();
         void analyseResources_();
-        void analyseSpecialists_();
+        void analyseSpecialists_();        
 
         std::map<UnitTypes, boost::shared_ptr<UnitInfo> > unitsInfo_;
         std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> > buildingsInfo_;
@@ -117,5 +124,8 @@ namespace AltAI
         std::map<BonusTypes, boost::shared_ptr<ResourceInfo> > resourcesInfo_;
 
         std::map<OutputTypes, SpecialistTypes> bestSpecialistTypesMap_;
+
+        typedef std::map<IDInfo, std::vector<CityGrowthLadder> > CityOutputsMap;
+        CityOutputsMap cityOutputsMap_;
     };
 }

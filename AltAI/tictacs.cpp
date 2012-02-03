@@ -18,6 +18,23 @@
 
 namespace AltAI
 {
+    namespace
+    {
+        struct TechTacticFinder
+        {
+            explicit TechTacticFinder(TechTypes techType_) : techType(techType_)
+            {
+            }
+
+            bool operator() (const ResearchTech& other) const
+            {
+                return techType == other.techType;
+            }
+
+            TechTypes techType;
+        };
+    }
+
     void PlayerTactics::init()
     {
         possibleTechTactics_ = makeTechTactics(player);
@@ -37,7 +54,48 @@ namespace AltAI
 
     void PlayerTactics::updateTechTactics()
     {
-        possibleTechTactics_ = makeTechTactics(player);
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+        os << "\nupdateTechTactics(): turn = " << gGlobals.getGame().getGameTurn() << "\n";
+#endif
+
+        for (int i = 0, count = gGlobals.getNumTechInfos(); i < count; ++i)
+        {
+            const int depth = player.getTechResearchDepth((TechTypes)i);
+            if (depth > 3)
+            {
+                continue;
+            }
+
+            std::list<ResearchTech>::iterator iter = std::find_if(possibleTechTactics_.begin(), possibleTechTactics_.end(), TechTacticFinder((TechTypes)i));
+
+            if (depth == 0)
+            {
+                if (iter != possibleTechTactics_.end())
+                {
+                    possibleTechTactics_.erase(iter);
+                }
+            }
+            else
+            {
+                if (iter == possibleTechTactics_.end())
+                {
+                    ResearchTech researchTech = makeTechTactic(player, (TechTypes)i);
+                    if (researchTech.techType != NO_TECH)
+                    {
+#ifdef ALTAI_DEBUG
+                        os << "\nAdding tech tactic: " << researchTech;
+#endif
+                        possibleTechTactics_.push_back(researchTech);
+                    }
+                }
+                else  // update tech depth
+                {
+                    iter->depth = depth;
+                }
+            }
+        }
+        
         selectTechTactics();
     }
 
@@ -109,10 +167,10 @@ namespace AltAI
 
     ConstructItem PlayerTactics::getBuildItem(const City& city)
     {
-        if (selectedTechTactics_.empty() || gGlobals.getGame().getGameTurn() == 0)
-        {
-            updateTechTactics();
-        }
+        //if (selectedTechTactics_.empty() || gGlobals.getGame().getGameTurn() == 0)
+        //{
+        //    updateTechTactics();
+        //}
         updateUnitTactics();
         //updateBuildingTactics();
         debugTactics();

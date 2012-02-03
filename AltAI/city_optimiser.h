@@ -43,6 +43,7 @@ namespace AltAI
  
         TotalOutput getMaxOutputs() const;
         TotalOutputWeights getMaxOutputWeights() const;
+        int getMaxFood();
 
         void debug(std::ostream& os, bool printAllPlots = true) const;
         static std::string getGrowthTypeString(GrowthType growthType);

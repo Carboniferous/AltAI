@@ -53,9 +53,10 @@ namespace AltAI
         pUnitAnalysis_->init();
         pUnitAnalysis_->debug();
 
+        analyseCities();
+
         playerTactics_->init();
     }
-
 
     void PlayerAnalysis::analyseUnits_()
     {
@@ -214,12 +215,132 @@ namespace AltAI
             }
         }
 
-        // debug
+#ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
         for (std::map<OutputTypes, SpecialistTypes>::const_iterator ci(bestSpecialistTypesMap_.begin()), ciEnd(bestSpecialistTypesMap_.end()); ci != ciEnd; ++ci)
         {
             os << "\n" << ci->first << " = " << (ci->second == NO_SPECIALIST ? "NO_SPECIALIST" : gGlobals.getSpecialistInfo(ci->second).getType());
         }
+#endif
+    }
+
+    void PlayerAnalysis::analyseCities()
+    {
+        CityIter cityIter(*player_.getCvPlayer());
+        while (CvCity* pCity = cityIter())
+        {
+            analyseCity(pCity);
+        }
+    }
+
+    void PlayerAnalysis::analyseCity(const CvCity* pCity)
+    {
+        if (pCity->isDisorder())
+        {
+            return;
+        }
+
+        const CvPlayer* pPlayer = player_.getCvPlayer();
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+#endif
+        // todo - calculate these from city itself, not generically
+        std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
+        std::vector<OutputTypes> outputTypes = boost::assign::list_of(OUTPUT_PRODUCTION)(OUTPUT_RESEARCH);
+        TotalOutputPriority outputPriorities = makeTotalOutputPriorities(outputTypes);
+        TotalOutputWeights outputWeights = makeOutputW(2, 2, 2, 2, 1, 1);
+
+        CityImprovementManager improvementManager(pMapAnalysis_->getImprovementManager(pCity->getIDInfo()));
+        const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
+
+        cityOutputsMap_[pCity->getIDInfo()] = std::vector<CityGrowthLadder>();
+        improvementManager.calcImprovements(yieldTypes, pCity->getPopulation() + 5, 3);
+
+        boost::shared_ptr<CityData> pCityData(new CityData(pCity, improvementManager));
+        pCityData->happyHelper->setNoUnhappiness(true);
+
+        CityOptimiser cityOptimiser(pCityData);
+
+#ifdef ALTAI_DEBUG
+        os << "\nCity: " << narrow(pCity->getName()) << " ";
+        //os << "\nImprovements: count = " << improvementManager.getImprovements().size();
+
+        //const std::vector<CityImprovementManager::PlotImprovementData>& plotImprovements = improvementManager.getImprovements();
+        //for (size_t i = 0, count = plotImprovements.size(); i < count; ++i)
+        //{
+        //    improvementManager.logImprovement(os, plotImprovements[i]);
+        //}
+#endif
+        TotalOutput lastOutput;
+        std::vector<CityGrowthLadder> growthLadder;
+
+        while (true)
+        {
+            int requiredFood = 100 * (pCityData->cityPopulation * foodPerPop) + pCityData->getLostFood();
+            int maxFood = cityOptimiser.getMaxFood();
+
+            if (maxFood < requiredFood)
+            {
+                break;
+            }
+
+            Range targetFood(maxFood < requiredFood + 200 ? requiredFood + 100 : 200 + (requiredFood + maxFood) / 2, Range::LowerBound);
+#ifdef ALTAI_DEBUG
+            pCityData->debugBasicData(os);
+            os << "\n max food = " << cityOptimiser.getMaxFood() << ", target = " << targetFood.lower;
+#endif
+            // optimise with target of at least some growth
+            if (cityOptimiser.optimise<MixedWeightedTotalOutputOrderFunctor>(outputPriorities, outputWeights, targetFood) == CityOptimiser::FailedInsufficientFood)
+            {
+#ifdef ALTAI_DEBUG
+                os << "\n final output = " << pCityData->getOutput() << " ";
+                cityOptimiser.debug(os, false);
+#endif
+                break;
+            }
+
+            TotalOutput thisOutput = pCityData->getOutput();
+            int turnsToGrow = MAX_INT;
+            int foodDelta = thisOutput[OUTPUT_FOOD] - requiredFood;
+
+            if (foodDelta > 0)
+            {
+                const int growthRate = (pCityData->growthThreshold - pCityData->currentFood) / foodDelta;
+                const int growthDelta = (pCityData->growthThreshold - pCityData->currentFood) % foodDelta;
+#ifdef ALTAI_DEBUG
+                os << "\nfood delta = " << foodDelta << ", threshold = " << pCityData->growthThreshold << ", stored food = " << pCityData->storedFood
+                    << ", growth rate = " << growthRate << ", remainder = " << growthDelta;
+#endif
+                turnsToGrow = growthRate + (growthDelta ? 1 : 0);
+            }
+                
+            growthLadder.push_back(boost::make_tuple(turnsToGrow, pCityData->cityPopulation, thisOutput - lastOutput));
+
+            lastOutput = thisOutput;
+
+            pCityData->storedFood = pCityData->foodKeptPercent * pPlayer->getGrowthThreshold(pCityData->cityPopulation + 1);
+            pCityData->changePopulation(1);
+        }
+
+        cityOutputsMap_[pCity->getIDInfo()] = growthLadder;
+
+#ifdef ALTAI_DEBUG
+        int turn = 0;
+        TotalOutput cumulativeOutput;
+        for (size_t i = 0, count = growthLadder.size(); i < count; ++i)
+        {
+            turn += boost::get<0>(growthLadder[i]);
+            cumulativeOutput += boost::get<2>(growthLadder[i]);
+            os << "\n\tPop = " << boost::get<1>(growthLadder[i]) << " turn = " << turn << " output = " << cumulativeOutput;
+            if (i > 0) os << ", delta = " << boost::get<2>(growthLadder[i]); 
+        }
+#endif
+    }
+
+    std::vector<PlayerAnalysis::CityGrowthLadder> PlayerAnalysis::getCityGrowthLadder(IDInfo city) const
+    {
+        CityOutputsMap::const_iterator ci(cityOutputsMap_.find(city));
+        return ci == cityOutputsMap_.end() ? std::vector<CityGrowthLadder>() : ci->second;
     }
 
     SpecialistTypes PlayerAnalysis::getBestSpecialist(OutputTypes outputType) const

@@ -234,8 +234,9 @@ namespace AltAI
     {
         if (node.techType == NO_TECH)
         {
-            return os << "(NO_TECH)";
+            return os << " ResearchTech with (NO_TECH)? ";
         }
+
         os << " can research: " << gGlobals.getTechInfo(node.techType).getType() << " (depth = " << node.depth << ")";
         if (node.targetTechType != NO_TECH)
         {

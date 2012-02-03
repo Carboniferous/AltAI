@@ -6391,6 +6391,10 @@ bool CvUnit::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestVisible)
 
 	if (!(GET_PLAYER(getOwnerINLINE()).canBuild(pPlot, eBuild, false, bTestVisible)))
 	{
+        if (GET_PLAYER(m_eOwner).isUsingAltAI())
+        {
+            GC.getGame().getAltAI()->getPlayer(m_eOwner)->logInvalidUnitBuild(this, eBuild);
+        }
 		return false;
 	}
 

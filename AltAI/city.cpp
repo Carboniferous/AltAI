@@ -494,7 +494,7 @@ namespace AltAI
 
     bool City::selectImprovement(CvUnit* pUnit, bool simulatedOnly)
     {
-        std::pair<XYCoords, BuildTypes> coordsAndBuildType = getBestImprovement("", simulatedOnly);
+        std::pair<XYCoords, BuildTypes> coordsAndBuildType = getBestImprovement("selectImprovement", simulatedOnly);
         if (coordsAndBuildType.second != NO_BUILD)
         {
             CvPlot* pPlot = gGlobals.getMap().plot(coordsAndBuildType.first.iX, coordsAndBuildType.first.iY);
@@ -521,6 +521,9 @@ namespace AltAI
 
     std::pair<XYCoords, BuildTypes> City::getBestImprovement(const std::string& sourceFunc, bool simulatedOnly)
     {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
+#endif
         const CityImprovementManager& improvementManager = getImprovementManager(pCity_);
 
         std::vector<boost::shared_ptr<PlotCond> > conditions;
@@ -560,8 +563,6 @@ namespace AltAI
 
 #ifdef ALTAI_DEBUG
             {   // debug
-                boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()));
-                std::ostream& os = pCivLog->getStream();
                 os << "\n(" << sourceFunc << ") " << narrow(pCity_->getName()) << " getBestImprovement(): Returned build of: "
                    << (buildOrder.second == NO_BUILD ? "(NO_BUILD)" : gGlobals.getBuildInfo(buildOrder.second).getType())
                    << " for: " << boost::get<0>(bestImprovement)
@@ -576,10 +577,18 @@ namespace AltAI
             return buildOrder;
         }
 
+        std::pair<XYCoords, RouteTypes> coordsAndRouteType = improvementManager.getBestRoute();
+        if (coordsAndRouteType.second != NO_ROUTE)
+        {
+#ifdef ALTAI_DEBUG
+            os << "\n(" << sourceFunc << ") getBestImprovement(): " << narrow(pCity_->getName()) << " returning build route at: "
+               << coordsAndRouteType.first << " for route type: " << gGlobals.getRouteInfo(coordsAndRouteType.second).getType();
+#endif
+            return std::make_pair(coordsAndRouteType.first, GameDataAnalysis::getBuildTypeForRouteType(coordsAndRouteType.second));
+        }
+
 #ifdef ALTAI_DEBUG
         {   // debug
-            boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()));
-            std::ostream& os = pCivLog->getStream();
             os << "\n(" << sourceFunc << ") getBestImprovement(): " << narrow(pCity_->getName()) << " Returned no build";
         }
 #endif
@@ -755,7 +764,7 @@ namespace AltAI
                         }
                         else if (!hasBonusAndWantsIrrigation)
                         {
-                            return std::make_pair(XYCoords(), NO_BUILD);
+                            return std::make_pair(coords, NO_BUILD);
                         }
                     }
                     else if (!hasBonusAndWantsIrrigation)
@@ -765,7 +774,7 @@ namespace AltAI
                             std::ostream& os = pErrorLog->getStream();
                             os << "\n" << narrow(pCity_->getName()) << " Failed to find plot for irrigation path from: " << coords;
                         }
-                        return std::make_pair(XYCoords(), NO_BUILD);
+                        return std::make_pair(coords, GameDataAnalysis::getBuildTypeForImprovementType(improvementManager.getSubstituteImprovement(coords)));
                     }
                 }
                 // todo - why does canBuild not appear to work for unirrigated farms on bonuses?
@@ -864,12 +873,16 @@ namespace AltAI
         std::ostream& os = CityLog::getLog(pCity_)->getStream();
         os << "\nRoutes for city: " << narrow(pCity_->getName());
 #endif
+        FAStar* pSubAreaStepFinder = gDLL->getFAStarIFace()->create();
+        CvMap& theMap = gGlobals.getMap();
+        gDLL->getFAStarIFace()->Initialize(pSubAreaStepFinder, theMap.getGridWidth(), theMap.getGridHeight(), theMap.isWrapX(), theMap.isWrapY(), subAreaStepDestValid, stepHeuristic, stepCost, subAreaStepValid, stepAdd, NULL, NULL);
+        const int stepFinderInfo = MAKEWORD((short)pCity_->getOwner(), (short)SubAreaStepFlags::Team_Territory);
+
+        FAStar& routeFinder = gGlobals.getRouteFinder();
+        gDLL->getFAStarIFace()->ForceReset(&routeFinder);
 
         const int subAreaID = pCity_->plot()->getSubArea();
-        XYCoords cityCoords(pCity_->plot()->getX(), pCity_->plot()->getY());
-        FAStar& routeFinder = gGlobals.getRouteFinder(), &stepFinder = gGlobals.getStepFinder();
-        gDLL->getFAStarIFace()->ForceReset(&routeFinder);
-        gDLL->getFAStarIFace()->ForceReset(&stepFinder);
+        XYCoords cityCoords(pCity_->plot()->getX(), pCity_->plot()->getY());        
 
         std::multimap<int, IDInfo> routeMap;
         CityIter iter(CvPlayerAI::getPlayer(pCity_->getOwner()));
@@ -898,9 +911,9 @@ namespace AltAI
                     haveRoute = true;
                 }
 
-                if (gDLL->getFAStarIFace()->GeneratePath(&stepFinder, cityCoords.iX, cityCoords.iY, destCityCoords.iX, destCityCoords.iY, false, 0, true))
+                if (gDLL->getFAStarIFace()->GeneratePath(pSubAreaStepFinder, cityCoords.iX, cityCoords.iY, destCityCoords.iX, destCityCoords.iY, false, stepFinderInfo, true))
                 {
-                    FAStarNode* pNode = gDLL->getFAStarIFace()->GetLastNode(&stepFinder);
+                    FAStarNode* pNode = gDLL->getFAStarIFace()->GetLastNode(pSubAreaStepFinder);
                     pathLength = pNode->m_iData1;
                 }
 
@@ -933,8 +946,8 @@ namespace AltAI
                 if (pUnit->generatePath(pTargetCityPlot, MOVE_SAFE_TERRITORY, true))
 			    {
                     // generate path from target, and find first plot which doesn't have the route type we want, and has no workers already on it
-                    gDLL->getFAStarIFace()->GeneratePath(&stepFinder, pTargetCityPlot->getX(), pTargetCityPlot->getY(), cityCoords.iX, cityCoords.iY, false, 0, true);
-                    FAStarNode* pNode = gDLL->getFAStarIFace()->GetLastNode(&stepFinder);
+                    gDLL->getFAStarIFace()->GeneratePath(pSubAreaStepFinder, pTargetCityPlot->getX(), pTargetCityPlot->getY(), cityCoords.iX, cityCoords.iY, false, stepFinderInfo, true);
+                    FAStarNode* pNode = gDLL->getFAStarIFace()->GetLastNode(pSubAreaStepFinder);
                     std::vector<CvPlot*> pTargetPlots;
                     while (pNode)
                     {
@@ -964,11 +977,15 @@ namespace AltAI
 		    				pUnit->getGroup()->pushMission(MISSION_ROUTE_TO, pTargetPlots[i]->getX(), pTargetPlots[i]->getY(), MOVE_SAFE_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, false, MISSIONAI_BUILD, pTargetPlots[i]);
 #ifdef ALTAI_DEBUG
                             {   // debug
+                                RouteTypes currentRouteType = pTargetPlots[i]->getRouteType();
                                 os << "\n" << narrow(pCity_->getName()) << " Requested connection to city: " << narrow(getCity(ci->second)->getName())
-                                   << " at plot: " << XYCoords(pTargetPlots[i]->getX(), pTargetPlots[i]->getY()) << " mission queue = " << pUnit->getGroup()->getLengthMissionQueue();
+                                   << " at plot: " << XYCoords(pTargetPlots[i]->getX(), pTargetPlots[i]->getY()) << " mission queue = " << pUnit->getGroup()->getLengthMissionQueue()
+                                   << " for route type: " << gGlobals.getRouteInfo(routeType).getType()
+                                   << " current route type: " << (currentRouteType == NO_ROUTE ? " NO_ROUTE" : gGlobals.getRouteInfo(currentRouteType).getType());
                             }
 #endif
                         }
+                        gDLL->getFAStarIFace()->destroy(pSubAreaStepFinder);
                         return true;
                     }
                 }
@@ -976,6 +993,7 @@ namespace AltAI
             }
         }
 
+        gDLL->getFAStarIFace()->destroy(pSubAreaStepFinder);
         return false;
     }
 

@@ -189,6 +189,19 @@ namespace AltAI
             }
         }
 
+        void getPowerNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
+        {
+            if (buildingInfo.isPower())
+            {
+                BuildingInfo::PowerNode node;
+                node.bonusType = (BonusTypes)buildingInfo.getPowerBonus();
+                node.isDirty = buildingInfo.isDirtyPower();
+                node.areaCleanPower = buildingInfo.isAreaCleanPower();
+
+                baseNode.nodes.push_back(node);
+            }
+        }
+
         void getUnitExpNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
         {
             BuildingInfo::UnitExpNode node;
@@ -297,6 +310,7 @@ namespace AltAI
             node.hurryAngerModifier = buildingInfo.getHurryAngerModifier();
             node.noUnhealthinessFromBuildings = buildingInfo.isBuildingOnlyHealthy();
             node.noUnhealthinessFromPopulation = buildingInfo.isNoUnhealthyPopulation();
+            node.startsGoldenAge = buildingInfo.isGoldenAge();
 
             if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 ||
                 node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation)
@@ -367,6 +381,7 @@ namespace AltAI
             getBonusNode(node, buildingInfo);
             getFreeBonusNode(node, buildingInfo);
             getRemoveBonusNode(node, buildingInfo);
+            getPowerNode(node, buildingInfo);
             getSpecialistNode(node, buildingInfo);
             getSpecialistSlotNode(node, buildingInfo);
             getMiscEffectNode(node, buildingInfo);

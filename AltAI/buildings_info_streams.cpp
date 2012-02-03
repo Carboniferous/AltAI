@@ -162,6 +162,24 @@ namespace AltAI
         return os;
     }
 
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::PowerNode& node)
+    {
+        os << "\n\t";
+        if (node.bonusType != NO_BONUS)
+        {
+            os << " requires: " << gGlobals.getBonusInfo(node.bonusType).getType();
+        }
+        if (node.isDirty)
+        {
+            os << " is dirty ";
+        }
+        if (node.areaCleanPower)
+        {
+            os << " clean power for all cities in area ";
+        }
+        return os;
+    }
+
     std::ostream& operator << (std::ostream& os, const BuildingInfo::UnitExpNode& node)
     {
         os << "\n\t";
@@ -294,6 +312,10 @@ namespace AltAI
         if (node.noUnhealthinessFromPopulation)
         {
             os << " no unhealthiness from population ";
+        }
+        if (node.startsGoldenAge)
+        {
+            os << " starts golden age ";
         }
         return os;
     }

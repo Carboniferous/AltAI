@@ -362,9 +362,17 @@ namespace AltAI
         {
             for (UnitCombatDataMap::const_iterator iter = ci->second.begin(), iterEnd = ci->second.end(); iter != iterEnd; ++iter)
             {
-                value += iter->second.attackOdds;
-                value += iter->second.defenceOdds;
-                maxValue += 2000;
+                if (iter->second.attackOdds > 200)
+                {
+                    value += iter->second.attackOdds;
+                    maxValue += 1000;
+                }
+
+                if (iter->second.defenceOdds > 200)
+                {
+                    value += iter->second.defenceOdds;
+                    maxValue += 1000;
+                }                
             }
         }
 

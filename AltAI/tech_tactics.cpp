@@ -46,7 +46,7 @@ namespace AltAI
             }
             
             explicit TechSelectionHelper(ResearchTech researchTech_) : researchTech(researchTech_), isReligiousTech(false), featureProduction(0),
-                workerScore(0), religionScore(0), bonusScore(0), processScore(0), buildingScore(0), unitScore(0), freeTechScore(0), 
+                workerScore(0), religionScore(0), bonusScore(0), processScore(0), buildingScore(0), unitScore(0), civicScore(0), freeTechScore(0), 
                 totalScore(0), techValue(0)
             {
             }
@@ -76,7 +76,9 @@ namespace AltAI
 
             std::map<BuildingTypes, TotalOutput> possibleBuildingOutputs;
 
-            int workerScore, religionScore, bonusScore, processScore, buildingScore, unitScore, freeTechScore, totalScore, techValue;
+            std::map<CivicTypes, TotalOutput> possibleCivicOutputs;
+
+            int workerScore, religionScore, bonusScore, processScore, buildingScore, unitScore, civicScore, freeTechScore, totalScore, techValue;
 
             int getImprovementsTotalValue() const
             {
@@ -190,6 +192,11 @@ namespace AltAI
                     os << "\n" << gGlobals.getBuildingInfo(ci->first).getType() << " projected output = " << ci->second;
                 }
 
+                for (std::map<CivicTypes, TotalOutput>::const_iterator ci(possibleCivicOutputs.begin()), ciEnd(possibleCivicOutputs.end()); ci != ciEnd; ++ci)
+                {
+                    os << "\n" << gGlobals.getCivicInfo(ci->first).getType() << " projected output = " << ci->second;
+                }
+
                 for (UnitValuesMap::const_iterator ci(unitValuesMap.begin()), ciEnd(unitValuesMap.end()); ci != ciEnd; ++ci)
                 {
                     os << "\n" << gGlobals.getUnitInfo(ci->first).getType() << " value = " << ci->second;
@@ -197,7 +204,8 @@ namespace AltAI
 
                 os << "\nFeature production = " << featureProduction;
                 os << "\nScores: worker = " << workerScore << ", religion = " << religionScore << ", bonus = " << bonusScore << ", process = " << processScore
-                   << ", buildings = " << buildingScore << ", units = " << unitScore << ", tech score = " << totalScore << ", value = " << techValue;
+                   << ", buildings = " << buildingScore << ", units = " << unitScore << ", civics = " << civicScore
+                   << ", tech score = " << totalScore << ", value = " << techValue;
                 os << "\n";
 #endif
             }
@@ -428,6 +436,10 @@ namespace AltAI
                 }
             }
 
+            void processCivics(TechSelectionHelper& techSelectionHelper)
+            {
+            }
+
             void addBuildingTechs()
             {
                 const std::map<IDInfo, ConstructList >& cityBuildingsTactics = playerTactics.selectedCityBuildingTactics_;
@@ -567,6 +579,11 @@ namespace AltAI
                     if (ci->techFlags & TechFlags::Free_Tech)
                     {
                         processFreeTechTech(techSelectionHelper);
+                    }
+
+                    if (!ci->possibleCivics.empty())
+                    {
+                        processCivics(techSelectionHelper);
                     }
 
                     techSelectionData.insert(std::make_pair(ci->techType, techSelectionHelper));
@@ -830,6 +847,63 @@ namespace AltAI
         }
     }
 
+    ResearchTech makeTechTactic(Player& player, TechTypes techType)
+    {
+        const CvTechInfo& techInfo = gGlobals.getTechInfo(techType);
+        const CvPlayer* pPlayer = player.getCvPlayer();
+        boost::shared_ptr<TechInfo> pTechInfo = player.getAnalysis()->getTechInfo(techType);
+        ResearchTech researchTech;
+        researchTech.techType = techType;
+        researchTech.depth = player.getTechResearchDepth(techType);
+
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*pPlayer)->getStream();
+        os << "\nChecking tech: " << techInfo.getType() << " with node: " << pTechInfo->getInfo();
+#endif
+
+        ResearchTech religionResearchTech = getReligionTechTactics(player, pTechInfo);
+
+        if (religionResearchTech.techType != NO_TECH)
+        {
+#ifdef ALTAI_DEBUG
+            os << "\nreligionResearchTech: " << religionResearchTech;
+#endif
+            researchTech.merge(religionResearchTech);
+        }
+
+        ResearchTech economicResearchTech = getEconomicTechTactics(player, pTechInfo);
+
+        if (economicResearchTech.techType != NO_TECH)
+        {
+#ifdef ALTAI_DEBUG
+            os << "\neconomicResearchTech: " << economicResearchTech;
+#endif
+            researchTech.merge(economicResearchTech);
+        }
+
+        ResearchTech militaryResearchTech = getMilitaryTechTactics(player, pTechInfo);
+
+        if (militaryResearchTech.techType != NO_TECH)
+        {
+#ifdef ALTAI_DEBUG
+            os << "\nmilitaryResearchTech:" << militaryResearchTech;
+#endif
+            researchTech.merge(militaryResearchTech);
+        }
+
+        ResearchTech workerResearchTech = getWorkerTechTactics(player, pTechInfo);
+
+        if (workerResearchTech.techType != NO_TECH)
+        {
+#ifdef ALTAI_DEBUG
+            os << "\nworkerResearchTech: " << workerResearchTech;
+#endif
+            researchTech.merge(workerResearchTech);
+        }
+
+        return researchTech;
+    }
+
     std::list<ResearchTech> makeTechTactics(Player& player)
     {
         std::list<ResearchTech> techTactics;
@@ -848,45 +922,13 @@ namespace AltAI
                 continue;
             }
 
-            const CvTechInfo& techInfo = gGlobals.getTechInfo((TechTypes)i);
-            boost::shared_ptr<TechInfo> pTechInfo = player.getAnalysis()->getTechInfo((TechTypes)i);
-#ifdef ALTAI_DEBUG
-            os << "\nChecking tech: " << techInfo.getType() << " with depth = " << depth << " and node: " << pTechInfo->getInfo();
-#endif
-            ResearchTech researchTech = getReligionTechTactics(player, pTechInfo);
-#ifdef ALTAI_DEBUG
-            os << researchTech;
-#endif
+            ResearchTech researchTech = makeTechTactic(player, (TechTypes)i);
             if (researchTech.techType != NO_TECH)
             {
-                addResearchTech(techTactics, researchTech);
-            }
-
-            researchTech = getEconomicTechTactics(player, pTechInfo);
 #ifdef ALTAI_DEBUG
-            os << researchTech;
+                os << "\nAdding tech tactic: " << researchTech;
 #endif
-            if (researchTech.techType != NO_TECH)
-            {
-                addResearchTech(techTactics, researchTech);
-            }
-
-            researchTech = getMilitaryTechTactics(player, pTechInfo);
-#ifdef ALTAI_DEBUG
-            os << researchTech;
-#endif
-            if (researchTech.techType != NO_TECH)
-            {
-                addResearchTech(techTactics, researchTech);
-            }
-
-            researchTech = getWorkerTechTactics(player, pTechInfo);
-#ifdef ALTAI_DEBUG
-            os << researchTech;
-#endif
-            if (researchTech.techType != NO_TECH)
-            {
-                addResearchTech(techTactics, researchTech);
+                techTactics.push_back(researchTech);
             }
         }
 

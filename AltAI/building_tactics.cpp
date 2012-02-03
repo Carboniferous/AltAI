@@ -44,14 +44,22 @@ namespace AltAI
         {
             const bool isWorldWonder = isWorldWonderClass((BuildingClassTypes)i), isNationalWonder = isNationalWonderClass((BuildingClassTypes)i);
 
-            // do national wonders separately
-            if (isNationalWonder)
+            BuildingTypes buildingType = getPlayerVersion(player.getPlayerID(), (BuildingClassTypes)i);
+            if (buildingType == NO_BUILDING)
             {
                 continue;
             }
 
-            BuildingTypes buildingType = getPlayerVersion(player.getPlayerID(), (BuildingClassTypes)i);
-            if (buildingType == NO_BUILDING)
+            if (isNationalWonder)
+            {
+                const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
+                if (buildingInfo.isGovernmentCenter())
+                {
+                    continue;
+                }
+            }
+
+            if (isWorldWonder && gGlobals.getGame().isBuildingClassMaxedOut((BuildingClassTypes)i))
             {
                 continue;
             }
@@ -118,6 +126,10 @@ namespace AltAI
                     if (isWorldWonder)
                     {
                         constructItem.buildingFlags |= BuildingFlags::Building_World_Wonder;
+                    }
+                    else if (isNationalWonder)
+                    {
+                        constructItem.buildingFlags |= BuildingFlags::Building_National_Wonder;
                     }
                     addConstructItem(buildingTactics, constructItem);
                 }
@@ -198,7 +210,11 @@ namespace AltAI
             const int cityCount = pPlayer->getNumCities();
             const int maxResearchRate = player.getMaxResearchRate();
             const std::pair<int, int> rankAndMaxProduction = player.getCityRank(pCity->getIDInfo(), OUTPUT_PRODUCTION);
+            const std::pair<int, int> rankAndMaxGoldOutput = player.getCityRank(pCity->getIDInfo(), OUTPUT_GOLD);
+            const std::pair<int, int> rankAndMaxResearchOutput = player.getCityRank(pCity->getIDInfo(), OUTPUT_RESEARCH);
+
             const bool isWorldWonder = constructItem.buildingFlags & BuildingFlags::Building_World_Wonder;
+            const bool isNationalWonder = constructItem.buildingFlags & BuildingFlags::Building_National_Wonder;
 
             // add check to avoid selecting wonders if city has rubbish production
 
@@ -227,7 +243,7 @@ namespace AltAI
             if (isBuildCulture) os << " is culture process ";
             os << " max research rate = " << maxResearchRate;
 #endif
-            if (needCulture && !isWorldWonder && constructItem.economicFlags & EconomicFlags::Output_Culture)
+            if (needCulture && !isWorldWonder && !isNationalWonder && constructItem.economicFlags & EconomicFlags::Output_Culture)
             {
                 // this can select build culture
                 selectedConstructItem.economicFlags |= EconomicFlags::Output_Culture;
@@ -235,9 +251,23 @@ namespace AltAI
             // don't build culture to relieve culture pressure
             else if (culturePressure && !isProcess && constructItem.economicFlags & EconomicFlags::Output_Culture)
             {
-                if (!isWorldWonder || isWorldWonder && rankAndMaxProduction.first < cityCount / 2 && culturePressure)
+                if (!isNationalWonder && !isWorldWonder)
                 {
                     selectedConstructItem.economicFlags |= EconomicFlags::Output_Culture;
+                }
+                else if (isWorldWonder || isNationalWonder)
+                {
+                    if (rankAndMaxProduction.first < cityCount / 2 && culturePressure)
+                    {
+                        // only select wonders with no other economic flags
+                        if (!(constructItem.economicFlags & ~EconomicFlags::Output_Culture))
+                        {
+#ifdef ALTAI_DEBUG
+                            os << " selecting: " << gGlobals.getBuildingInfo(constructItem.buildingType).getType() << " as culture, non economic (national) wonder";
+#endif
+                            selectedConstructItem.economicFlags |= EconomicFlags::Output_Culture;
+                        }
+                    }
                 }
             }
 
@@ -265,36 +295,79 @@ namespace AltAI
 
             if (maxResearchRate < 50)
             {
-                std::pair<int, int> rankAndMaxOutput = player.getCityRank(pCity->getIDInfo(), OUTPUT_GOLD);
                 bool bGold = constructItem.economicFlags & EconomicFlags::Output_Gold, bCommerce = constructItem.economicFlags & EconomicFlags::Output_Commerce;
+                bool selected = false;
 
-                if (rankAndMaxOutput.first > 0 && rankAndMaxOutput.first < cityCount / 3 && (bGold || bCommerce))
+                if (rankAndMaxGoldOutput.first > 0 && (bGold || bCommerce))
                 {
-                    if (bCommerce)
+                    if (isNationalWonder)
                     {
-                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Commerce;
+                        if (rankAndMaxGoldOutput.first <= 3)
+                        {
+                            selected = true;
+                        }
                     }
-                    if (bGold)
+                    else if (rankAndMaxGoldOutput.first < cityCount / 3)
                     {
-                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Gold;
+                        selected = true;
+                    }
+                    else if (constructItem.buildingType != NO_BUILDING)
+                    {
+                        if (rankAndMaxGoldOutput.second > city.getCvCity()->getProductionNeeded(constructItem.buildingType) / 10)  // todo - scale with game speed
+                        {
+                            selected = true;
+                        }
+                    }
+
+                    if (selected)
+                    {
+                        if (bCommerce)
+                        {
+                            selectedConstructItem.economicFlags |= EconomicFlags::Output_Commerce;
+                        }
+                        if (bGold)
+                        {
+                            selectedConstructItem.economicFlags |= EconomicFlags::Output_Gold;
+                        }
                     }
                 }
             }
             else
             {
-                std::pair<int, int> rankAndMaxOutput = player.getCityRank(pCity->getIDInfo(), OUTPUT_RESEARCH);
                 bool bResearch = constructItem.economicFlags & EconomicFlags::Output_Research, bCommerce = constructItem.economicFlags & EconomicFlags::Output_Commerce;
+                bool selected = false;
 
-                if (cityCount > 1 && rankAndMaxOutput.first > 0 && rankAndMaxOutput.first < 1 + cityCount / 3 && 
-                    (constructItem.economicFlags & EconomicFlags::Output_Research || constructItem.economicFlags & EconomicFlags::Output_Commerce))
+                if (rankAndMaxResearchOutput.first > 0 && (bResearch || bCommerce))
                 {
-                    if (bCommerce)
+                    if (isNationalWonder)
                     {
-                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Commerce;
+                        if (rankAndMaxResearchOutput.first <= 3)  // national wonder and in top three cities for research output
+                        {
+                            selected = true;
+                        }
                     }
-                    if (bResearch)
+                    else if (rankAndMaxResearchOutput.first < 1 + cityCount / 3)
                     {
-                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Research;
+                        selected = true;
+                    }
+                    else if (constructItem.buildingType != NO_BUILDING)
+                    {
+                        if (rankAndMaxResearchOutput.second > city.getCvCity()->getProductionNeeded(constructItem.buildingType) / 10)  // todo - scale with game speed
+                        {
+                            selected = true;
+                        }
+                    }
+
+                    if (selected)
+                    {
+                        if (bCommerce)
+                        {
+                            selectedConstructItem.economicFlags |= EconomicFlags::Output_Commerce;
+                        }
+                        if (bResearch)
+                        {
+                            selectedConstructItem.economicFlags |= EconomicFlags::Output_Research;
+                        }
                     }
                 }
             }
@@ -304,13 +377,13 @@ namespace AltAI
                 selectedConstructItem.economicFlags |= EconomicFlags::Output_Food;
             }
 
-            std::pair<int, int> rankAndMaxOutput = player.getCityRank(pCity->getIDInfo(), OUTPUT_PRODUCTION);
-            if (cityCount > 1 && rankAndMaxOutput.first > 0 && rankAndMaxOutput.first < 1 + cityCount / 3 && (constructItem.economicFlags & EconomicFlags::Output_Production))
+            if (cityCount > 1 && rankAndMaxProduction.first > 0 && (rankAndMaxProduction.first < 1 + cityCount / 3 || rankAndMaxProduction.second > 20) &&
+                (constructItem.economicFlags & EconomicFlags::Output_Production))
             {
                 selectedConstructItem.economicFlags |= EconomicFlags::Output_Production;
             }
 
-            if (isWorldWonder && rankAndMaxOutput.first > 0 && rankAndMaxOutput.first < 3)
+            if (isWorldWonder && rankAndMaxProduction.first > 0 && rankAndMaxProduction.first <= std::max<int>(1, cityCount / 3))
             {
                 for (size_t i = 0, count = constructItem.positiveBonuses.size(); i < count; ++i)
                 {
@@ -320,6 +393,20 @@ namespace AltAI
                         selectedConstructItem.economicFlags |= EconomicFlags::Output_Production;
                         selectedConstructItem.positiveBonuses.push_back(constructItem.positiveBonuses[i]);
                     }
+                }
+            }
+
+            bool bGold = constructItem.economicFlags & EconomicFlags::Output_Gold, bCommerce = constructItem.economicFlags & EconomicFlags::Output_Commerce;
+
+            if (rankAndMaxGoldOutput.first > 0 && (rankAndMaxGoldOutput.first <= 2 || rankAndMaxGoldOutput.second > 20) && (bGold || bCommerce))
+            {
+                if (bCommerce)
+                {
+                    selectedConstructItem.economicFlags |= EconomicFlags::Output_Commerce;
+                }
+                if (bGold)
+                {
+                    selectedConstructItem.economicFlags |= EconomicFlags::Output_Gold;
                 }
             }
 

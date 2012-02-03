@@ -2654,7 +2654,7 @@ void CvPlayer::doTurn()
     if (m_bUsingAltAI)
     {
         GC.getGame().getAltAI()->getPlayer(m_eID)->doTurn();
-        GC.getGame().getAltAI()->getPlayer(m_eID)->updateSharedPlots();
+        GC.getGame().getAltAI()->getPlayer(m_eID)->updateCityData();
     }
 
 	AI_assignWorkingPlots();

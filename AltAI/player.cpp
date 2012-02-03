@@ -565,6 +565,11 @@ namespace AltAI
         FeatureTypes featureType = pPlot->getFeatureType();
         BonusTypes bonusType = pPlot->getBonusType(getTeamID());
 
+        if (improvementType == NO_IMPROVEMENT)  // building a route
+        {
+            return std::vector<BuildTypes>(1, buildType);
+        }
+
         bool improvementMakesBonusValid = bonusType != NO_BONUS && gGlobals.getImprovementInfo(improvementType).isImprovementBonusMakesValid(bonusType);
 
         bool buildRemovesFeature = featureType != NO_FEATURE ? GameDataAnalysis::doesBuildTypeRemoveFeature(buildType, featureType) : false;
@@ -998,8 +1003,16 @@ namespace AltAI
         cityFlags_.insert(city);
     }
 
-    void Player::updateSharedPlots()
+    void Player::updateCityData()
     {
+        for (std::set<IDInfo>::const_iterator ci(cityFlags_.begin()), ciEnd(cityFlags_.end()); ci != ciEnd; ++ci)
+        {
+            const CvCity* pCity = pPlayer_->getCity(ci->iID);
+            if (pCity)
+            {
+                getAnalysis()->analyseCity(pCity);
+            }
+        }
         getAnalysis()->getMapAnalysis()->analyseSharedPlots(cityFlags_);
         cityFlags_.clear();
     }
@@ -1369,5 +1382,11 @@ namespace AltAI
         std::ostream& os = pErrorLog->getStream();
 
         os << "\nSelection group at: " << XYCoords(pHeadUnit->getX(), pHeadUnit->getY()) << " stuck. Head unit is: " << gGlobals.getUnitInfo(pHeadUnit->getUnitType()).getType();
+    }
+
+    void Player::logInvalidUnitBuild(const CvUnit* pUnit, BuildTypes buildType) const
+    {
+        std::ostream& os = ErrorLog::getLog(*pPlayer_)->getStream();
+        os << "\nInvalid build for unit: " << pUnit->getID() << " = " << gGlobals.getBuildInfo(buildType).getType();
     }
 }

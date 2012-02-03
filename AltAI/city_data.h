@@ -34,6 +34,7 @@ namespace AltAI
     };
 
     struct HurryData;
+    class CityImprovementManager;
 
     typedef std::list<PlotData> PlotDataList;
     typedef PlotDataList::const_iterator PlotDataListConstIter;
@@ -42,11 +43,11 @@ namespace AltAI
     struct CityData : boost::enable_shared_from_this<CityData>
     {
         explicit CityData(const CvCity* pCity_, bool includeUnclaimedPlots = false);
+        CityData(const CvCity* pCity_, const CityImprovementManager& improvements);
         CityData(const CityData& other);
 
         boost::shared_ptr<CityData> clone() const;
-
-        void calcOutputs();
+        
         void recalcOutputs();
 
         void advanceTurn();
@@ -147,7 +148,12 @@ namespace AltAI
         int getBuildingProductionModifier_();
         void completeBuilding_();
         int setBuilding_();
+
+        void calcOutputsFromPlotData_();
+        void calcOutputsFromPlannedImprovements_(const CityImprovementManager& improvements);
         void calcCityOutput_();
+        void calculateSpecialistOutput_();
+
         void doUpgrades_();
         void updateFreeSpecialistSlots_(int change);
         bool canWork_(const CvPlot* pPlot) const;

@@ -227,6 +227,11 @@ namespace AltAI
                 updateCityData(data_, pPlayer_->getAnalysis()->getResourceInfo(node.bonusType), false);
             }
 
+            void operator() (const BuildingInfo::PowerNode& node) const
+            {
+                // todo - get health change - use healthhelper
+            }
+
             void operator() (const BuildingInfo::MiscEffectNode& node) const
             {
                 if (node.cityMaintenanceModifierChange != 0)
@@ -495,6 +500,11 @@ namespace AltAI
             return false;
         }
 
+        result_type operator() (const BuildingInfo::PowerNode& node) const
+        {
+            return true;
+        }
+
         result_type operator() (const BuildingInfo::SpecialistSlotNode& node) const
         {
             const CvPlayer& player = CvPlayerAI::getPlayer(data_.owner);
@@ -629,6 +639,11 @@ namespace AltAI
         }
 
         result_type operator() (const BuildingInfo::RemoveBonusNode&) const
+        {
+            return true;
+        }
+
+        result_type operator() (const BuildingInfo::PowerNode&) const
         {
             return true;
         }

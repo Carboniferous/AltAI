@@ -1924,6 +1924,19 @@ int stepDestValid(int iToX, int iToY, const void* pointer, FAStar* finder)
 	return TRUE;
 }
 
+int subAreaStepDestValid(int iToX, int iToY, const void* pointer, FAStar* finder)
+{
+	CvPlot* pFromPlot = GC.getMapINLINE().plotSorenINLINE(gDLL->getFAStarIFace()->GetStartX(finder), gDLL->getFAStarIFace()->GetStartY(finder));
+	CvPlot* pToPlot = GC.getMapINLINE().plotSorenINLINE(iToX, iToY);
+
+    if (pFromPlot->getSubArea() != pToPlot->getSubArea())
+	{
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 
 int stepHeuristic(int iFromX, int iFromY, int iToX, int iToY)
 {
@@ -1959,6 +1972,59 @@ int stepValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 	}
 
 	return TRUE;
+}
+
+int subAreaStepValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder)
+{
+	if (parent == NULL)
+	{
+		return TRUE;
+	}
+
+	CvPlot* pNewPlot = GC.getMapINLINE().plotSorenINLINE(node->m_iX, node->m_iY);
+
+	if (pNewPlot->isImpassable())
+	{
+		return FALSE;
+	}
+
+	if (GC.getMapINLINE().plotSorenINLINE(parent->m_iX, parent->m_iY)->getSubArea() != pNewPlot->getSubArea())
+	{
+		return FALSE;
+	}
+
+    // store player type in low order bytes of int, and any flags are in high order bytes 
+    int finderInfo = gDLL->getFAStarIFace()->GetInfo(finder);
+    PlayerTypes playerType = (PlayerTypes)(LOBYTE(finderInfo));
+    TeamTypes teamType = CvPlayerAI::getPlayer(playerType).getTeam();
+    const int flags = HIBYTE(finderInfo);
+
+    PlayerTypes plotOwner = pNewPlot->getOwner();
+    TeamTypes plotTeam = plotOwner == NO_PLAYER ? NO_TEAM : CvPlayerAI::getPlayer(plotOwner).getTeam();
+
+    if (flags & SubAreaStepFlags::Team_Territory)
+    {
+        if (plotOwner != NO_PLAYER && plotTeam == teamType)
+        {
+            return TRUE;
+        }
+    }
+    else if (flags & SubAreaStepFlags::Unowned_Territory)
+    {
+        if (plotOwner == NO_PLAYER)
+        {
+            return TRUE;
+        }
+    }
+    else if (flags & SubAreaStepFlags::Friendly_Territory)
+    {
+        if (CvTeamAI::getTeam(teamType).isFreeTrade(plotTeam))
+        {
+            return TRUE;
+        }
+    }
+
+	return FALSE;
 }
 
 

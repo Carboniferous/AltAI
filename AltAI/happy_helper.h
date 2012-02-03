@@ -40,6 +40,8 @@ namespace AltAI
 
         void changePlayerHappiness(int change);
 
+        void setNoUnhappiness(bool newState);
+
         const HurryHelper& getHurryHelper() const
         {
             return hurryHelper_;

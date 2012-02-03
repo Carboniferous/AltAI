@@ -88,8 +88,12 @@ namespace AltAI
         int getRank(XYCoords coords, TotalOutputWeights outputWeights) const;
         int getNumImprovementsNotBuilt() const;
 
+        std::pair<XYCoords, RouteTypes> getBestRoute() const;
+
         const std::vector<PlotImprovementData>& getImprovements() const;
         std::vector<PlotImprovementData>& getImprovements();
+
+        bool getIncludeUnclaimedPlots() const { return includeUnclaimedPlots_; }
 
         TotalOutput simulateImprovements(TotalOutputWeights outputWeights, const std::string& logLabel = "");
         bool updateImprovements(const CvPlot* pPlot, ImprovementTypes improvementType);
@@ -97,6 +101,7 @@ namespace AltAI
         PlotYield getProjectedYield(int citySize, YieldPriority yieldP, YieldWeights yieldW) const;
 
         XYCoords getIrrigationChainPlot(XYCoords destination, ImprovementTypes improvementType);
+        ImprovementTypes getSubstituteImprovement(XYCoords coords);
 
         void logImprovements() const;
         void logImprovement(std::ostream& os, const PlotImprovementData& improvement) const;
@@ -127,4 +132,18 @@ namespace AltAI
 
     std::vector<CityImprovementManager::PlotImprovementData> 
             findNewImprovements(const std::vector<CityImprovementManager::PlotImprovementData>& baseImprovements, const std::vector<CityImprovementManager::PlotImprovementData>& newImprovements);
+
+    struct ImprovementCoordsFinder
+    {
+        explicit ImprovementCoordsFinder(XYCoords coords_) : coords(coords_)
+        {
+        }
+
+        bool operator() (const CityImprovementManager::PlotImprovementData& other) const
+        {
+            return boost::get<0>(other) == coords;
+        }
+
+        XYCoords coords;
+    };
 }

@@ -23,6 +23,7 @@
 #include "./specialist_helper.h"
 #include "./helper_fns.h"
 #include "./gamedata_analysis.h"
+#include "./city_improvements.h"
 
 // todo - specialist helper pCity->totalFreeSpecialists(), pCity->getMaxSpecialistCount
 // bonushelper - pCity->hasBonus()
@@ -71,7 +72,51 @@ namespace AltAI
             commercePercent_[commerceType] = player.getCommercePercent((CommerceTypes)commerceType);
         }
 
-        calcOutputs();
+        calcOutputsFromPlotData_();
+    }
+
+    CityData::CityData(const CvCity* pCity_, const CityImprovementManager& improvements)
+        : cityPopulation(0), workingPopulation(0), happyCap(0), currentFood(0), storedFood(0),
+          currentProduction(0), growthThreshold(0), requiredProduction(-1), foodKeptPercent(0), currentProductionModifier(0),
+          civHelper(gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getCivHelper()),
+          happyHelper(boost::shared_ptr<HappyHelper>(new HappyHelper(pCity_))),
+          healthHelper(boost::shared_ptr<HealthHelper>(new HealthHelper(pCity_))),
+          maintenanceHelper(boost::shared_ptr<MaintenanceHelper>(new MaintenanceHelper(pCity_))),
+          religionHelper(boost::shared_ptr<ReligionHelper>(new ReligionHelper(pCity_))),
+          cultureHelper(boost::shared_ptr<CultureHelper>(new CultureHelper(pCity_))),
+          tradeRouteHelper(boost::shared_ptr<TradeRouteHelper>(new TradeRouteHelper(pCity_))),
+          buildingHelper(boost::shared_ptr<BuildingHelper>(new BuildingHelper(pCity_))),
+          bonusHelper(boost::shared_ptr<BonusHelper>(new BonusHelper(pCity_))),
+          specialistHelper(boost::shared_ptr<SpecialistHelper>(new SpecialistHelper(pCity_))),
+          corporationHelper(boost::shared_ptr<CorporationHelper>(new CorporationHelper(pCity_))),
+          specialConditions(None),
+          pCity(pCity_), owner(pCity_->getOwner()), coords(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(improvements.getIncludeUnclaimedPlots)
+    {
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
+
+        currentFood = 100 * pCity->getFood();
+        storedFood = 100 * pCity->getFoodKept();
+        cityPopulation = pCity->getPopulation();
+        workingPopulation = cityPopulation - getNonWorkingPopulation();
+        happyCap = happyHelper->happyPopulation() - happyHelper->angryPopulation();
+
+        growthThreshold = 100 * pCity->growthThreshold();
+        foodKeptPercent = pCity->getMaxFoodKeptPercent();
+
+        for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
+        {
+            yieldModifier_[yieldType] = pCity->getBaseYieldRateModifier((YieldTypes)yieldType);
+        }
+        currentProductionModifier = yieldModifier_[YIELD_PRODUCTION];
+
+        for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)
+        {
+            // modifier is just extra % here, so add 100 in
+            commerceModifier_[commerceType] = 100 + pCity->getCommerceRateModifier((CommerceTypes)commerceType);
+            commercePercent_[commerceType] = player.getCommercePercent((CommerceTypes)commerceType);
+        }
+
+        calcOutputsFromPlannedImprovements_(improvements);
     }
 
     // events queue is not copied
@@ -116,7 +161,7 @@ namespace AltAI
         return boost::shared_ptr<CityData>(new CityData(*this));
     }
 
-    void CityData::calcOutputs()
+    void CityData::calcOutputsFromPlotData_()
     {
         const CvPlayer& player = CvPlayerAI::getPlayer(owner);
         const boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis = gGlobals.getGame().getAltAI()->getPlayer(player.getID())->getAnalysis();
@@ -175,6 +220,95 @@ namespace AltAI
             }
         }
 
+        calculateSpecialistOutput_();
+    }
+
+    void CityData::calcOutputsFromPlannedImprovements_(const CityImprovementManager& improvements)
+    {
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
+        const boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis = gGlobals.getGame().getAltAI()->getPlayer(player.getID())->getAnalysis();
+        const boost::shared_ptr<MapAnalysis>& pMapAnalysis = pPlayerAnalysis->getMapAnalysis();
+        const int timeHorizon = pPlayerAnalysis->getTimeHorizon();
+
+        calcCityOutput_();
+
+        // typedef boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, PlotYield, TotalOutput, ImprovementState, int /*ImprovementFlags*/> PlotImprovementData;
+        const std::vector<CityImprovementManager::PlotImprovementData>& plotImprovements = improvements.getImprovements();
+
+        CityPlotIter iter(pCity);  // ok to use city here, as called from main ctor
+        bool first = true;
+
+        while (IterPlot pLoopPlot = iter())
+        {
+            if (pLoopPlot.valid())
+            {
+                if (first)
+                {
+                    calcCityOutput_();
+                    first = false;
+                }
+                else
+                {
+                    XYCoords coords(pLoopPlot->getX(), pLoopPlot->getY());
+                    ImprovementTypes improvementType = pLoopPlot->getImprovementType();
+                    FeatureTypes featureType = pLoopPlot->getFeatureType();
+                    PlotYield plotYield(pLoopPlot->getYield());
+                    RouteTypes routeType = pLoopPlot->getRouteType();
+
+                    std::vector<CityImprovementManager::PlotImprovementData>::const_iterator improvementIter = 
+                        std::find_if(plotImprovements.begin(), plotImprovements.end(), ImprovementCoordsFinder(coords));
+                    if (improvementIter != plotImprovements.end())
+                    {
+                        // allow for improvements which have upgraded since they were built
+                        if (boost::get<5>(*improvementIter) != CityImprovementManager::Built)
+                        {
+                            // todo - add route type to improvement manager data
+                            improvementType = boost::get<2>(*improvementIter);
+                            plotYield = boost::get<3>(*improvementIter);
+                            featureType = boost::get<1>(*improvementIter);
+                        }
+                    }
+
+                    TotalOutput plotOutput(makeOutput(plotYield, yieldModifier_, commerceModifier_, commercePercent_));
+
+                    if (isEmpty(plotYield))  // skip canWork_ check if setting up from planned improvements, as this is looking ahead
+                    {
+                        continue;  // no point in adding desert, or plots worked by other cities we own (add ones we don't own, in case we end up owning them)
+                    }
+
+                    PlotData plot(plotYield, Commerce(), plotOutput, GreatPersonOutput(), XYCoords(pLoopPlot->getX(), pLoopPlot->getY()),
+                        improvementType, featureType, pLoopPlot->getRouteType(), PlotData::CultureData(pLoopPlot, player.getID(), pCity));
+
+                    // TODO - incorporate into ctor
+                    plot.controlled = plot.cultureData.ownerAndCultureTrumpFlag.first == player.getID() || plot.cultureData.ownerAndCultureTrumpFlag.first == NO_PLAYER && includeUnclaimedPlots_;
+                    plot.ableToWork = true;
+                    
+                    if (improvementType != NO_IMPROVEMENT)
+                    {
+                        ImprovementTypes upgradeImprovementType = (ImprovementTypes)gGlobals.getImprovementInfo(improvementType).getImprovementUpgrade();
+
+                        if (upgradeImprovementType != NO_IMPROVEMENT)
+			            {
+                            const PlotInfo::PlotInfoNode& plotInfo = pMapAnalysis->getPlotInfoNode(pLoopPlot);
+                            plot.upgradeData = PlotData::UpgradeData(timeHorizon,
+                                getUpgradedImprovementsData(plotInfo, player.getID(), improvementType, pLoopPlot->getUpgradeTimeLeft(improvementType, player.getID()), 
+                                    timeHorizon, player.getImprovementUpgradeRate()));
+
+                            plot.output += plot.upgradeData.getExtraOutput(yieldModifier_, commerceModifier_, commercePercent_);
+                        }
+                    }
+
+                    plot.controlled ? plotOutputs.push_back(plot) : unworkablePlots.push_back(plot);
+                }
+            }
+        }
+
+        calculateSpecialistOutput_();
+    }
+
+    void CityData::calculateSpecialistOutput_()
+    {
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
         int defaultSpecType = gGlobals.getDefineINT("DEFAULT_SPECIALIST");
         int freeSpecialistsCount = specialistHelper->getTotalFreeSpecialistSlotCount();
         
@@ -466,7 +600,7 @@ namespace AltAI
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
         os << "Pop: " << cityPopulation << ", angry = " << happyHelper->angryPopulation() << ", happy = " << happyHelper->happyPopulation()
            << ", working = " << workingPopulation << ", happyCap = " << happyCap << ", unhealthy = " << healthHelper->badHealth() << ", healthy = " << healthHelper->goodHealth()
-           << ", currentFood = " << currentFood << ", surplus = " << (getFood() - 100 * (cityPopulation * foodPerPop)) << ", production = " << getOutput() << " ";
+           << ", currentFood = " << currentFood << ", surplus = " << (getFood() - getLostFood() - 100 * (cityPopulation * foodPerPop)) << ", production = " << getOutput() << " ";
 #endif
     }
 
@@ -747,9 +881,7 @@ namespace AltAI
         {
             events_.push(CitySimulationEventPtr(new ImprovementUpgrade(upgrades)));
         }
-    }
-
-    
+    }   
 
     int CityData::getNumPossibleSpecialists(SpecialistTypes specialistType) const
     {

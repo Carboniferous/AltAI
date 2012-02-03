@@ -143,9 +143,54 @@ namespace AltAI
             }
         }
 
+        void operator() (const BuildingInfo::PowerNode& node)
+        {
+            constructItem_.economicFlags |= EconomicFlags::Output_Production;
+        }
+
         void operator() (const BuildingInfo::SpecialistSlotNode& node)
         {
             // need enough food to run specialists
+
+            // free specialists
+            for (size_t i = 0, count = node.freeSpecialistTypes.size(); i < count; ++i)
+            {
+                PlotYield yield(getSpecialistYield(*player_.getCvPlayer(), node.freeSpecialistTypes[i].first));
+                Commerce commerce(getSpecialistCommerce(*player_.getCvPlayer(), node.freeSpecialistTypes[i].first));
+                if (yield[YIELD_FOOD] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Food;
+                }
+                if (yield[YIELD_PRODUCTION] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Production;
+                }
+                if (yield[YIELD_COMMERCE] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Commerce;
+                }
+                if (commerce[COMMERCE_GOLD] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Gold;
+                }
+                if (commerce[COMMERCE_RESEARCH] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Research;
+                }
+                if (commerce[COMMERCE_CULTURE] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Culture;
+                }
+                if (commerce[COMMERCE_ESPIONAGE] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Espionage;
+                }
+            }
+            
+            // does this step make more sense to be done as a city specific check?
+            /*for (size_t i = 0, count = node.improvementFreeSpecialists.size(); i < count; ++i)
+            {
+            }*/
         }
 
         void operator() (const BuildingInfo::BonusNode& node)
@@ -154,6 +199,22 @@ namespace AltAI
             if (node.prodModifier > 0)
             {
                 constructItem_.positiveBonuses.push_back(node.bonusType);
+            }
+
+            if (!isEmpty(node.yieldModifier) && player_.getCvPlayer()->hasBonus(node.bonusType))
+            {
+                if (node.yieldModifier[YIELD_FOOD] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Food;
+                }
+                if (node.yieldModifier[YIELD_PRODUCTION] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Production;
+                }
+                if (node.yieldModifier[YIELD_COMMERCE] > 0)
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Commerce;
+                }
             }
 
             if (node.happy > 0)
@@ -171,6 +232,16 @@ namespace AltAI
 
         void operator() (const BuildingInfo::FreeBonusNode& node)
         {
+            constructItem_.economicFlags |= EconomicFlags::Output_Commerce;  // can always sell extra bonuses
+            const CvBonusInfo& bonusInfo = gGlobals.getBonusInfo(node.freeBonuses.first);
+            if (bonusInfo.getHappiness() > 0)
+            {
+                constructItem_.economicFlags |= EconomicFlags::Output_Happy;
+            }
+            if (bonusInfo.getHealth() > 0)
+            {
+                constructItem_.economicFlags |= EconomicFlags::Output_Health;
+            }
         }
 
         void operator() (const BuildingInfo::RemoveBonusNode& node)
@@ -187,6 +258,17 @@ namespace AltAI
             if (node.cityMaintenanceModifierChange < 0)
             {
                 constructItem_.economicFlags |= EconomicFlags::Output_Maintenance_Reduction;
+            }
+
+            if (node.hurryAngerModifier > 0)
+            {
+                constructItem_.economicFlags |= EconomicFlags::Output_Production;
+            }
+
+            if (node.startsGoldenAge)
+            {
+                constructItem_.economicFlags |= EconomicFlags::Output_Production;
+                constructItem_.economicFlags |= EconomicFlags::Output_Commerce;
             }
         }
 
@@ -341,6 +423,11 @@ namespace AltAI
         void operator() (const BuildingInfo::RemoveBonusNode& node)
         {
             // todo - check if bonus removal can make units unavailable
+        }
+
+        void operator() (const BuildingInfo::PowerNode& node)
+        {
+            constructItem_.militaryFlags |= MilitaryFlags::Output_Production;
         }
 
         void operator() (const BuildingInfo::CityDefenceNode& node)

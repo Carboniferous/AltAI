@@ -261,6 +261,13 @@ namespace AltAI
         boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
         bool haveConstructItem = constructItem.buildingType != NO_BUILDING || constructItem.unitType != NO_UNIT || constructItem.processType != NO_PROCESS;
 
+        if ((pCity->isProductionBuilding() && pCity->getProductionBuilding() != constructItem.buildingType) ||
+            (pCity->isProductionUnit() && pCity->getProductionUnit() != constructItem.unitType) ||
+            (pCity->isProductionProcess() && pCity->getProductionProcess() != constructItem.processType))
+        {
+            haveConstructItem = false;  // can happen if constructItem left over from auto play
+        }
+
         const int angryPop = pCity->angryPopulation();
         const int happyCap = pCityData->happyCap;
         const bool noUnhappiness = pCity->isNoUnhappiness();
@@ -280,10 +287,14 @@ namespace AltAI
         CityOptimiser::GrowthType growthType = CityOptimiser::Not_Set;
         bool isWonder = false;
 
-        if (constructItem.buildingType != NO_BUILDING || pCity->isProductionBuilding())
+        if (pCity->isProductionBuilding())
         {
-            bool isWonder = constructItem.buildingFlags & (BuildingFlags::Building_World_Wonder | BuildingFlags::Building_National_Wonder);
-            if (!haveConstructItem)
+            bool isWonder = false;
+            if (haveConstructItem)
+            {
+                isWonder = constructItem.buildingFlags & (BuildingFlags::Building_World_Wonder | BuildingFlags::Building_National_Wonder);
+            }
+            else
             {
                 BuildingClassTypes buildingClassType = (BuildingClassTypes)(gGlobals.getBuildingInfo(pCity->getProductionBuilding()).getBuildingClassType());
                 isWonder = isWorldWonderClass(buildingClassType) || isNationalWonderClass(buildingClassType) || isTeamWonderClass(buildingClassType);
@@ -293,9 +304,8 @@ namespace AltAI
             {
                 targetFoodYield = Range(pCity->foodConsumption() * 100, maxOutputs[OUTPUT_FOOD]);
                 outputTypes.push_back(OUTPUT_PRODUCTION);
-                isWonder = true;
             }
-            else if (constructItem.economicFlags & EconomicFlags::Output_Culture)
+            else if (haveConstructItem && constructItem.economicFlags & EconomicFlags::Output_Culture)
             {
                 outputTypes.push_back(OUTPUT_PRODUCTION);
             }
@@ -318,15 +328,15 @@ namespace AltAI
                 }
             }
         }
-        else if (constructItem.unitType != NO_UNIT || pCity->isProductionUnit())
+        else if (pCity->isProductionUnit())
         {
             // Building a unit which can build improvments (likely a workboat, since worker production consumes food and won't hit this check)
-            if (!constructItem.possibleBuildTypes.empty())
+            if (haveConstructItem && !constructItem.possibleBuildTypes.empty())
             {
                 outputTypes.push_back(OUTPUT_PRODUCTION);
                 growthType = CityOptimiser::MinorGrowth;
             }
-            else if (constructItem.militaryFlags & MilitaryFlags::Output_Defence)
+            else if (haveConstructItem && constructItem.militaryFlags & MilitaryFlags::Output_Defence)
             {
                 outputTypes.push_back(OUTPUT_PRODUCTION);
             }
@@ -343,15 +353,9 @@ namespace AltAI
                 }
             }
         }
-        else if (constructItem.processType != NO_PROCESS || pCity->isProductionProcess())
+        else if (pCity->isProductionProcess())
         {
-            //outputTypes.push_back(OUTPUT_PRODUCTION);
-
-            ProcessTypes processType = constructItem.processType;
-            if (processType == NO_PROCESS)
-            {
-                processType = pCity->getProductionProcess();
-            }
+            ProcessTypes processType = pCity->getProductionProcess();
 
             const CvProcessInfo& processInfo = gGlobals.getProcessInfo(processType);
             if (processInfo.getProductionToCommerceModifier(COMMERCE_GOLD) > 0)
@@ -705,6 +709,27 @@ namespace AltAI
     TotalOutputWeights CityOptimiser::getMaxOutputWeights() const
     {
         return maxOutputs_.second;
+    }
+
+    // get max food without assigning worked plots
+    int CityOptimiser::getMaxFood()
+    {
+        MixedWeightedTotalOutputOrderFunctor valueF(makeTotalOutputSinglePriority(OUTPUT_FOOD), makeOutputW(1, 1, 1, 1, 1, 1));
+        PlotDataAdaptor<MixedWeightedTotalOutputOrderFunctor> valueAdaptor(valueF);
+        data_->plotOutputs.sort(valueAdaptor);
+
+        int output = 0;
+        PlotDataListIter plotIter(data_->plotOutputs.begin()), endIter(data_->plotOutputs.end());
+        for (int i = 0; i < data_->workingPopulation && plotIter != endIter; ++i)
+        {
+            output += plotIter->actualOutput[OUTPUT_FOOD];
+            ++plotIter;
+        }
+
+        output += data_->cityPlotOutput.actualOutput[OUTPUT_FOOD];
+        output -= data_->getLostFood();
+
+        return output;
     }
 
     template <class ValueAdaptor>

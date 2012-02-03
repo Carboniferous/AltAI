@@ -82,6 +82,13 @@ namespace AltAI
             int foreignTradeRouteModifier;
         };
 
+        struct PowerNode
+        {
+            PowerNode() : bonusType(NO_BONUS), isDirty(false), areaCleanPower(false) {}
+            BonusTypes bonusType;
+            bool isDirty, areaCleanPower;
+        };
+
         struct UnitExpNode
         {
             UnitExpNode() : freeExperience(0), globalFreeExperience(0), freePromotion(NO_PROMOTION) {}
@@ -135,15 +142,15 @@ namespace AltAI
         struct MiscEffectNode
         {
             MiscEffectNode() : cityMaintenanceModifierChange(0), foodKeptPercent(0), hurryAngerModifier(0),
-                noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false) {}
+                noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false), startsGoldenAge(false) {}
             int cityMaintenanceModifierChange;
             int foodKeptPercent;
             int hurryAngerModifier;
-            bool noUnhealthinessFromBuildings, noUnhealthinessFromPopulation;
+            bool noUnhealthinessFromBuildings, noUnhealthinessFromPopulation, startsGoldenAge;
         };
 
         typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, YieldNode, CommerceNode, TradeNode, BonusNode, FreeBonusNode, 
-            RemoveBonusNode, SpecialistNode, UnitExpNode, CityDefenceNode, SpecialistSlotNode, MiscEffectNode> BuildingInfoNode;
+            RemoveBonusNode, SpecialistNode, PowerNode, UnitExpNode, CityDefenceNode, SpecialistSlotNode, MiscEffectNode> BuildingInfoNode;
 
         struct BaseNode
         {

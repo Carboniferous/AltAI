@@ -46,6 +46,7 @@ namespace AltAI
         struct PlotDataFinder
         {
             explicit PlotDataFinder(const CityImprovementManager::PlotImprovementData& plotData) : coords(boost::get<0>(plotData)) {}
+            explicit PlotDataFinder(XYCoords coords_) : coords(coords_) {}
 
             bool operator() (const CityImprovementManager::PlotImprovementData& other) const
             {
@@ -53,6 +54,19 @@ namespace AltAI
             }
 
             const XYCoords coords;
+        };
+
+        template <typename P>
+            struct PlotImprovementDataAdaptor
+        {
+            typedef typename P Pred;
+            PlotImprovementDataAdaptor(P pred_) : pred(pred_) {}
+
+            bool operator () (const CityImprovementManager::PlotImprovementData& p1, const CityImprovementManager::PlotImprovementData& p2) const
+            {
+                return pred(boost::get<3>(p1), boost::get<3>(p2));
+            }
+            P pred;
         };
     }
 
@@ -173,13 +187,14 @@ namespace AltAI
 
         DotMapOptimiser optMixed(dotMapItem, YieldWeights(), YieldWeights());
 
-        optMixed.optimise(yieldTypes, std::min<int>(dotMapItem.plotData.size(), targetSize));
+        //optMixed.optimise(yieldTypes, std::min<int>(dotMapItem.plotData.size(), targetSize));
+        optMixed.optimise(yieldTypes, targetSize);
         //optMixed.optimise(yieldTypes, std::min<int>(dotMapItem.plotData.size(), 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel())));
 
 #ifdef ALTAI_DEBUG
         {
             std::ostream& os = CityLog::getLog(pCity)->getStream();
-            os << "\nPop = " << pCity->getPopulation() << ", happy = " << pCity->happyLevel() << ", unhappy = " << pCity->unhappyLevel() << " target = " << std::min<int>(dotMapItem.plotData.size(), targetSize);
+            os << "\nPop = " << pCity->getPopulation() << ", happy = " << pCity->happyLevel() << ", unhappy = " << pCity->unhappyLevel() << " target = " << targetSize;
             for (size_t i = 0, count = yieldTypes.size(); i < count; ++i)
             {
                 os << " yieldTypes[" << i << "] = " << yieldTypes[i];
@@ -556,22 +571,6 @@ namespace AltAI
         return improvementCount;
     }
 
-    namespace
-    {
-        template <typename P>
-            struct PlotImprovementDataAdaptor
-        {
-            typedef typename P Pred;
-            PlotImprovementDataAdaptor(P pred_) : pred(pred_) {}
-
-            bool operator () (const CityImprovementManager::PlotImprovementData& p1, const CityImprovementManager::PlotImprovementData& p2) const
-            {
-                return pred(boost::get<3>(p1), boost::get<3>(p2));
-            }
-            P pred;
-        };
-    }
-
     PlotYield CityImprovementManager::getProjectedYield(int citySize, YieldPriority yieldP, YieldWeights yieldW) const
     {
         MixedOutputOrderFunctor<PlotYield> mixedF(yieldP, yieldW);
@@ -918,6 +917,116 @@ namespace AltAI
         gDLL->getFAStarIFace()->destroy(pIrrigationPathFinder);
 
         return pathCostMap.empty() ? XYCoords(-1, -1) : pathCostMap.begin()->second;
+    }
+
+    ImprovementTypes CityImprovementManager::getSubstituteImprovement(XYCoords coords)
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(city_.eOwner))->getStream();
+#endif
+        const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
+
+        DotMapItem::PlotData plotData(pPlot, city_.eOwner, 0);
+
+        std::vector<PlotImprovementData>::iterator iter = std::find_if(improvements_.begin(), improvements_.end(), PlotDataFinder(coords));
+        if (iter != improvements_.end())
+        {
+            bool hasIrrigation = false;
+            ImprovementTypes currentImprovement = pPlot->getImprovementType();
+            if (currentImprovement != NO_IMPROVEMENT)
+            {
+                const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(currentImprovement);
+                if (improvementInfo.isCarriesIrrigation())
+                {
+                    hasIrrigation = true;
+                }
+            }
+
+            if (!hasIrrigation && boost::get<6>(*iter) & IrrigationChainPlot)
+            {
+                boost::get<6>(*iter) &= ~IrrigationChainPlot;
+            }
+        }
+
+        ImprovementTypes bestImprovement = NO_IMPROVEMENT;
+        int bestValue = 0;
+        YieldValueFunctor valueF(makeYieldW(2, 3, 1));
+
+        for (size_t i = 0, count = plotData.possibleImprovements.size(); i < count; ++i)
+        {
+            if (plotData.possibleImprovements[i].second == NO_IMPROVEMENT)
+            {
+                continue;
+            }
+
+            const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(plotData.possibleImprovements[i].second);
+            if (improvementInfo.isRequiresIrrigation())
+            {
+                continue;
+            }
+            int thisValue = valueF(plotData.getPlotYield(i));
+
+#ifdef ALTAI_DEBUG
+            os << "\nChecking possible substitute improvement: " << improvementInfo.getType() << " value = " << thisValue;
+#endif
+
+            if (thisValue > bestValue)
+            {
+                bestValue = thisValue;
+                bestImprovement = plotData.possibleImprovements[i].second;
+            }
+        }
+
+        return getBaseImprovement(bestImprovement);
+    }
+
+    std::pair<XYCoords, RouteTypes> CityImprovementManager::getBestRoute() const
+    {
+        const CvCity* pCity = ::getCity(city_);
+        CityPlotIter iter(pCity);
+        const CvPlayerAI& player = CvPlayerAI::getPlayer(city_.eOwner);
+        boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getAnalysis()->getMapAnalysis();
+
+        RouteTypes bestRouteType = NO_ROUTE;
+        int bestRouteValue = 0;
+        XYCoords bestCoords;
+        YieldValueFunctor yieldF(makeYieldW(2, 1, 1));
+
+        while (IterPlot pLoopPlot = iter())
+        {
+            if (!pLoopPlot.valid())
+            {
+                continue;
+            }
+
+            PlayerTypes plotOwner = pLoopPlot->getOwner();
+            XYCoords plotCoords(pLoopPlot->getX(), pLoopPlot->getY());
+
+            if (plotOwner == city_.eOwner)
+            {
+                const PlotInfo::PlotInfoNode& node = pMapAnalysis->getPlotInfoNode(pLoopPlot);
+
+                std::vector<std::pair<RouteTypes, PlotYield> > routeYieldChanges = 
+                    getRouteYieldChanges(node, city_.eOwner, pLoopPlot->getImprovementType(), pLoopPlot->getFeatureType());
+                
+                for (size_t i = 0, count = routeYieldChanges.size(); i < count; ++i)
+                {
+                    BuildTypes buildType = GameDataAnalysis::getBuildTypeForRouteType(routeYieldChanges[i].first);
+                    if (player.canBuild(pLoopPlot, buildType))
+                    {
+                        int thisRoutesValue = yieldF(routeYieldChanges[i].second);
+                        if (thisRoutesValue > bestRouteValue)
+                        {
+                            bestRouteValue = thisRoutesValue;
+                            bestRouteType = routeYieldChanges[i].first;
+                            bestCoords = XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
+                        }
+                    }
+                }
+            }
+        }
+
+        return std::make_pair(bestCoords, bestRouteType);
     }
 
     std::pair<int, XYCoords> CityImprovementManager::getPathAndCost_(FAStar* pIrrigationPathFinder, XYCoords start, XYCoords destination, PlayerTypes playerType) const

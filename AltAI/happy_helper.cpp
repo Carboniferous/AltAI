@@ -214,4 +214,9 @@ namespace AltAI
     {
         playerExtraHappiness_ += change;
     }
+
+    void HappyHelper::setNoUnhappiness(bool newState)
+    {
+        noUnhappiness_ = newState;
+    }
 }
