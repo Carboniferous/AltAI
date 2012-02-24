@@ -11,9 +11,11 @@ namespace AltAI
     std::ostream& operator << (std::ostream& os, MilitaryFlags militaryFlags);
     std::ostream& operator << (std::ostream& os, TechFlags techFlags);
     std::ostream& operator << (std::ostream& os, WorkerFlags workerFlags);
+    std::ostream& operator << (std::ostream& os, VictoryFlags victoryFlags);
 
     void streamEconomicFlags(std::ostream& os, int flags);
     void streamMilitaryFlags(std::ostream& os, int flags);
     void streamTechFlags(std::ostream& os, int flags);
     void streamWorkerFlags(std::ostream& os, int flags);
+    void streamVictoryFlags(std::ostream& os, int flags);
 }

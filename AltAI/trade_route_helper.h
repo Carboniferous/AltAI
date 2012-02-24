@@ -4,10 +4,12 @@
 
 namespace AltAI
 {
+    class CityData;
+
     class TradeRouteHelper
     {
     public:
-        explicit TradeRouteHelper(const CvCity* pCity);
+        TradeRouteHelper(const CvCity* pCity, CityData& data);
 
         PlotYield getTradeYield() const;
         int getNumRoutes() const;
@@ -24,6 +26,7 @@ namespace AltAI
         bool needsRecalc() const;
 
     private:
+        CityData& data_;
         void updateTradeYield_();
 
         int totalTradeModifier_(const CvCity* pTradeCity) const;
@@ -55,4 +58,6 @@ namespace AltAI
 
         bool isDirty_;
     };
+
+    typedef boost::shared_ptr<TradeRouteHelper> TradeRouteHelperPtr;
 }

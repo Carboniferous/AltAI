@@ -37,13 +37,13 @@ namespace AltAI
                 // add any base happy/health
                 if (node.happy != 0)
                 {
-                    data_.happyHelper->changePlayerHappiness(node.happy);
+                    data_.getHappyHelper()->changePlayerHappiness(node.happy);
                     data_.changeWorkingPopulation();
                 }
 
                 if (node.health != 0)
                 {
-                    data_.healthHelper->changePlayerHealthiness(node.health);
+                    data_.getHealthHelper()->changePlayerHealthiness(node.health);
                 }
 
                 for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
@@ -56,7 +56,7 @@ namespace AltAI
             {
                 if (!isEmpty(node.modifier))
                 {
-                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot() && iter->improvementType == node.improvementType)
                         {
@@ -70,7 +70,7 @@ namespace AltAI
             {
                 if (node.extraTradeRoutes != 0)
                 {
-                    data_.tradeRouteHelper->changeNumRoutes(node.extraTradeRoutes);
+                    data_.getTradeRouteHelper()->changeNumRoutes(node.extraTradeRoutes);
                 }
             }
 
@@ -78,7 +78,7 @@ namespace AltAI
             {
                 if (node.enablesWaterWork)
                 {
-                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot())
                         {
@@ -488,7 +488,7 @@ namespace AltAI
 
     void updateRequestData(const CvCity* pCity, CityData& data, const boost::shared_ptr<TechInfo>& pTechInfo)
     {
-        data.civHelper->addTech(pTechInfo->getTechType());
+        data.getCivHelper()->addTech(pTechInfo->getTechType());
         boost::apply_visitor(CityOutputUpdater(pCity, data), pTechInfo->getInfo());
         data.recalcOutputs();
     }

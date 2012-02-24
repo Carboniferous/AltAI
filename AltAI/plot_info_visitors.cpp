@@ -813,7 +813,7 @@ namespace AltAI
             CityOutputUpdater(CityData& data, PlotData& plotData, FeatureTypes featureType, RouteTypes routeType, ImprovementTypes improvementType, const PlotInfo::PlotInfoNode& plotInfoNode)
                 : data_(data), plotData_(plotData), featureType_(featureType), routeType_(routeType), improvementType_(improvementType), plotInfoNode_(plotInfoNode)
             {
-                playerType_ = data_.pCity->getOwner();
+                playerType_ = data_.getCity()->getOwner();
             }
 
             void operator() (const PlotInfo::NullNode&) const
@@ -828,7 +828,7 @@ namespace AltAI
                 plotData_.upgradeData = PlotData::UpgradeData(timeHorizon, getUpgradedImprovementsData(plotInfoNode_, playerType_, improvementType_, 
                     getActualUpgradeTurns(gGlobals.getGame().getImprovementUpgradeTime(improvementType_), upgradeRate), timeHorizon, upgradeRate));
 
-                plotData_.output += plotData_.upgradeData.getExtraOutput(data_.getYieldModifier(), data_.getCommerceModifier(), data_.getCommercePercent());
+                plotData_.output += plotData_.upgradeData.getExtraOutput(makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent());
             }
 
             void operator() (const PlotInfo::BaseNode& node) const
@@ -852,14 +852,14 @@ namespace AltAI
             void operator() (const PlotInfo::ImprovementNode& node) const
             {
                 plotData_.plotYield = YieldVisitor(playerType_, routeType_)(node);
-                plotData_.actualOutput = plotData_.output = makeOutput(plotData_.plotYield, data_.getYieldModifier(), data_.getCommerceModifier(), data_.getCommercePercent());
+                plotData_.actualOutput = plotData_.output = makeOutput(plotData_.plotYield, makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent());
 
                 if (!node.upgradeNode.empty())
                 {
                     (*this)(node.upgradeNode[0]);
                 }
 
-                int freeSpecCount = data_.specialistHelper->getFreeSpecialistCountPerImprovement(node.improvementType);
+                int freeSpecCount = data_.getSpecialistHelper()->getFreeSpecialistCountPerImprovement(node.improvementType);
                 if (freeSpecCount > 0)
                 {
                     data_.changeImprovementFreeSpecialistSlotCount(freeSpecCount);
@@ -891,11 +891,11 @@ namespace AltAI
         //const boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(data.owner)->getAnalysis()->getMapAnalysis();
 
         //const PlotInfo::PlotInfoNode& node = pMapAnalysis->getPlotInfoNode(gGlobals.getMap().plot(plotData.coords.iX, plotData.coords.iY));
-        PlotInfo plotInfo(gGlobals.getMap().plot(plotData.coords.iX, plotData.coords.iY), data.pCity->getOwner());
+        PlotInfo plotInfo(gGlobals.getMap().plot(plotData.coords.iX, plotData.coords.iY), data.getCity()->getOwner());
 
 #ifdef ALTAI_DEBUG
         // debug
-        std::ostream& os = CityLog::getLog(data.pCity)->getStream();
+        std::ostream& os = CityLog::getLog(data.getCity())->getStream();
         os << "\nPlot: " << plotData.coords << " applying improvement: " << gGlobals.getImprovementInfo(improvementType).getType();
         if (featureType != NO_FEATURE)
         {
@@ -912,14 +912,14 @@ namespace AltAI
         //const boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(data.owner)->getAnalysis()->getMapAnalysis();
         PlotsAndImprovements results;
 
-        for (PlotDataListConstIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(data.getPlotOutputs().begin()), endIter(data.getPlotOutputs().end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot() && iter->controlled && (ignoreExisting || iter->improvementType == NO_IMPROVEMENT))
             {
-                PlotInfo plotInfo(gGlobals.getMap().plot(iter->coords.iX, iter->coords.iY), data.pCity->getOwner());
+                PlotInfo plotInfo(gGlobals.getMap().plot(iter->coords.iX, iter->coords.iY), data.getCity()->getOwner());
                 //const PlotInfo::PlotInfoNode& node = pMapAnalysis->getPlotInfoNode(gGlobals.getMap().plot(iter->coords.iX, iter->coords.iY));
 
-                AvailableImprovementsFinder improvementsFinder(data.pCity->getOwner(), iter->featureType);
+                AvailableImprovementsFinder improvementsFinder(data.getCity()->getOwner(), iter->featureType);
                 boost::apply_visitor(improvementsFinder, plotInfo.getInfo());
 
                 AvailableImprovements improvements(improvementsFinder.getAvailableImprovements());
@@ -935,16 +935,16 @@ namespace AltAI
 
     std::vector<std::pair<XYCoords, boost::tuple<FeatureTypes, ImprovementTypes, PlotYield> > > getBestImprovements(const CityData& data, YieldValueFunctor valueF, bool ignoreExisting)
     {
-        const boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(data.owner)->getAnalysis()->getMapAnalysis();
+        const boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(data.getOwner())->getAnalysis()->getMapAnalysis();
         std::vector<std::pair<XYCoords, boost::tuple<FeatureTypes, ImprovementTypes, PlotYield> > > results;
 
-        for (PlotDataListConstIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(data.getPlotOutputs().begin()), endIter(data.getPlotOutputs().end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot() && iter->controlled && (ignoreExisting || iter->improvementType == NO_IMPROVEMENT))
             {
-                PlotInfo plotInfo(gGlobals.getMap().plot(iter->coords.iX, iter->coords.iY), data.pCity->getOwner());
+                PlotInfo plotInfo(gGlobals.getMap().plot(iter->coords.iX, iter->coords.iY), data.getCity()->getOwner());
 
-                AvailableImprovementsFinder improvementsFinder(data.pCity->getOwner(), iter->featureType);
+                AvailableImprovementsFinder improvementsFinder(data.getCity()->getOwner(), iter->featureType);
                 boost::apply_visitor(improvementsFinder, plotInfo.getInfo());
 
                 AvailableImprovements improvements(improvementsFinder.getAvailableImprovements());

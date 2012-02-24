@@ -12,6 +12,7 @@
 #include "./settler_manager.h"
 #include "./events.h"
 #include "./civ_helper.h"
+#include "./area_helper.h"
 #include "./civ_log.h"
 #include "./unit_log.h"
 #include "./error_log.h"
@@ -36,6 +37,16 @@ namespace AltAI
 
     void Player::init()
     {
+        AreaIter iter(&gGlobals.getMap());
+
+        while (CvArea* pArea = iter())
+        {
+            if (pArea->getCitiesPerPlayer(pPlayer_->getID()) > 0)
+            {
+                areaHelpersMap_[pArea->getID()] = boost::shared_ptr<AreaHelper>(new AreaHelper(*pPlayer_, pArea));
+            }
+        }
+
         pPlayerAnalysis_->init();
 
         pPlayerAnalysis_->getMapAnalysis()->init();
@@ -223,9 +234,9 @@ namespace AltAI
                 {
                     for (size_t j = 0, count = cityData.size(); j < count; ++j)
                     {
-                        updateRequestData(cityData[j]->pCity, *cityData[j], getAnalysis(), (CivicTypes)i);
+                        updateRequestData(cityData[j]->getCity(), *cityData[j], getAnalysis(), (CivicTypes)i);
 
-                        CitySimulation simulation(cityData[j]->pCity, cityData[j]);
+                        CitySimulation simulation(cityData[j]->getCity(), cityData[j]);
                         SimulationOutput simOutput = simulation.simulateAsIs(20);
                         civWideOutput += *simOutput.cumulativeOutput.rbegin();
                     }
@@ -369,6 +380,19 @@ namespace AltAI
     const boost::shared_ptr<CivHelper>& Player::getCivHelper() const
     {
         return pCivHelper_;
+    }
+
+    const boost::shared_ptr<AreaHelper>& Player::getAreaHelper(int areaID)
+    {
+        std::map<int, boost::shared_ptr<AreaHelper> >::iterator iter = areaHelpersMap_.find(areaID);
+        if (iter == areaHelpersMap_.end())
+        {
+            return areaHelpersMap_.insert(std::make_pair(areaID, boost::shared_ptr<AreaHelper>(new AreaHelper(*pPlayer_, gGlobals.getMap().getArea(areaID))))).first->second;
+        }
+        else
+        {
+            return iter->second;
+        }
     }
 
     bool Player::checkResourcesOutsideCities(CvUnitAI* pUnit) const
@@ -927,6 +951,7 @@ namespace AltAI
         // similarly for units (potentially)
         pPlayerAnalysis_->getPlayerTactics()->updateUnitTactics();
         pPlayerAnalysis_->getPlayerTactics()->updateTechTactics();
+        pPlayerAnalysis_->getPlayerTactics()->updateProjectTactics();
 
         boost::shared_ptr<TechInfo> pTechInfo = pPlayerAnalysis_->getTechInfo(techType);
 

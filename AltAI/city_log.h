@@ -5,7 +5,7 @@
 namespace AltAI
 {
     struct CityLogFileHandles;
-    struct CityData;
+    class CityData;
     struct HurryData;
     class CityOptimiser;
     struct BuildingSimulationResults;

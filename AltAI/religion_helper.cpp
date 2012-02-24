@@ -4,7 +4,7 @@
 
 namespace AltAI
 {
-    ReligionHelper::ReligionHelper(const CvCity* pCity) : pCity_(pCity)
+    ReligionHelper::ReligionHelper(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
     {
         const CvPlayer& player = CvPlayerAI::getPlayer(pCity_->getOwner());
         religionType_ = player.getStateReligion();

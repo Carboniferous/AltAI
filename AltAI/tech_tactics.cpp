@@ -237,17 +237,17 @@ namespace AltAI
                     const City& city = player.getCity(pCity->getID());
 
                     boost::shared_ptr<CityData> cityData(new CityData(pCity));
-                    cityData->civHelper = pCivHelper;
+                    cityData->getCivHelper() = pCivHelper;
 
                     CitySimulation simulation(pCity, cityData, city.getConstructItem());
                     simulation.optimisePlots();
                     TotalOutput baseOutput = cityData->getActualOutput();
 #ifdef ALTAI_DEBUG
-                    civLog << "\nbase output = " << baseOutput << ", no. trade routes = " << cityData->tradeRouteHelper->getNumRoutes();
+                    civLog << "\nbase output = " << baseOutput << ", no. trade routes = " << cityData->getTradeRouteHelper()->getNumRoutes();
 #endif
                     updateRequestData(pCity, *cityData, player.getAnalysis()->getTechInfo(techSelectionHelper.researchTech.techType));
 #ifdef ALTAI_DEBUG
-                    civLog << ", no. routes = " << cityData->tradeRouteHelper->getNumRoutes() << ", delta output = " << simulation.getCityData()->getActualOutput() - baseOutput;
+                    civLog << ", no. routes = " << cityData->getTradeRouteHelper()->getNumRoutes() << ", delta output = " << simulation.getCityData()->getActualOutput() - baseOutput;
 #endif
                     pCivHelper->removeTech(techSelectionHelper.researchTech.techType);
                 }

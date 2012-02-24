@@ -1,11 +1,13 @@
 #include "./building_helper.h"
 #include "./religion_helper.h"
 #include "./bonus_helper.h"
+#include "./city_data.h"
 #include "./civ_log.h"
 
 namespace AltAI
 {
-    BuildingHelper::BuildingHelper(const CvCity* pCity) : pCity_(pCity)
+    BuildingsHelper::BuildingsHelper(const CvCity* pCity, CityData& data) : 
+        pCity_(pCity), data_(data), dirtyPowerCount_(pCity->getDirtyPowerCount()), isPower_(pCity->isPower()), isAreaCleanPower_(pCity->isAreaCleanPower())
     {
         owner_ = pCity->getOwner();
 
@@ -40,78 +42,78 @@ namespace AltAI
         }
     }
 
-    int BuildingHelper::getNumBuildings(BuildingTypes buildingType) const
+    int BuildingsHelper::getNumBuildings(BuildingTypes buildingType) const
     {
         return getNumRealBuildings(buildingType) + getNumFreeBuildings(buildingType);
     }
 
-    int BuildingHelper::getNumFreeBuildings(BuildingTypes buildingType) const
+    int BuildingsHelper::getNumFreeBuildings(BuildingTypes buildingType) const
     {
         return freeBuildings_[buildingType];
     }
 
-    int BuildingHelper::getNumRealBuildings(BuildingTypes buildingType) const
+    int BuildingsHelper::getNumRealBuildings(BuildingTypes buildingType) const
     {
         return buildings_[buildingType];
     }
 
-    PlayerTypes BuildingHelper::getBuildingOriginalOwner(BuildingTypes buildingType) const
+    PlayerTypes BuildingsHelper::getBuildingOriginalOwner(BuildingTypes buildingType) const
     {
         return buildingOriginalOwners_[buildingType];
     }
 
-    void BuildingHelper::setBuildingOriginalOwner(BuildingTypes buildingType)
+    void BuildingsHelper::setBuildingOriginalOwner(BuildingTypes buildingType)
     {
         buildingOriginalOwners_[buildingType] = owner_;
     }
 
-    void BuildingHelper::changeNumRealBuildings(BuildingTypes buildingType)
+    void BuildingsHelper::changeNumRealBuildings(BuildingTypes buildingType)
     {
         ++buildings_[buildingType];
         setBuildingOriginalOwner(buildingType);
     }
 
-    void BuildingHelper::changeNumFreeBuildings(BuildingTypes buildingType)
+    void BuildingsHelper::changeNumFreeBuildings(BuildingTypes buildingType)
     {
         ++freeBuildings_[buildingType];
         setBuildingOriginalOwner(buildingType);
     }
 
-    PlotYield BuildingHelper::getBuildingYieldChange(BuildingClassTypes buildingClassType) const
+    PlotYield BuildingsHelper::getBuildingYieldChange(BuildingClassTypes buildingClassType) const
     {
         std::map<BuildingClassTypes, PlotYield>::const_iterator ci(buildingYieldsMap_.find(buildingClassType));
         return ci == buildingYieldsMap_.end() ? PlotYield() : ci->second;
     }
 
-    void BuildingHelper::setBuildingYieldChange(BuildingClassTypes buildingClassType, PlotYield plotYield)
+    void BuildingsHelper::setBuildingYieldChange(BuildingClassTypes buildingClassType, PlotYield plotYield)
     {
         // ok, so we don't set the yieldrate here, but compare this to CvCity::setBuildingYieldChange() (~40 lines of code)
         // whoever wrote that clearly doesn't understand the -> operator, but wrote conditions to avoid accidental assignment - weird!
         buildingYieldsMap_[buildingClassType] = plotYield;
     }
 
-    void BuildingHelper::changeBuildingYieldChange(BuildingClassTypes buildingClassType, PlotYield plotYield)
+    void BuildingsHelper::changeBuildingYieldChange(BuildingClassTypes buildingClassType, PlotYield plotYield)
     {
         buildingYieldsMap_[buildingClassType] += plotYield;
     }
 
-    Commerce BuildingHelper::getBuildingCommerceChange(BuildingClassTypes buildingClassType) const
+    Commerce BuildingsHelper::getBuildingCommerceChange(BuildingClassTypes buildingClassType) const
     {
         std::map<BuildingClassTypes, Commerce>::const_iterator ci(buildingCommerceMap_.find(buildingClassType));
         return ci == buildingCommerceMap_.end() ? Commerce() : ci->second;
     }
 
-    void BuildingHelper::setBuildingCommerceChange(BuildingClassTypes buildingClassType, Commerce commerce)
+    void BuildingsHelper::setBuildingCommerceChange(BuildingClassTypes buildingClassType, Commerce commerce)
     {
         buildingCommerceMap_[buildingClassType] = commerce;
     }
 
-    void BuildingHelper::changeBuildingCommerceChange(BuildingClassTypes buildingClassType, Commerce commerce)
+    void BuildingsHelper::changeBuildingCommerceChange(BuildingClassTypes buildingClassType, Commerce commerce)
     {
         buildingCommerceMap_[buildingClassType] += commerce;
     }
 
-    int BuildingHelper::getProductionModifier(BuildingTypes buildingType, const boost::shared_ptr<BonusHelper>& bonusHelper, const boost::shared_ptr<ReligionHelper>& religionHelper) const
+    int BuildingsHelper::getProductionModifier(BuildingTypes buildingType) const
     {
         const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
         const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
@@ -120,14 +122,14 @@ namespace AltAI
 
 	    for (int bonusType = 0, count = gGlobals.getNumBonusInfos(); bonusType < count; ++bonusType)
 	    {
-		    if (bonusHelper->getNumBonuses((BonusTypes)bonusType) > 0)
+		    if (data_.getBonusHelper()->getNumBonuses((BonusTypes)bonusType) > 0)
 		    {
 			    multiplier += buildingInfo.getBonusProductionModifier(bonusType);
 		    }
         }
 
-        ReligionTypes stateReligion = religionHelper->getStateReligion();
-	    if (stateReligion != NO_RELIGION && religionHelper->isHasReligion(stateReligion))
+        ReligionTypes stateReligion = data_.getReligionHelper()->getStateReligion();
+	    if (stateReligion != NO_RELIGION && data_.getReligionHelper()->isHasReligion(stateReligion))
     	{
 			multiplier += player.getStateReligionBuildingProductionModifier(); // todo - use civic helper
 		}
@@ -135,7 +137,7 @@ namespace AltAI
 	    return std::max<int>(0, multiplier);
     }
 
-    Commerce BuildingHelper::getBuildingCommerce(BuildingTypes buildingType, const boost::shared_ptr<ReligionHelper>& religionHelper) const
+    Commerce BuildingsHelper::getBuildingCommerce(BuildingTypes buildingType) const
     {
         //std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(owner_))->getStream();
 
@@ -145,7 +147,7 @@ namespace AltAI
         const int originalBuildTime = pCity_->getBuildingOriginalTime(buildingType);  // todo
         const int gameTurnYear = gGlobals.getGame().getGameTurnYear(); // todo
 
-        ReligionTypes stateReligion = CvPlayerAI::getPlayer(owner_).getStateReligion();
+        ReligionTypes stateReligion = data_.getReligionHelper()->getStateReligion();
 
 	    if (buildingCount > 0)
 	    {
@@ -161,7 +163,7 @@ namespace AltAI
             if (buildingInfo.getGlobalReligionCommerce() != NO_RELIGION)  // shrine
     	    {
                 ReligionTypes religionType = (ReligionTypes)buildingInfo.getGlobalReligionCommerce();
-			    totalCommerce += Commerce(gGlobals.getReligionInfo(religionType).getGlobalReligionCommerceArray()) * religionHelper->getReligionCount(religionType) * activeBuildingCount;
+			    totalCommerce += Commerce(gGlobals.getReligionInfo(religionType).getGlobalReligionCommerceArray()) * data_.getReligionHelper()->getReligionCount(religionType) * activeBuildingCount;
 		    }
 
             for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)
@@ -197,5 +199,47 @@ namespace AltAI
 	    }
 
 	    return totalCommerce;
+    }
+
+    void BuildingsHelper::updatePower(bool isDirty, bool isAdding)
+    {
+        if (isDirty)
+        {
+            dirtyPowerCount_ += (isAdding ? 1 : -1);
+        }
+        else
+        {
+            powerCount_ += (isAdding ? 1 : -1);
+        }
+    }
+
+    void BuildingsHelper::updateAreaCleanPower(bool isAdding)
+    {
+        isAreaCleanPower_ = isAdding;
+    }
+
+    bool BuildingsHelper::isPower() const
+    {
+    	return powerCount_ > 0 || isAreaCleanPower_;
+    }
+
+    bool BuildingsHelper::isDirtyPower() const
+    {
+        return isPower() && dirtyPowerCount_ == powerCount_ && !isAreaCleanPower_;
+    }
+
+    bool BuildingsHelper::isAreaCleanPower() const
+    {
+        return isAreaCleanPower_;
+    }
+
+    int BuildingsHelper::getPowerCount() const
+    {
+        return powerCount_;
+    }
+
+    int BuildingsHelper::getDirtyPowerCount() const
+    {
+        return dirtyPowerCount_;
     }
 }

@@ -4,12 +4,17 @@
 
 namespace AltAI
 {
+    class CityData;
+
     class CorporationHelper
     {
     public:
-        explicit CorporationHelper(const CvCity* pCity);
+        CorporationHelper(const CvCity* pCity, CityData& data);
 
     private:
+        CityData& data_;
         const CvCity* pCity_;
     };
+
+    typedef boost::shared_ptr<CorporationHelper> CorporationHelperPtr;
 }

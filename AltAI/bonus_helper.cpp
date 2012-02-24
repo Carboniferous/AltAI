@@ -1,8 +1,9 @@
 #include "./bonus_helper.h"
+#include "./city_data.h"
 
 namespace AltAI
 {
-    BonusHelper::BonusHelper(const CvCity* pCity)
+    BonusHelper::BonusHelper(const CvCity* pCity, CityData& data) : data_(data)
     {
         const int bonusCount = gGlobals.getNumBonusInfos();
         bonuses_.resize(bonusCount, 0);

@@ -174,8 +174,9 @@ namespace AltAI
         TotalOutput bestOutput;
         SpecialistTypes bestSpecialist = NO_SPECIALIST;
 
-        YieldModifier yieldModifier = city.getCityData()->getYieldModifier();
-        CommerceModifier commerceModifier = city.getCityData()->getCommerceModifier(), commercePercent = city.getCityData()->getCommercePercent();
+        YieldModifier yieldModifier = makeYield(100, 100, 100) + city.getCityData()->getModifiersHelper()->getTotalYieldModifier();
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100), // city.getCityData()->getCommerceModifier(),
+            commercePercent = city.getCityData()->getCommercePercent();
 
         return getBestSpecialistHelper(player.getPlayerID(), valueF, yieldModifier, commerceModifier, commercePercent);
     }

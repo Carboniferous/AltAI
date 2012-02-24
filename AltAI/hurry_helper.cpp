@@ -3,7 +3,7 @@
 
 namespace AltAI
 {
-    HurryHelper::HurryHelper(const CvCity* pCity)
+    HurryHelper::HurryHelper(const CvCity* pCity, CityData& data) : data_(data)
     {
         HURRY_ANGER_DIVISOR_ = gGlobals.getDefineINT("HURRY_ANGER_DIVISOR");
         PERCENT_ANGER_DIVISOR_ = gGlobals.getPERCENT_ANGER_DIVISOR();
@@ -62,35 +62,36 @@ namespace AltAI
         return hurryAngryTimer_ > 0 ? 1 + ((1 + (hurryAngryTimer_ - 1) / flatHurryAngerLength_) * HURRY_POP_ANGER_ * PERCENT_ANGER_DIVISOR_) / std::max<int>(1, population_) : 0;
     }
 
-    std::pair<bool, HurryData> HurryHelper::canHurry(HurryTypes hurryType, const boost::shared_ptr<const CityData>& pCityData) const
+    std::pair<bool, HurryData> HurryHelper::canHurry(HurryTypes hurryType) const
     {
         HurryData hurryData(hurryType);
         bool costsPopulation = productionPerPopulation_[hurryType] != 0, costsGold = goldPerProduction_[hurryType] != 0;
 
-        if ((!costsPopulation && !costsGold) || pCityData->queuedBuildings.empty())
+        if ((!costsPopulation && !costsGold) || data_.getQueuedBuildings().empty())
         {
             return std::make_pair(false, hurryData);
         }
         else
         {
-            hurryData = getHurryCosts_(hurryType, pCityData);
+            hurryData = getHurryCosts_(hurryType);
     
             // even if can't hurry - return how many pop we would need
             return std::make_pair(costsPopulation ? population_ / 2 >= hurryData.hurryPopulation : true, hurryData);
         }
     }
 
-    HurryData HurryHelper::getHurryCosts_(HurryTypes hurryType, const boost::shared_ptr<const CityData>& pCityData) const
+    HurryData HurryHelper::getHurryCosts_(HurryTypes hurryType) const
     {
         bool costsPopulation = productionPerPopulation_[hurryType] != 0, costsGold = goldPerProduction_[hurryType] != 0;
+        BuildingTypes buildingType = data_.getQueuedBuildings().top();
 
-        int hurryCostModifier = getHurryCostModifier_(gGlobals.getBuildingInfo(pCityData->queuedBuildings.top()).getHurryCostModifier(), pCityData->currentProduction == 0);
+        int hurryCostModifier = getHurryCostModifier_(gGlobals.getBuildingInfo(buildingType).getHurryCostModifier(), data_.getCurrentProduction() == 0);
 
-        int production = (((pCityData->requiredProduction - pCityData->currentProduction) / 100) * hurryCostModifier + 99) / 100;
+        int production = (((data_.getRequiredProduction() - data_.getCurrentProduction()) / 100) * hurryCostModifier + 99) / 100;
 
         if (costsPopulation) // this is only included for whipping, not rush-buying
         {
-	        int extraProduction = (production * pCityData->currentProductionModifier) / 100;
+	        int extraProduction = (production * data_.getModifiersHelper()->getBuildingProductionModifier(buildingType)) / 100;
 	        if (extraProduction > 0)
     	    {
 	    	    production = (production * production + (extraProduction - 1)) / extraProduction;
@@ -105,8 +106,8 @@ namespace AltAI
             hurryData.hurryPopulation = (hurryCost - 1) / productionPerPopulation_[hurryType];
 	        hurryData.hurryPopulation = std::max<int>(1, 1 + hurryData.hurryPopulation);
 
-            hurryData.extraProduction = 100 * (pCityData->requiredProduction / 100 - 
-                (hurryData.hurryPopulation * productionPerPopulation_[hurryType] * pCityData->currentProductionModifier / 100) / std::max<int>(1, hurryCostModifier));
+            hurryData.extraProduction = 100 * (data_.getRequiredProduction() / 100 - 
+                (hurryData.hurryPopulation * productionPerPopulation_[hurryType] * data_.getModifiersHelper()->getBuildingProductionModifier(buildingType) / 100) / std::max<int>(1, hurryCostModifier));
         }
         
         if (costsGold)

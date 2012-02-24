@@ -1,19 +1,18 @@
 #pragma once
 
 #include "./utils.h"
-#include "./hurry_helper.h"
 
 class CvCity;
 
 namespace AltAI
 {
-    class HurryHelper;
+    class CityData;
 
     // simulates happy/unhappy logic in CvCity; allows simulation of changing (un)happiness
     class HappyHelper
     {
     public:
-        explicit HappyHelper(const CvCity* pCity);
+        HappyHelper(const CvCity* pCity, CityData& data);
 
         int happyPopulation() const;
         int angryPopulation() const;
@@ -42,21 +41,12 @@ namespace AltAI
 
         void setNoUnhappiness(bool newState);
 
-        const HurryHelper& getHurryHelper() const
-        {
-            return hurryHelper_;
-        }
-
-        HurryHelper& getHurryHelper()
-        {
-            return hurryHelper_;
-        }
-
     private:
         void setOvercrowdingPercentAnger_();
 
+        CityData& data_;
         const CvCity* pCity_;
-        HurryHelper hurryHelper_;
+
         int population_;
         bool noUnhappiness_;
 
@@ -78,4 +68,6 @@ namespace AltAI
         int targetNumCities_;
         int PERCENT_ANGER_DIVISOR_, TEMP_HAPPY_;
     };
+
+    typedef boost::shared_ptr<HappyHelper> HappyHelperPtr;
 }

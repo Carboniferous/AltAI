@@ -5,6 +5,7 @@
 #include "./tech_info_visitors.h"
 #include "./civic_info_visitors.h"
 #include "./building_info_visitors.h"
+#include "./project_info_visitors.h"
 #include "./spec_info_visitors.h"
 #include "./player_analysis.h"
 #include "./map_analysis.h"
@@ -38,6 +39,7 @@ namespace AltAI
     {
         analyseUnits_();
         analyseBuildings_();
+        analyseProjects_();
         analyseTechs_();
         analyseCivics_();
         analyseResources_();
@@ -68,7 +70,8 @@ namespace AltAI
             {
                 // skip 'special' units (not built by normal means, such as great people; also excludes barb animals)
                 // need the >= as settlers cost 0 in the xml and have a weird, undocumented mechanism to determine their cost
-                if (gGlobals.getUnitInfo(unitType).getProductionCost() >= 0)
+                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+                if (unitInfo.getProductionCost() >= 0)
                 {
                     unitsInfo_.insert(std::make_pair(unitType, makeUnitInfo(unitType, playerType)));
                 }
@@ -77,6 +80,26 @@ namespace AltAI
                 //    std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
                 //    os << "\nSkipping unit: " << gGlobals.getUnitInfo(unitType).getType();
                 //}
+
+                int productionMultiplier = 0;
+                SpecialUnitTypes specialUnitType = (SpecialUnitTypes)unitInfo.getSpecialUnitType();
+                for (int j = 0, count = gGlobals.getNumTraitInfos(); j < count; ++j)
+                {
+                    if (player_.getCvPlayer()->hasTrait((TraitTypes)j))
+                    {
+                        productionMultiplier = unitInfo.getProductionTraits(j);
+
+                        if (specialUnitType != NO_SPECIALUNIT)
+                        {
+                            productionMultiplier += gGlobals.getSpecialUnitInfo(specialUnitType).getProductionTraits(j);
+                        }
+                    }
+                }
+
+                if (productionMultiplier != 0)
+                {
+                    unitProductionModifiersMap_[unitType] = productionMultiplier;
+                }
             }
         }
 
@@ -102,7 +125,8 @@ namespace AltAI
             BuildingTypes buildingType = getPlayerVersion(playerType, (BuildingClassTypes)i);
             if (buildingType != NO_BUILDING)
             {
-                if (gGlobals.getBuildingInfo(buildingType).getProductionCost() > 0)
+                const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
+                if (buildingInfo.getProductionCost() > 0)
                 {
                     buildingsInfo_.insert(std::make_pair(buildingType, makeBuildingInfo(buildingType, playerType)));
                 }
@@ -110,8 +134,28 @@ namespace AltAI
                 {
 #ifdef ALTAI_DEBUG
                     std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-                    os << "\nSkipping building: " << gGlobals.getBuildingInfo(buildingType).getType();
+                    os << "\nSkipping building: " << buildingInfo.getType();
 #endif
+                }
+
+                int productionMultiplier = 0;
+                SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)buildingInfo.getSpecialBuildingType();
+                for (int j = 0, count = gGlobals.getNumTraitInfos(); j < count; ++j)
+                {
+                    if (player_.getCvPlayer()->hasTrait((TraitTypes)j))
+                    {
+                        productionMultiplier = buildingInfo.getProductionTraits(j);
+
+                        if (specialBuildingType != NO_SPECIALBUILDING)
+                        {
+                            productionMultiplier += gGlobals.getSpecialBuildingInfo(specialBuildingType).getProductionTraits(j);
+                        }
+                    }
+                }
+
+                if (productionMultiplier != 0)
+                {
+                    buildingProductionModifiersMap_[buildingType] = productionMultiplier;
                 }
             }
         }
@@ -124,6 +168,28 @@ namespace AltAI
             {
                 os << "\n" << gGlobals.getBuildingInfo(ci->first).getType() << ": ";
                 streamBuildingInfo(os, ci->second);
+            }
+            os << "\n";
+        }
+#endif
+    }
+
+    void PlayerAnalysis::analyseProjects_()
+    {
+        for (int i = 0, count = gGlobals.getNumProjectInfos(); i < count; ++i)
+        {
+            PlayerTypes playerType = player_.getPlayerID();
+            projectsInfo_.insert(std::make_pair((ProjectTypes)i, makeProjectInfo((ProjectTypes)i, playerType)));
+        }
+
+#ifdef ALTAI_DEBUG
+        // debug
+        {
+            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+            for (std::map<ProjectTypes, boost::shared_ptr<ProjectInfo> >::const_iterator ci(projectsInfo_.begin()), ciEnd(projectsInfo_.end()); ci != ciEnd; ++ci)
+            {
+                os << "\n" << gGlobals.getProjectInfo(ci->first).getType() << ": ";
+                streamProjectInfo(os, ci->second);
             }
             os << "\n";
         }
@@ -153,8 +219,7 @@ namespace AltAI
     }
 
     void PlayerAnalysis::analyseCivics_()
-    {
-        for (int i = 0, count = gGlobals.getNumCivicInfos(); i < count; ++i)
+    {        for (int i = 0, count = gGlobals.getNumCivicInfos(); i < count; ++i)
         {
             PlayerTypes playerType = player_.getPlayerID();
             civicsInfo_.insert(std::make_pair((CivicTypes)i, makeCivicInfo((CivicTypes)i, playerType)));
@@ -257,7 +322,7 @@ namespace AltAI
         improvementManager.calcImprovements(yieldTypes, pCity->getPopulation() + 5, 3);
 
         boost::shared_ptr<CityData> pCityData(new CityData(pCity, improvementManager));
-        pCityData->happyHelper->setNoUnhappiness(true);
+        pCityData->getHappyHelper()->setNoUnhappiness(true);
 
         CityOptimiser cityOptimiser(pCityData);
 
@@ -276,7 +341,7 @@ namespace AltAI
 
         while (true)
         {
-            int requiredFood = 100 * (pCityData->cityPopulation * foodPerPop) + pCityData->getLostFood();
+            int requiredFood = 100 * (pCityData->getPopulation() * foodPerPop) + pCityData->getLostFood();
             int maxFood = cityOptimiser.getMaxFood();
 
             if (maxFood < requiredFood)
@@ -305,20 +370,20 @@ namespace AltAI
 
             if (foodDelta > 0)
             {
-                const int growthRate = (pCityData->growthThreshold - pCityData->currentFood) / foodDelta;
-                const int growthDelta = (pCityData->growthThreshold - pCityData->currentFood) % foodDelta;
+                const int growthRate = (pCityData->getGrowthThreshold() - pCityData->getCurrentFood()) / foodDelta;
+                const int growthDelta = (pCityData->getGrowthThreshold() - pCityData->getCurrentFood()) % foodDelta;
 #ifdef ALTAI_DEBUG
-                os << "\nfood delta = " << foodDelta << ", threshold = " << pCityData->growthThreshold << ", stored food = " << pCityData->storedFood
+                os << "\nfood delta = " << foodDelta << ", threshold = " << pCityData->getGrowthThreshold() << ", stored food = " << pCityData->getStoredFood()
                     << ", growth rate = " << growthRate << ", remainder = " << growthDelta;
 #endif
                 turnsToGrow = growthRate + (growthDelta ? 1 : 0);
             }
                 
-            growthLadder.push_back(boost::make_tuple(turnsToGrow, pCityData->cityPopulation, thisOutput - lastOutput));
+            growthLadder.push_back(boost::make_tuple(turnsToGrow, pCityData->getPopulation(), thisOutput - lastOutput));
 
             lastOutput = thisOutput;
 
-            pCityData->storedFood = pCityData->foodKeptPercent * pPlayer->getGrowthThreshold(pCityData->cityPopulation + 1);
+            pCityData->setStoredFood(pCityData->getFoodKeptPercent() * pPlayer->getGrowthThreshold(pCityData->getPopulation() + 1));
             pCityData->changePopulation(1);
         }
 
@@ -349,6 +414,18 @@ namespace AltAI
         return  ci != bestSpecialistTypesMap_.end() ? ci->second : NO_SPECIALIST;
     }
 
+    int PlayerAnalysis::getPlayerUnitProductionModifier(UnitTypes unitType) const
+    {
+        std::map<UnitTypes, int>::const_iterator ci = unitProductionModifiersMap_.find(unitType);
+        return ci == unitProductionModifiersMap_.end() ? 0 : ci->second;
+    }
+
+    int PlayerAnalysis::getPlayerBuildingProductionModifier(BuildingTypes buildingType) const
+    {
+        std::map<BuildingTypes, int>::const_iterator ci = buildingProductionModifiersMap_.find(buildingType);
+        return ci == buildingProductionModifiersMap_.end() ? 0 : ci->second;
+    }
+
     boost::shared_ptr<UnitInfo> PlayerAnalysis::getUnitInfo(UnitTypes unitType) const
     {
         std::map<UnitTypes, boost::shared_ptr<UnitInfo> >::const_iterator unitsIter = unitsInfo_.find(unitType);
@@ -371,6 +448,18 @@ namespace AltAI
         }
         
         return boost::shared_ptr<BuildingInfo>();
+    }
+
+    boost::shared_ptr<ProjectInfo> PlayerAnalysis::getProjectInfo(ProjectTypes projectType) const
+    {
+        std::map<ProjectTypes, boost::shared_ptr<ProjectInfo> >::const_iterator projectsIter = projectsInfo_.find(projectType);
+
+        if (projectsIter != projectsInfo_.end())
+        {
+            return projectsIter->second;
+        }
+        
+        return boost::shared_ptr<ProjectInfo>();
     }
 
     boost::shared_ptr<TechInfo> PlayerAnalysis::getTechInfo(TechTypes techType) const
@@ -692,7 +781,7 @@ namespace AltAI
         }
 #endif
 
-        boost::shared_ptr<CivHelper> civHelper = gGlobals.getGame().getAltAI()->getPlayer(player_.getPlayerID())->getCivHelper();
+        CivHelperPtr civHelper = gGlobals.getGame().getAltAI()->getPlayer(player_.getPlayerID())->getCivHelper();
         std::set<BonusTypes> potentialBonusTypes = gGlobals.getGame().getAltAI()->getPlayer(player_.getPlayerID())->getSettlerManager()->getBonusesForSites(2);
 
         std::map<TechTypes, WorkerTechData> techData;

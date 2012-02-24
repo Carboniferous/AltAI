@@ -260,6 +260,12 @@ namespace AltAI
                 constructItem_.economicFlags |= EconomicFlags::Output_Maintenance_Reduction;
             }
 
+            if (node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation)
+            {
+                constructItem_.economicFlags |= EconomicFlags::Output_Food;
+                constructItem_.economicFlags |= EconomicFlags::Output_Health;
+            }
+
             if (node.hurryAngerModifier > 0)
             {
                 constructItem_.economicFlags |= EconomicFlags::Output_Production;
@@ -317,11 +323,11 @@ namespace AltAI
             //{
             //    const bool canHurryPop = CvPlayerAI::getPlayer(player_.getPlayerID()).canPopRush();
 
-            //    const int requiredFood = 100 * pCityData_->cityPopulation * gGlobals.getFOOD_CONSUMPTION_PER_POPULATION() + pCityData_->getLostFood();
+            //    const int requiredFood = 100 * pCityData_->getPopulation() * gGlobals.getFOOD_CONSUMPTION_PER_POPULATION() + pCityData_->getLostFood();
 
             //    const int foodDelta = city_.getMaxOutputs()[YIELD_FOOD] - requiredFood;
 
-            //    const int size = std::max<int>(pCityData_->cityPopulation, pCityData_->cityPopulation + pCityData_->happyCap);
+            //    const int size = std::max<int>(pCityData_->getPopulation(), pCityData_->getPopulation() + pCityData_->happyCap);
             //    PlotYield projectedCityYield = improvementManager_.getProjectedYield(size);
             //    TotalOutput projectedCityOutput = makeOutput(projectedCityYield, pCityData_->getYieldModifier(), pCityData_->getCommerceModifier(), pCityData_->getCommercePercent());
 
@@ -480,20 +486,20 @@ namespace AltAI
         //simulation.getCityOptimiser()->debug(os, false);
         
         TotalOutput baseOutput = pCityData->getActualOutput();
-        baseOutput[OUTPUT_GOLD] -= pCityData->maintenanceHelper->getMaintenance();
+        baseOutput[OUTPUT_GOLD] -= pCityData->getMaintenanceHelper()->getMaintenance();
 #ifdef ALTAI_DEBUG
-        os << "\nbaseOutput = " << baseOutput << " city output = " << pCityData->cityPlotOutput.actualOutput << " maintenance = " << pCityData->maintenanceHelper->getMaintenance();
+        os << "\nbaseOutput = " << baseOutput << " city output = " << pCityData->getCityPlotOutput().actualOutput << " maintenance = " << pCityData->getMaintenanceHelper()->getMaintenance();
 #endif
         updateRequestData(city.getCvCity(), *pCityData, pBuildingInfo);
-        pCityData->buildingHelper->changeNumRealBuildings(pBuildingInfo->getBuildingType());
+        pCityData->getBuildingsHelper()->changeNumRealBuildings(pBuildingInfo->getBuildingType());
         pCityData->recalcOutputs();
 
         simulation.optimisePlots();
         //simulation.getCityOptimiser()->debug(os, false);
         TotalOutput newOutput = pCityData->getActualOutput();
-        newOutput[OUTPUT_GOLD] -= pCityData->maintenanceHelper->getMaintenance();
+        newOutput[OUTPUT_GOLD] -= pCityData->getMaintenanceHelper()->getMaintenance();
 #ifdef ALTAI_DEBUG        
-        os << "\nnew baseOutput = " << newOutput << " city output = " << pCityData->cityPlotOutput.actualOutput << " maintenance = " << pCityData->maintenanceHelper->getMaintenance();
+        os << "\nnew baseOutput = " << newOutput << " city output = " << pCityData->getCityPlotOutput().actualOutput << " maintenance = " << pCityData->getMaintenanceHelper()->getMaintenance();
 
         os << "\nDelta output = " << newOutput - baseOutput;
 #endif

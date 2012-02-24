@@ -275,11 +275,11 @@ namespace AltAI
         }
         else
         {
-            int productionModifier = pCity_->getProductionUnit() == NO_UNIT ? 0 : CvPlayerAI::getPlayer(pCity_->getOwner()).getProductionModifier(pCity_->getProductionUnit());
-            if (productionModifier != 0)
-            {
-                pCityData_->changeYieldModifier(makeYield(0, productionModifier, 0));
-            }
+            //int productionModifier = pCity_->getProductionUnit() == NO_UNIT ? 0 : CvPlayerAI::getPlayer(pCity_->getOwner()).getProductionModifier(pCity_->getProductionUnit());
+            //if (productionModifier != 0)
+            //{
+            //    pCityData_->changeYieldModifier(makeYield(0, productionModifier, 0));
+            //}
             opt.optimiseFoodProduction(pCity_->getProductionUnit(), true);
 #ifdef ALTAI_DEBUG
             pCityData_->debugBasicData(os);
@@ -291,7 +291,7 @@ namespace AltAI
         // city plot is not in plot data list
         pCity_->setWorkingPlot(CITY_HOME_PLOT, pCity_->getPopulation() > 0 && pCity_->canWork(pCity_->getCityIndexPlot(CITY_HOME_PLOT)));
 
-        for (PlotDataListConstIter iter(pCityData_->plotOutputs.begin()), endIter(pCityData_->plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(pCityData_->getPlotOutputs().begin()), endIter(pCityData_->getPlotOutputs().end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -317,7 +317,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataListConstIter iter(pCityData_->freeSpecOutputs.begin()), endIter(pCityData_->freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(pCityData_->getFreeSpecOutputs().begin()), endIter(pCityData_->getFreeSpecOutputs().end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -406,10 +406,24 @@ namespace AltAI
         return constructItem_;
     }
 
-    boost::tuple<UnitTypes, BuildingTypes, ProcessTypes> City::getBuild()
+    boost::tuple<UnitTypes, BuildingTypes, ProcessTypes, ProjectTypes> City::getBuild()
     {
+        if (constructItem_.projectType != NO_PROJECT)
+        {
+            if (pCity_->getProjectProduction(constructItem_.projectType) > 0 && pCity_->getProductionNeeded(constructItem_.projectType) > 0)
+            {
+#ifdef ALTAI_DEBUG
+                std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
+                os << "\n" << narrow(pCity_->getName()) << " keeping build: " << constructItem_ << " production so far = "
+                   << pCity_->getProjectProduction(constructItem_.projectType) << ", needed = " << pCity_->getProductionNeeded(constructItem_.projectType);
+#endif
+                return boost::make_tuple(NO_UNIT, NO_BUILDING, NO_PROCESS, constructItem_.projectType);
+            }
+        }
+
         if (flags_ & NeedsBuildingCalcs)
         {
+            
             calcBuildings_();
         }
 
@@ -428,17 +442,21 @@ namespace AltAI
 
         if (constructItem_.buildingType != NO_BUILDING)
         {
-            return boost::make_tuple(NO_UNIT, constructItem_.buildingType, NO_PROCESS);
+            return boost::make_tuple(NO_UNIT, constructItem_.buildingType, NO_PROCESS, NO_PROJECT);
         }
         else if (constructItem_.unitType != NO_UNIT)
         {
-            return boost::make_tuple(constructItem_.unitType, NO_BUILDING, NO_PROCESS);
+            return boost::make_tuple(constructItem_.unitType, NO_BUILDING, NO_PROCESS, NO_PROJECT);
         }
         else if (constructItem_.processType != NO_PROCESS)
         {
-            return boost::make_tuple(NO_UNIT, NO_BUILDING, constructItem_.processType);
+            return boost::make_tuple(NO_UNIT, NO_BUILDING, constructItem_.processType, NO_PROJECT);
         }
-        return boost::make_tuple(NO_UNIT, NO_BUILDING, NO_PROCESS);
+        else if (constructItem_.projectType != NO_PROJECT)
+        {
+            return boost::make_tuple(NO_UNIT, NO_BUILDING, NO_PROCESS, constructItem_.projectType);
+        }
+        return boost::make_tuple(NO_UNIT, NO_BUILDING, NO_PROCESS, NO_PROJECT);
     }
 
     std::pair<BuildTypes, int> City::getBestImprovement(XYCoords coords, const std::string& sourceFunc)

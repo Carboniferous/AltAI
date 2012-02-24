@@ -1,9 +1,10 @@
 #include "./happy_helper.h"
+#include "./city_data.h"
 
 namespace AltAI
 {
-    HappyHelper::HappyHelper(const CvCity* pCity)
-        : pCity_(pCity), hurryHelper_(pCity)
+    HappyHelper::HappyHelper(const CvCity* pCity, CityData& data)
+        : pCity_(pCity), data_(data)
     {
         population_ = pCity_->getPopulation();
         PERCENT_ANGER_DIVISOR_ = gGlobals.getPERCENT_ANGER_DIVISOR();
@@ -100,7 +101,7 @@ namespace AltAI
 		    iAngerPercent += noMilitaryPercentAnger_;
 		    iAngerPercent += culturePercentAnger_;
 		    iAngerPercent += religionPercentAnger_;
-		    iAngerPercent += hurryHelper_.getHurryPercentAnger();
+		    iAngerPercent += data_.getHurryHelper()->getHurryPercentAnger();
 		    iAngerPercent += conscriptPercentAnger_;
 		    iAngerPercent += defyResolutionPercentAnger_;
 		    iAngerPercent += warWearinessPercentAnger_;
@@ -134,7 +135,7 @@ namespace AltAI
 
     void HappyHelper::advanceTurn()
     {
-        hurryHelper_.advanceTurn();
+        data_.getHurryHelper()->advanceTurn();
         if (--tempHappyTimer_ < 0)
         {
             tempHappyTimer_ = 0;
@@ -145,7 +146,7 @@ namespace AltAI
     {
         population_ = population;
         setOvercrowdingPercentAnger_();
-        hurryHelper_.setPopulation(population);
+        data_.getHurryHelper()->setPopulation(population);
     }
 
     void HappyHelper::setOvercrowdingPercentAnger_()

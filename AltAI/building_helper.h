@@ -4,13 +4,12 @@
 
 namespace AltAI
 {
-    class ReligionHelper;
-    class BonusHelper;
+    class CityData;
 
-    class BuildingHelper
+    class BuildingsHelper
     {
     public:
-        explicit BuildingHelper(const CvCity* pCity);
+        BuildingsHelper(const CvCity* pCity, CityData& data);
 
         int getNumBuildings(BuildingTypes buildingType) const;
         int getNumRealBuildings(BuildingTypes buildingType) const;
@@ -30,11 +29,21 @@ namespace AltAI
         void setBuildingCommerceChange(BuildingClassTypes buildingClassType, Commerce commerce);
         void changeBuildingCommerceChange(BuildingClassTypes buildingClassType, Commerce commerce);
 
-        Commerce getBuildingCommerce(BuildingTypes buildingType, const boost::shared_ptr<ReligionHelper>& religionHelper) const;
+        Commerce getBuildingCommerce(BuildingTypes buildingType) const;
 
-        int getProductionModifier(BuildingTypes buildingType, const boost::shared_ptr<BonusHelper>& bonusHelper, const boost::shared_ptr<ReligionHelper>& religionHelper) const;
+        int getProductionModifier(BuildingTypes buildingType) const;
+
+        void updatePower(bool isDirty, bool isAdding);
+        void updateAreaCleanPower(bool isAdding);
+
+        bool isPower() const;
+        bool isDirtyPower() const;
+        bool isAreaCleanPower() const;
+        int getPowerCount() const;
+        int getDirtyPowerCount() const;
 
     private:
+        CityData& data_;
         const CvCity* pCity_;
         PlayerTypes owner_;
 
@@ -45,5 +54,10 @@ namespace AltAI
 
         std::map<BuildingClassTypes, PlotYield> buildingYieldsMap_;
         std::map<BuildingClassTypes, Commerce> buildingCommerceMap_;
+
+        int powerCount_, dirtyPowerCount_;
+        bool isPower_, isAreaCleanPower_;
     };
+
+    typedef boost::shared_ptr<BuildingsHelper> BuildingsHelperPtr;
 }

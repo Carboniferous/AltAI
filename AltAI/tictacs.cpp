@@ -5,6 +5,7 @@
 #include "./building_tactics.h"
 #include "./city_tactics.h"
 #include "./unit_tactics.h"
+#include "./project_tactics.h"
 #include "./building_tactics_visitors.h"
 #include "./tech_tactics_visitors.h"
 #include "./player.h"
@@ -40,6 +41,7 @@ namespace AltAI
         possibleTechTactics_ = makeTechTactics(player);
         possibleUnitTactics_ = makeUnitTactics(player);
         possibleBuildingTactics_ = makeBuildingTactics(player);
+        possibleProjectTactics_ = makeProjectTactics(player);
 
         selectCityTactics();
 
@@ -103,6 +105,12 @@ namespace AltAI
     {
         possibleUnitTactics_ = makeUnitTactics(player);
         selectUnitTactics();
+    }
+
+    void PlayerTactics::updateProjectTactics()
+    {
+        possibleProjectTactics_ = makeProjectTactics(player);
+        selectProjectTactics();
     }
 
     void PlayerTactics::updateFirstToTechTactics(TechTypes techType)
@@ -261,6 +269,47 @@ namespace AltAI
         //debugTactics();           
     }
 
+    void PlayerTactics::selectProjectTactics()
+    {
+        const CvPlayer* pPlayer = player.getCvPlayer();
+
+        CityIter cityIter(*pPlayer);
+        CvCity* pCity;
+        while (pCity = cityIter())
+        {
+            selectProjectTactics(player.getCity(pCity->getID()));
+        }
+    }
+
+    void PlayerTactics::selectProjectTactics(const City& city)
+    {
+        selectedCityProjectTactics_[city.getCvCity()->getIDInfo()].clear();
+        ConstructListIter iter(possibleProjectTactics_.begin());
+        while (iter != possibleProjectTactics_.end())
+        {
+            ConstructItem selectedProject = AltAI::selectProjectTactics(player, city, *iter);
+            if (selectedProject.projectType != NO_PROJECT)
+            {
+                ConstructList& constructList = selectedCityProjectTactics_[city.getCvCity()->getIDInfo()];
+
+                ConstructList::iterator listIter = std::find_if(constructList.begin(), constructList.end(), ConstructItemFinder(selectedProject));
+
+                if (listIter != constructList.end())
+                {
+                    listIter->merge(selectedProject);
+                }
+                else
+                {
+                    constructList.push_back(selectedProject);
+                }
+            }
+
+            ++iter;
+        }
+
+        //debugTactics();           
+    }
+
     void PlayerTactics::selectCityTactics()
     {
         typedef std::map<YieldTypes, std::multimap<int, IDInfo, std::greater<int> > > CityYieldMap;
@@ -379,8 +428,29 @@ namespace AltAI
             os << *ci << "\n";
         }
 
+        os << "\nPossible project tactics:\n";
+        for (ConstructListConstIter ci(possibleProjectTactics_.begin()), ciEnd(possibleProjectTactics_.end()); ci != ciEnd; ++ci)
+        {
+            os << *ci << "\n";
+        }
+
         os << "\nSelected building tactics:\n";
         for (std::map<IDInfo, ConstructList >::const_iterator ci(selectedCityBuildingTactics_.begin()), ciEnd(selectedCityBuildingTactics_.end()); ci != ciEnd; ++ci)
+        {
+            const CvCity* pCity = getCity(ci->first);
+            if (pCity)
+            {
+                os << "\nCity: " << narrow(pCity->getName()) << "\n";
+            }
+
+            for (ConstructListConstIter ci2(ci->second.begin()), ci2End(ci->second.end()); ci2 != ci2End; ++ci2)
+            {
+                os << *ci2 << "\n";
+            }
+        }
+
+        os << "\nSelected project tactics:\n";
+        for (std::map<IDInfo, ConstructList >::const_iterator ci(selectedCityProjectTactics_.begin()), ciEnd(selectedCityProjectTactics_.end()); ci != ciEnd; ++ci)
         {
             const CvCity* pCity = getCity(ci->first);
             if (pCity)

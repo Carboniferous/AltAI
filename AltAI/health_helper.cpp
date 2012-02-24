@@ -1,9 +1,14 @@
 #include "./health_helper.h"
+#include "./city_data.h"
+#include "./building_helper.h"
 
 namespace AltAI
 {
-    HealthHelper::HealthHelper(const CvCity* pCity) : pCity_(pCity)
+    HealthHelper::HealthHelper(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
     {
+        POWER_HEALTH_CHANGE_ = gGlobals.getDefineINT("POWER_HEALTH_CHANGE");
+        DIRTY_POWER_HEALTH_CHANGE_  = gGlobals.getDefineINT("DIRTY_POWER_HEALTH_CHANGE");
+
         population_ = pCity_->getPopulation();
         const CvPlayerAI& player = CvPlayerAI::getPlayer(pCity_->getOwner());
 
@@ -128,6 +133,33 @@ namespace AltAI
     void HealthHelper::setNoUnhealthinessFromBuildings()
     {
         noUnhealthinessFromBuildings_ = true;
+    }
+
+    void HealthHelper::updatePowerHealth(const CityData& cityData)
+    {
+        if (cityData.getBuildingsHelper()->isPower())
+        {
+            if (POWER_HEALTH_CHANGE_ > 0)
+            {
+                powerGoodHealth_ = POWER_HEALTH_CHANGE_;
+            }
+            else
+            {
+                powerBadHealth_ = POWER_HEALTH_CHANGE_;
+            }
+        }
+
+        if (cityData.getBuildingsHelper()->isDirtyPower())
+        {
+            if (DIRTY_POWER_HEALTH_CHANGE_ > 0)
+            {
+                powerGoodHealth_ += DIRTY_POWER_HEALTH_CHANGE_;
+            }
+            else
+            {
+                powerBadHealth_ += DIRTY_POWER_HEALTH_CHANGE_;
+            }
+        }
     }
 
     void HealthHelper::setNoUnhealthinessFromPopulation()

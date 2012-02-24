@@ -30,8 +30,10 @@ namespace AltAI
         economicFlags |= other.economicFlags;
         militaryFlags |= other.militaryFlags;
         workerFlags |= other.workerFlags;
+        victoryFlags |= other.victoryFlags;
 
         mergeVectors(possibleBuildings, other.possibleBuildings);
+        mergeVectors(possibleProjects, other.possibleProjects);
         mergeVectors(possibleUnits, other.possibleUnits);
         mergeVectors(possibleCivics, other.possibleCivics);
         mergeVectors(possibleBonuses, other.possibleBonuses);
@@ -66,7 +68,8 @@ namespace AltAI
 
     void ConstructItem::merge(const ConstructItem& other)
     {
-        if (other.unitType != unitType || other.buildingType != buildingType || other.processType != processType || other.improvementType != improvementType)
+        if (other.unitType != unitType || other.buildingType != buildingType || other.projectType != projectType ||
+            other.processType != processType || other.improvementType != improvementType)
         {
             return;
         }
@@ -74,6 +77,7 @@ namespace AltAI
         economicFlags |= other.economicFlags;
         militaryFlags |= other.militaryFlags;
         buildingFlags |= other.buildingFlags;
+        victoryFlags |= other.victoryFlags;
 
         mergeVectors(positiveBonuses, other.positiveBonuses);
 
@@ -104,8 +108,10 @@ namespace AltAI
         pStream->Write(economicFlags);
         pStream->Write(militaryFlags);
         pStream->Write(workerFlags);
+        pStream->Write(victoryFlags);
 
         writeVector(pStream, possibleBuildings);
+        writeVector(pStream, possibleProjects);
         writeVector(pStream, possibleUnits);
         writeVector(pStream, possibleCivics);
         writeVector(pStream, possibleBonuses);
@@ -133,8 +139,10 @@ namespace AltAI
         pStream->Read(&economicFlags);
         pStream->Read(&militaryFlags);
         pStream->Read(&workerFlags);
+        pStream->Read(&victoryFlags);
 
         readVector<BuildingTypes, int>(pStream, possibleBuildings);
+        readVector<ProjectTypes, int>(pStream, possibleProjects);
         readVector<UnitTypes, int>(pStream, possibleUnits);
         readVector<CivicTypes, int>(pStream, possibleCivics);
         readVector<BonusTypes, int>(pStream, possibleBonuses);
@@ -158,6 +166,7 @@ namespace AltAI
     {
         pStream->Write(buildingType);
         pStream->Write(unitType);
+        pStream->Write(projectType);
         pStream->Write(improvementType);
         pStream->Write(processType);
 
@@ -177,12 +186,16 @@ namespace AltAI
         pStream->Write(economicFlags);
         pStream->Write(militaryFlags);
         pStream->Write(buildingFlags);
+        pStream->Write(victoryFlags);
+
+        writeComplexVector(pStream, prerequisites);
     }
 
     void ConstructItem::read(FDataStreamBase* pStream)
     {
         pStream->Read((int*)&buildingType);
         pStream->Read((int*)&unitType);
+        pStream->Read((int*)&projectType);
         pStream->Read((int*)&improvementType);
         pStream->Read((int*)&processType);
 
@@ -207,5 +220,8 @@ namespace AltAI
         pStream->Read(&economicFlags);
         pStream->Read(&militaryFlags);
         pStream->Read(&buildingFlags);
+        pStream->Read(&victoryFlags);
+
+        readComplexVector<ConstructItem>(pStream, prerequisites);
     }
 }

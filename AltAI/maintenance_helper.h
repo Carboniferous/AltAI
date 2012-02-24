@@ -4,6 +4,8 @@
 
 namespace AltAI
 {
+    class CityData;
+
     // same logic as code in CvCity, but this class is designed for simulating population, modifier, etc.. changing
     class MaintenanceHelper
     {
@@ -53,4 +55,6 @@ namespace AltAI
         int MAX_DISTANCE_CITY_MAINTENANCE_, distanceMaintenancePercent_, distanceHandicapMaintenancePercent_, distanceMaintenanceModifier_, maxPlotDistance_;
         int numCitiesMaintenancePercent_, numCitiesHandicapMaintenancePercent_, maxNumCitiesMaintenance_, numCitiesMaintenanceModifier_;
     };
+
+    typedef boost::shared_ptr<MaintenanceHelper> MaintenanceHelperPtr;
 }

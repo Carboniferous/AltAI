@@ -4,6 +4,8 @@
 
 namespace AltAI
 {
+    class CityData;
+
     class CivHelper
     {
     public:
@@ -37,4 +39,6 @@ namespace AltAI
         std::set<CivicTypes> availableCivics_;
         std::vector<CivicTypes> currentCivics_;
     };
+
+    typedef boost::shared_ptr<CivHelper> CivHelperPtr;
 }

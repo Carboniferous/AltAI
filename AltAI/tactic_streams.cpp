@@ -155,6 +155,18 @@ namespace AltAI
         }
     }
 
+    void streamVictoryFlags(std::ostream& os, int flags)
+    {
+        if (flags & VictoryFlags::Component_Project)
+        {
+            os << " Component_Project, ";
+        }
+        if (flags & VictoryFlags::Prereq_Project)
+        {
+            os << " Prereq_Project, ";
+        }
+    }
+
     std::ostream& operator << (std::ostream& os, const ConstructItem& node)
     {
         if (node.buildingType != NO_BUILDING)
@@ -173,6 +185,10 @@ namespace AltAI
         {
             os << " want process = " << gGlobals.getProcessInfo(node.processType).getType();
         }
+        if (node.projectType != NO_PROJECT)
+        {
+            os << " want project = " << gGlobals.getProjectInfo(node.projectType).getType();
+        }
         if (node.economicFlags)
         {
             streamEconomicFlags(os, node.economicFlags);
@@ -181,6 +197,11 @@ namespace AltAI
         {
             streamMilitaryFlags(os, node.militaryFlags);
         }
+        if (node.victoryFlags)
+        {
+            streamVictoryFlags(os, node.victoryFlags);
+        }
+
         bool first = true;
         for (std::map<BuildTypes, int>::const_iterator ci(node.possibleBuildTypes.begin()), ciEnd(node.possibleBuildTypes.end()); ci != ciEnd; ++ci)
         {
@@ -227,6 +248,10 @@ namespace AltAI
                 os << " for: " << gGlobals.getUnitClassInfo((UnitClassTypes)ci->second.second).getType();
             }
         }
+        for (std::vector<ConstructItem>::const_iterator ci(node.prerequisites.begin()), ciEnd(node.prerequisites.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nPrerequisite: " << *ci;
+        }
         return os;
     }
 
@@ -257,6 +282,10 @@ namespace AltAI
         if (node.workerFlags)
         {
             streamWorkerFlags(os, node.workerFlags);
+        }
+        if (node.victoryFlags)
+        {
+            streamVictoryFlags(os, node.victoryFlags);
         }
 
         for (size_t i = 0, count = node.possibleBonuses.size(); i < count; ++i)
@@ -374,6 +403,19 @@ namespace AltAI
         {
             os << " flags = ";
             streamWorkerFlags(os, workerFlags.flags);
+        }
+        
+        return os;
+    }
+
+    std::ostream& operator << (std::ostream& os, VictoryFlags victoryFlags)
+    {
+        os << "VictoryFlags: ";
+
+        if (victoryFlags.flags)
+        {
+            os << " flags = ";
+            streamVictoryFlags(os, victoryFlags.flags);
         }
         
         return os;

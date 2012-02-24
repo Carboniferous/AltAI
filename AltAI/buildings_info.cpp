@@ -1,4 +1,5 @@
 #include "./buildings_info.h"
+#include "./helper_fns.h"
 
 namespace AltAI
 {
@@ -53,12 +54,14 @@ namespace AltAI
             // TODO check we can't miss any combinations of arrays here which are permitted in the xml
             PlotYield yieldChange = buildingInfo.getYieldChangeArray();
             YieldModifier yieldModifier = buildingInfo.getYieldModifierArray();
+            YieldModifier powerYieldModifier = buildingInfo.getPowerYieldModifierArray();
 
-            if (!isEmpty(yieldChange) || !isEmpty(yieldModifier))
+            if (!isEmpty(yieldChange) || !isEmpty(yieldModifier) || !isEmpty(powerYieldModifier))
             {
                 BuildingInfo::YieldNode node;
                 node.yield = yieldChange;
                 node.modifier = yieldModifier;
+                node.powerModifier = powerYieldModifier;
                 baseNode.nodes.push_back(node);
             }
 
@@ -191,7 +194,7 @@ namespace AltAI
 
         void getPowerNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
         {
-            if (buildingInfo.isPower())
+            if (buildingInfo.isPower() || buildingInfo.getPowerBonus() != NO_BONUS || buildingInfo.isAreaCleanPower())
             {
                 BuildingInfo::PowerNode node;
                 node.bonusType = (BonusTypes)buildingInfo.getPowerBonus();
@@ -373,6 +376,26 @@ namespace AltAI
             if (minimumAreaSize > 0 && !buildingInfo.isWater())
             {
                 node.buildConditions.push_back(BuildingInfo::MinArea(false, minimumAreaSize));
+            }
+
+            BuildingInfo::RequiredBuildings requiredBuildings;
+            for (int i = 0, count = gGlobals.getNumBuildingClassInfos(); i < count; ++i)
+            {
+                if (buildingInfo.isBuildingClassNeededInCity(i))
+                {
+                    requiredBuildings.cityBuildings.push_back(getPlayerVersion(requestData.playerType, (BuildingClassTypes)i));
+                }
+
+                int requiredCount = buildingInfo.getPrereqNumOfBuildingClass(i);
+                if (requiredCount > 0)
+                {
+                    requiredBuildings.buildingCounts.push_back(std::make_pair(getPlayerVersion(requestData.playerType, (BuildingClassTypes)i), requiredCount));
+                }
+            }
+
+            if (!requiredBuildings.buildingCounts.empty() || !requiredBuildings.cityBuildings.empty())
+            {
+                node.buildConditions.push_back(requiredBuildings);
             }
 
             getYieldNode(node, buildingInfo);

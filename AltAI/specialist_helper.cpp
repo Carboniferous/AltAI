@@ -1,8 +1,9 @@
 #include "./specialist_helper.h"
+#include "./city_data.h"
 
 namespace AltAI
 {
-    SpecialistHelper::SpecialistHelper(const CvCity* pCity)
+    SpecialistHelper::SpecialistHelper(const CvCity* pCity, CityData& data) : data_(data)
     {
         const int specialistCount = gGlobals.getNumSpecialistInfos();
         maxSpecialistCounts_.resize(specialistCount);

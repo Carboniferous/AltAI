@@ -31,144 +31,98 @@
 
 namespace AltAI
 {
-    CityData::CityData(const CvCity* pCity_, bool includeUnclaimedPlots)
-        : cityPopulation(0), workingPopulation(0), happyCap(0), currentFood(0), storedFood(0),
-          currentProduction(0), growthThreshold(0), requiredProduction(-1), foodKeptPercent(0), currentProductionModifier(0),
-          civHelper(gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getCivHelper()),
-          happyHelper(boost::shared_ptr<HappyHelper>(new HappyHelper(pCity_))),
-          healthHelper(boost::shared_ptr<HealthHelper>(new HealthHelper(pCity_))),
-          maintenanceHelper(boost::shared_ptr<MaintenanceHelper>(new MaintenanceHelper(pCity_))),
-          religionHelper(boost::shared_ptr<ReligionHelper>(new ReligionHelper(pCity_))),
-          cultureHelper(boost::shared_ptr<CultureHelper>(new CultureHelper(pCity_))),
-          tradeRouteHelper(boost::shared_ptr<TradeRouteHelper>(new TradeRouteHelper(pCity_))),
-          buildingHelper(boost::shared_ptr<BuildingHelper>(new BuildingHelper(pCity_))),
-          bonusHelper(boost::shared_ptr<BonusHelper>(new BonusHelper(pCity_))),
-          specialistHelper(boost::shared_ptr<SpecialistHelper>(new SpecialistHelper(pCity_))),
-          corporationHelper(boost::shared_ptr<CorporationHelper>(new CorporationHelper(pCity_))),
-          specialConditions(None),
-          pCity(pCity_), owner(pCity_->getOwner()), coords(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots)
+    CityData::CityData(const CvCity* pCity, bool includeUnclaimedPlots)
+        : cityPopulation_(0), workingPopulation_(0), happyCap_(0), currentFood_(0), storedFood_(0),
+          currentProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
+          commerceYieldModifier_(100), specialConditions_(None), pCity_(pCity), owner_(pCity->getOwner()),
+          coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots)
     {
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
-
-        currentFood = 100 * pCity->getFood();
-        storedFood = 100 * pCity->getFoodKept();
-        cityPopulation = pCity->getPopulation();
-        workingPopulation = cityPopulation - getNonWorkingPopulation();
-        happyCap = happyHelper->happyPopulation() - happyHelper->angryPopulation();
-
-        growthThreshold = 100 * pCity->growthThreshold();
-        foodKeptPercent = pCity->getMaxFoodKeptPercent();
-
-        for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
-        {
-            yieldModifier_[yieldType] = pCity->getBaseYieldRateModifier((YieldTypes)yieldType);
-        }
-        currentProductionModifier = yieldModifier_[YIELD_PRODUCTION];
-
-        for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)
-        {
-            // modifier is just extra % here, so add 100 in
-            commerceModifier_[commerceType] = 100 + pCity->getCommerceRateModifier((CommerceTypes)commerceType);
-            commercePercent_[commerceType] = player.getCommercePercent((CommerceTypes)commerceType);
-        }
-
-        calcOutputsFromPlotData_();
+        initHelpers_(pCity);
+        init_(pCity);
+        calcOutputsFromPlotData_(pCity);
+        calculateSpecialistOutput_();
     }
 
-    CityData::CityData(const CvCity* pCity_, const CityImprovementManager& improvements)
-        : cityPopulation(0), workingPopulation(0), happyCap(0), currentFood(0), storedFood(0),
-          currentProduction(0), growthThreshold(0), requiredProduction(-1), foodKeptPercent(0), currentProductionModifier(0),
-          civHelper(gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getCivHelper()),
-          happyHelper(boost::shared_ptr<HappyHelper>(new HappyHelper(pCity_))),
-          healthHelper(boost::shared_ptr<HealthHelper>(new HealthHelper(pCity_))),
-          maintenanceHelper(boost::shared_ptr<MaintenanceHelper>(new MaintenanceHelper(pCity_))),
-          religionHelper(boost::shared_ptr<ReligionHelper>(new ReligionHelper(pCity_))),
-          cultureHelper(boost::shared_ptr<CultureHelper>(new CultureHelper(pCity_))),
-          tradeRouteHelper(boost::shared_ptr<TradeRouteHelper>(new TradeRouteHelper(pCity_))),
-          buildingHelper(boost::shared_ptr<BuildingHelper>(new BuildingHelper(pCity_))),
-          bonusHelper(boost::shared_ptr<BonusHelper>(new BonusHelper(pCity_))),
-          specialistHelper(boost::shared_ptr<SpecialistHelper>(new SpecialistHelper(pCity_))),
-          corporationHelper(boost::shared_ptr<CorporationHelper>(new CorporationHelper(pCity_))),
-          specialConditions(None),
-          pCity(pCity_), owner(pCity_->getOwner()), coords(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(improvements.getIncludeUnclaimedPlots)
+    CityData::CityData(const CvCity* pCity, const CityImprovementManager& improvements)
+        : cityPopulation_(0), workingPopulation_(0), happyCap_(0), currentFood_(0), storedFood_(0),
+          currentProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
+          commerceYieldModifier_(100), specialConditions_(None), pCity_(pCity), owner_(pCity_->getOwner()),
+          coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(improvements.getIncludeUnclaimedPlots())
     {
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
-
-        currentFood = 100 * pCity->getFood();
-        storedFood = 100 * pCity->getFoodKept();
-        cityPopulation = pCity->getPopulation();
-        workingPopulation = cityPopulation - getNonWorkingPopulation();
-        happyCap = happyHelper->happyPopulation() - happyHelper->angryPopulation();
-
-        growthThreshold = 100 * pCity->growthThreshold();
-        foodKeptPercent = pCity->getMaxFoodKeptPercent();
-
-        for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
-        {
-            yieldModifier_[yieldType] = pCity->getBaseYieldRateModifier((YieldTypes)yieldType);
-        }
-        currentProductionModifier = yieldModifier_[YIELD_PRODUCTION];
-
-        for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)
-        {
-            // modifier is just extra % here, so add 100 in
-            commerceModifier_[commerceType] = 100 + pCity->getCommerceRateModifier((CommerceTypes)commerceType);
-            commercePercent_[commerceType] = player.getCommercePercent((CommerceTypes)commerceType);
-        }
-
+        initHelpers_(pCity);
+        init_(pCity);
         calcOutputsFromPlannedImprovements_(improvements);
+        calculateSpecialistOutput_();
     }
 
-    // events queue is not copied
-    CityData::CityData(const CityData& other)
-        : plotOutputs(other.plotOutputs),
-          unworkablePlots(other.unworkablePlots),
-          freeSpecOutputs(other.freeSpecOutputs),
-          cityPlotOutput(other.cityPlotOutput),
-          cityGreatPersonOutput(other.cityGreatPersonOutput), 
-          cityPopulation(other.cityPopulation),
-          workingPopulation(other.workingPopulation),
-          happyCap(other.happyCap),
-          currentFood(other.currentFood),
-          storedFood(other.storedFood),
-          currentProduction(other.currentProduction),
-          growthThreshold(other.growthThreshold),
-          requiredProduction(other.requiredProduction),
-          foodKeptPercent(other.foodKeptPercent),
-          yieldModifier_(other.yieldModifier_),
-          commerceModifier_(other.commerceModifier_),
-          commercePercent_(other.commercePercent_), 
-          currentProductionModifier(other.currentProductionModifier), 
-          civHelper(other.civHelper),
-          happyHelper(boost::shared_ptr<HappyHelper>(new HappyHelper(*other.happyHelper))),
-          healthHelper(boost::shared_ptr<HealthHelper>(new HealthHelper(*other.healthHelper))),
-          maintenanceHelper(boost::shared_ptr<MaintenanceHelper>(new MaintenanceHelper(*other.maintenanceHelper))),
-          religionHelper(boost::shared_ptr<ReligionHelper>(new ReligionHelper(*other.religionHelper))),
-          cultureHelper(boost::shared_ptr<CultureHelper>(new CultureHelper(*other.cultureHelper))),
-          tradeRouteHelper(boost::shared_ptr<TradeRouteHelper>(new TradeRouteHelper(*other.tradeRouteHelper))),
-          buildingHelper(boost::shared_ptr<BuildingHelper>(new BuildingHelper(*other.buildingHelper))),
-          bonusHelper(boost::shared_ptr<BonusHelper>(new BonusHelper(*other.bonusHelper))),
-          specialistHelper(boost::shared_ptr<SpecialistHelper>(new SpecialistHelper(*other.specialistHelper))),
-          corporationHelper(boost::shared_ptr<CorporationHelper>(new CorporationHelper(*other.corporationHelper))),
-          specialConditions(other.specialConditions),
-          queuedBuildings(other.queuedBuildings),
-          pCity(other.pCity), owner(other.owner), coords(other.coords), includeUnclaimedPlots_(other.includeUnclaimedPlots_)
+    void CityData::initHelpers_(const CvCity* pCity)
     {
+        areaHelper_ = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getAreaHelper(pCity->getArea());
+        civHelper_ = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCivHelper();
+
+        maintenanceHelper_ = MaintenanceHelperPtr(new MaintenanceHelper(pCity));
+
+        bonusHelper_ = BonusHelperPtr(new BonusHelper(pCity, *this));
+        buildingsHelper_ = BuildingsHelperPtr(new BuildingsHelper(pCity, *this));
+        corporationHelper_ = CorporationHelperPtr(new CorporationHelper(pCity, *this));
+        cultureHelper_ = CultureHelperPtr(new CultureHelper(pCity, *this));
+        happyHelper_ = HappyHelperPtr(new HappyHelper(pCity, *this));
+        healthHelper_ = HealthHelperPtr(new HealthHelper(pCity, *this));
+        hurryHelper_ = HurryHelperPtr(new HurryHelper(pCity, *this));
+        modifiersHelper_ = ModifiersHelperPtr(new ModifiersHelper(pCity, *this));
+        religionHelper_ = ReligionHelperPtr(new ReligionHelper(pCity, *this));
+        specialistHelper_ = SpecialistHelperPtr(new SpecialistHelper(pCity, *this));
+        tradeRouteHelper_ = TradeRouteHelperPtr(new TradeRouteHelper(pCity, *this));    
     }
 
-    boost::shared_ptr<CityData> CityData::clone() const
+    void CityData::init_(const CvCity* pCity)
     {
-        return boost::shared_ptr<CityData>(new CityData(*this));
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
+
+        currentFood_ = 100 * pCity->getFood();
+        storedFood_ = 100 * pCity->getFoodKept();
+        cityPopulation_ = pCity->getPopulation();
+        workingPopulation_ = cityPopulation_ - getNonWorkingPopulation();
+        happyCap_ = happyHelper_->happyPopulation() - happyHelper_->angryPopulation();
+
+        growthThreshold_ = 100 * pCity->growthThreshold();
+        foodKeptPercent_ = pCity->getMaxFoodKeptPercent();
+
+        commerceYieldModifier_ += modifiersHelper_->getTotalYieldModifier()[YIELD_COMMERCE];
+
+        for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)
+        {
+            commercePercent_[commerceType] = player.getCommercePercent((CommerceTypes)commerceType);
+        }
     }
 
-    void CityData::calcOutputsFromPlotData_()
+    CityDataPtr CityData::clone() const
     {
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
-        const boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis = gGlobals.getGame().getAltAI()->getPlayer(player.getID())->getAnalysis();
-        const boost::shared_ptr<MapAnalysis>& pMapAnalysis = pPlayerAnalysis->getMapAnalysis();
-        const int timeHorizon = pPlayerAnalysis->getTimeHorizon();
+        CityDataPtr clone = CityDataPtr(new CityData(*this));
+        clone->events_ = std::queue<CitySimulationEventPtr>();  // clear events queue
 
-        CityPlotIter iter(pCity);  // ok to use city here, as called from main ctor
+        // area and civ helpers are shared (for now)
+
+        // copy state of unshared helpers
+        clone->bonusHelper_ = BonusHelperPtr(new BonusHelper(*bonusHelper_));
+        clone->buildingsHelper_ = BuildingsHelperPtr(new BuildingsHelper(*buildingsHelper_));
+        clone->corporationHelper_ = CorporationHelperPtr(new CorporationHelper(*corporationHelper_));
+        clone->cultureHelper_ = CultureHelperPtr(new CultureHelper(*cultureHelper_));
+        clone->happyHelper_ = HappyHelperPtr(new HappyHelper(*happyHelper_));
+        clone->healthHelper_ = HealthHelperPtr(new HealthHelper(*healthHelper_));
+        clone->hurryHelper_ = HurryHelperPtr(new HurryHelper(*hurryHelper_));
+        clone->maintenanceHelper_ = MaintenanceHelperPtr(new MaintenanceHelper(*maintenanceHelper_));
+        clone->modifiersHelper_ = ModifiersHelperPtr(new ModifiersHelper(*modifiersHelper_));
+        clone->religionHelper_ = ReligionHelperPtr(new ReligionHelper(*religionHelper_));
+        clone->specialistHelper_ = SpecialistHelperPtr(new SpecialistHelper(*specialistHelper_));
+        clone->tradeRouteHelper_ = TradeRouteHelperPtr(new TradeRouteHelper(*tradeRouteHelper_));
+
+        return clone;
+    }
+
+    void CityData::calcOutputsFromPlotData_(const CvCity* pCity)
+    {
+        CityPlotIter iter(pCity);
         bool first = true;
 
         while (IterPlot pLoopPlot = iter())
@@ -182,60 +136,26 @@ namespace AltAI
                 }
                 else
                 {
-                    ImprovementTypes improvementType = pLoopPlot->getImprovementType();
-                    FeatureTypes featureType = pLoopPlot->getFeatureType();
                     PlotYield plotYield(pLoopPlot->getYield());
-                    TotalOutput plotOutput(makeOutput(plotYield, yieldModifier_, commerceModifier_, commercePercent_));
                      // todo - check adding improvement later to plot will work (if there are any plots which have zero yield without improvement)
                     if (isEmpty(plotYield) || !canWork_(pLoopPlot))  // todo use controlled and abletowork flags properly
-                        //pLoopPlot->getOwner() == owner && pLoopPlot->getWorkingCity() && pMapAnalysis->getWorkingCity(pCity->getIDInfo(), XYCoords(pLoopPlot->getX(), pLoopPlot->getY())) != pCity)
+                        //pLoopPlot->getOwner() == owner_ && pLoopPlot->getWorkingCity() && pMapAnalysis->getWorkingCity(pCity->getIDInfo(), XYCoords(pLoopPlot->getX(), pLoopPlot->getY())) != pCity)
                     {
                         continue;  // no point in adding desert, or plots worked by other cities we own (add ones we don't own, in case we end up owning them)
                     }
 
-                    PlotData plot(plotYield, Commerce(), plotOutput, GreatPersonOutput(), XYCoords(pLoopPlot->getX(), pLoopPlot->getY()),
-                        improvementType, featureType, pLoopPlot->getRouteType(), PlotData::CultureData(pLoopPlot, player.getID(), pCity));
-
-                    // TODO - incorporate into ctor
-                    plot.controlled = plot.cultureData.ownerAndCultureTrumpFlag.first == player.getID() || plot.cultureData.ownerAndCultureTrumpFlag.first == NO_PLAYER && includeUnclaimedPlots_;
-                    plot.ableToWork = true;
-                    
-                    if (improvementType != NO_IMPROVEMENT)
-                    {
-                        ImprovementTypes upgradeImprovementType = (ImprovementTypes)gGlobals.getImprovementInfo(improvementType).getImprovementUpgrade();
-
-                        if (upgradeImprovementType != NO_IMPROVEMENT)
-			            {
-                            const PlotInfo::PlotInfoNode& plotInfo = pMapAnalysis->getPlotInfoNode(pLoopPlot);
-                            plot.upgradeData = PlotData::UpgradeData(timeHorizon,
-                                getUpgradedImprovementsData(plotInfo, player.getID(), improvementType, pLoopPlot->getUpgradeTimeLeft(improvementType, player.getID()), 
-                                    timeHorizon, player.getImprovementUpgradeRate()));
-
-                            plot.output += plot.upgradeData.getExtraOutput(yieldModifier_, commerceModifier_, commercePercent_);
-                        }
-                    }
-
-                    plot.controlled ? plotOutputs.push_back(plot) : unworkablePlots.push_back(plot);
+                    initPlot_(pLoopPlot, plotYield, pLoopPlot->getImprovementType(), pLoopPlot->getFeatureType(), pLoopPlot->getRouteType());
                 }
             }
         }
-
-        calculateSpecialistOutput_();
     }
 
     void CityData::calcOutputsFromPlannedImprovements_(const CityImprovementManager& improvements)
     {
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
-        const boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis = gGlobals.getGame().getAltAI()->getPlayer(player.getID())->getAnalysis();
-        const boost::shared_ptr<MapAnalysis>& pMapAnalysis = pPlayerAnalysis->getMapAnalysis();
-        const int timeHorizon = pPlayerAnalysis->getTimeHorizon();
-
-        calcCityOutput_();
-
         // typedef boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, PlotYield, TotalOutput, ImprovementState, int /*ImprovementFlags*/> PlotImprovementData;
         const std::vector<CityImprovementManager::PlotImprovementData>& plotImprovements = improvements.getImprovements();
 
-        CityPlotIter iter(pCity);  // ok to use city here, as called from main ctor
+        CityPlotIter iter(pCity_);  // ok to use city here, as called from main ctor
         bool first = true;
 
         while (IterPlot pLoopPlot = iter())
@@ -268,56 +188,69 @@ namespace AltAI
                             featureType = boost::get<1>(*improvementIter);
                         }
                     }
-
-                    TotalOutput plotOutput(makeOutput(plotYield, yieldModifier_, commerceModifier_, commercePercent_));
-
+                    
                     if (isEmpty(plotYield))  // skip canWork_ check if setting up from planned improvements, as this is looking ahead
                     {
                         continue;  // no point in adding desert, or plots worked by other cities we own (add ones we don't own, in case we end up owning them)
                     }
 
-                    PlotData plot(plotYield, Commerce(), plotOutput, GreatPersonOutput(), XYCoords(pLoopPlot->getX(), pLoopPlot->getY()),
-                        improvementType, featureType, pLoopPlot->getRouteType(), PlotData::CultureData(pLoopPlot, player.getID(), pCity));
-
-                    // TODO - incorporate into ctor
-                    plot.controlled = plot.cultureData.ownerAndCultureTrumpFlag.first == player.getID() || plot.cultureData.ownerAndCultureTrumpFlag.first == NO_PLAYER && includeUnclaimedPlots_;
-                    plot.ableToWork = true;
-                    
-                    if (improvementType != NO_IMPROVEMENT)
-                    {
-                        ImprovementTypes upgradeImprovementType = (ImprovementTypes)gGlobals.getImprovementInfo(improvementType).getImprovementUpgrade();
-
-                        if (upgradeImprovementType != NO_IMPROVEMENT)
-			            {
-                            const PlotInfo::PlotInfoNode& plotInfo = pMapAnalysis->getPlotInfoNode(pLoopPlot);
-                            plot.upgradeData = PlotData::UpgradeData(timeHorizon,
-                                getUpgradedImprovementsData(plotInfo, player.getID(), improvementType, pLoopPlot->getUpgradeTimeLeft(improvementType, player.getID()), 
-                                    timeHorizon, player.getImprovementUpgradeRate()));
-
-                            plot.output += plot.upgradeData.getExtraOutput(yieldModifier_, commerceModifier_, commercePercent_);
-                        }
-                    }
-
-                    plot.controlled ? plotOutputs.push_back(plot) : unworkablePlots.push_back(plot);
+                    initPlot_(pLoopPlot, plotYield, improvementType, featureType, routeType);
                 }
             }
         }
+    }
 
-        calculateSpecialistOutput_();
+    void CityData::initPlot_(const CvPlot* pPlot, PlotYield plotYield, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType)
+    {
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
+        const boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis = gGlobals.getGame().getAltAI()->getPlayer(player.getID())->getAnalysis();
+        const boost::shared_ptr<MapAnalysis>& pMapAnalysis = pPlayerAnalysis->getMapAnalysis();
+        const int upgradeRate = player.getImprovementUpgradeRate();
+        const int timeHorizon = pPlayerAnalysis->getTimeHorizon();
+
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+
+        TotalOutput plotOutput(makeOutput(plotYield, yieldModifier, commerceModifier, commercePercent_));
+
+        PlotData plot(plotYield, Commerce(), plotOutput, GreatPersonOutput(), XYCoords(pPlot->getX(), pPlot->getY()),
+                          improvementType, featureType, routeType, PlotData::CultureData(pPlot, owner_, pCity_));
+
+        plot.controlled = plot.cultureData.ownerAndCultureTrumpFlag.first == owner_ || plot.cultureData.ownerAndCultureTrumpFlag.first == NO_PLAYER && includeUnclaimedPlots_;
+        plot.ableToWork = true;
+                    
+        if (plot.improvementType != NO_IMPROVEMENT)
+        {
+            ImprovementTypes upgradeImprovementType = (ImprovementTypes)gGlobals.getImprovementInfo(plot.improvementType).getImprovementUpgrade();
+
+            if (upgradeImprovementType != NO_IMPROVEMENT)
+			{
+                const PlotInfo::PlotInfoNode& plotInfo = pMapAnalysis->getPlotInfoNode(pPlot);
+                plot.upgradeData = PlotData::UpgradeData(timeHorizon,
+                    getUpgradedImprovementsData(plotInfo, owner_, plot.improvementType, pPlot->getUpgradeTimeLeft(plot.improvementType, owner_), timeHorizon, upgradeRate));
+
+                plot.output += plot.upgradeData.getExtraOutput(yieldModifier, commerceModifier, commercePercent_);
+            }
+        }
+
+        plot.controlled ? plotOutputs_.push_back(plot) : unworkablePlots_.push_back(plot);
     }
 
     void CityData::calculateSpecialistOutput_()
     {
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
         int defaultSpecType = gGlobals.getDefineINT("DEFAULT_SPECIALIST");
-        int freeSpecialistsCount = specialistHelper->getTotalFreeSpecialistSlotCount();
+        int freeSpecialistsCount = specialistHelper_->getTotalFreeSpecialistSlotCount();
+
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
         
         // TODO - deal with forced specialists? (if you can have specs which require other specs to be valid)
         for (int specialistType = 0, count = gGlobals.getNumSpecialistInfos(); specialistType < count; ++specialistType)
         {
             PlotYield yield(getSpecialistYield(player, (SpecialistTypes)specialistType));
             Commerce commerce(getSpecialistCommerce(player, (SpecialistTypes)specialistType));
-            TotalOutput specialistOutput(makeOutput(yield, commerce, yieldModifier_, commerceModifier_, commercePercent_));
+            TotalOutput specialistOutput(makeOutput(yield, commerce, yieldModifier, commerceModifier, commercePercent_));
 
             PlotData specialistData(yield, commerce, specialistOutput, 
                 GameDataAnalysis::getSpecialistUnitTypeAndOutput((SpecialistTypes)specialistType, player.getID()), XYCoords(-1, specialistType));
@@ -326,21 +259,21 @@ namespace AltAI
             if (defaultSpecType == specialistType || player.isSpecialistValid((SpecialistTypes)specialistType))
             {
                 // store specialist type in coords data so we know what we picked
-                plotOutputs.insert(plotOutputs.end(), workingPopulation, specialistData);
+                plotOutputs_.insert(plotOutputs_.end(), workingPopulation_, specialistData);
 
                 if (freeSpecialistsCount > 0)
                 {
-                    freeSpecOutputs.insert(freeSpecOutputs.end(), freeSpecialistsCount, specialistData);
+                    freeSpecOutputs_.insert(freeSpecOutputs_.end(), freeSpecialistsCount, specialistData);
                 }
             }
             else
             {
-                int maxSpecialistCount = specialistHelper->getMaxSpecialistCount((SpecialistTypes)specialistType);
-                plotOutputs.insert(plotOutputs.end(), maxSpecialistCount, specialistData);
+                int maxSpecialistCount = specialistHelper_->getMaxSpecialistCount((SpecialistTypes)specialistType);
+                plotOutputs_.insert(plotOutputs_.end(), maxSpecialistCount, specialistData);
 
                 if (freeSpecialistsCount > 0)
                 {
-                    freeSpecOutputs.insert(freeSpecOutputs.end(), std::min<int>(freeSpecialistsCount, maxSpecialistCount), specialistData);
+                    freeSpecOutputs_.insert(freeSpecOutputs_.end(), std::min<int>(freeSpecialistsCount, maxSpecialistCount), specialistData);
                 }
             }
         }
@@ -348,51 +281,30 @@ namespace AltAI
 
     void CityData::recalcOutputs()
     {
-        if (tradeRouteHelper->needsRecalc())
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+
+        if (tradeRouteHelper_->needsRecalc())
         {
-            tradeRouteHelper->updateTradeRoutes();
+            tradeRouteHelper_->updateTradeRoutes();
         }
 
         calcCityOutput_();
-        cityPlotOutput.actualOutput = cityPlotOutput.output = makeOutput(cityPlotOutput.plotYield, cityPlotOutput.commerce, yieldModifier_, commerceModifier_, commercePercent_);
+        cityPlotOutput_.actualOutput = cityPlotOutput_.output = makeOutput(cityPlotOutput_.plotYield, cityPlotOutput_.commerce, yieldModifier, commerceModifier, commercePercent_);
 
-        for (PlotDataListIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
-            iter->actualOutput = iter->output = makeOutput(iter->plotYield, iter->commerce, yieldModifier_, commerceModifier_, commercePercent_);
+            iter->actualOutput = iter->output = makeOutput(iter->plotYield, iter->commerce, yieldModifier, commerceModifier, commercePercent_);
             if (!iter->upgradeData.upgrades.empty())
             {
-                iter->output += iter->upgradeData.getExtraOutput(yieldModifier_, commerceModifier_, commercePercent_);
+                iter->output += iter->upgradeData.getExtraOutput(yieldModifier, commerceModifier, commercePercent_);
             }
         }
 
-        for (PlotDataListIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(freeSpecOutputs_.begin()), endIter(freeSpecOutputs_.end()); iter != endIter; ++iter)
         {
-            iter->actualOutput = iter->output = makeOutput(iter->plotYield, iter->commerce, yieldModifier_, commerceModifier_, commercePercent_);
+            iter->actualOutput = iter->output = makeOutput(iter->plotYield, iter->commerce, yieldModifier, commerceModifier, commercePercent_);
         }
-    }
-
-    void CityData::setYieldModifier(YieldModifier yieldModifier)
-    { 
-        yieldModifier_ = yieldModifier; 
-        recalcOutputs();
-    }
-
-    void CityData::changeYieldModifier(YieldModifier yieldModifier)
-    { 
-        yieldModifier_ += yieldModifier; 
-        recalcOutputs();
-    }
-
-    void CityData::setCommerceModifier(CommerceModifier commerceModifier)
-    {
-        commerceModifier_ = commerceModifier; 
-        recalcOutputs();
-    }
-
-    void CityData::changeCommerceModifier(CommerceModifier commerceModifier)
-    { 
-        commerceModifier_ += commerceModifier; 
-        recalcOutputs();
     }
 
     void CityData::setCommercePercent(CommerceModifier commercePercent)
@@ -407,6 +319,12 @@ namespace AltAI
         recalcOutputs();
     }
 
+    void CityData::changeCommerceYieldModifier(int change)
+    {
+        commerceYieldModifier_ += change;
+        recalcOutputs();
+    }
+
     void CityData::advanceTurn()
     {
         // TODO create event when improvements upgrade
@@ -416,45 +334,52 @@ namespace AltAI
 
         // TODO handle builds that use food as well as production
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-        int foodDelta = totalOutput[OUTPUT_FOOD] - 100 * (cityPopulation * foodPerPop) - getLostFood();
-        currentFood += foodDelta;
-        storedFood += foodDelta;
-        storedFood = range(storedFood, 0, (growthThreshold * foodKeptPercent) / 100);
+        int foodDelta = totalOutput[OUTPUT_FOOD] - 100 * (cityPopulation_ * foodPerPop) - getLostFood();
+        currentFood_ += foodDelta;
+        storedFood_ += foodDelta;
+        storedFood_ = range(storedFood_, 0, (growthThreshold_ * foodKeptPercent_) / 100);
 
-        if (currentFood >= growthThreshold)
+        if (currentFood_ >= growthThreshold_)
         {
             changePopulation(1);
         }
-        else if (currentFood < 0)
+        else if (currentFood_ < 0)
         {
-            currentFood = 0;
+            currentFood_ = 0;
             changePopulation(-1);
         }
 
-        currentProduction += (totalOutput[OUTPUT_PRODUCTION] * currentProductionModifier) / yieldModifier_[YIELD_PRODUCTION];
+        int productionModifier = 100;
+        if (!queuedBuildings_.empty())
+        {
+            productionModifier += modifiersHelper_->getBuildingProductionModifier(queuedBuildings_.top());
+        }
 
-        cultureHelper->advanceTurn(*this, includeUnclaimedPlots_);
+        int thisTurnProduction = ((productionModifier + modifiersHelper_->getTotalYieldModifier()[OUTPUT_PRODUCTION]) * totalOutput[OUTPUT_PRODUCTION]) / 100;
+        currentProduction_ += thisTurnProduction;
 
-        if (!queuedBuildings.empty())
+        cultureHelper_->advanceTurn(includeUnclaimedPlots_);
+
+        if (!queuedBuildings_.empty())
         {
             // TODO - consider food consumption too
             totalOutput[OUTPUT_PRODUCTION] = 0;  // don't count production consumed by building as output
         }
 
-        if (currentProduction >= requiredProduction && !queuedBuildings.empty())
+        if (currentProduction_ >= requiredProduction_ && !queuedBuildings_.empty())
         {
-            BuildingTypes completedBuilding = queuedBuildings.top();
-            buildingHelper->changeNumRealBuildings(completedBuilding);
+            BuildingTypes completedBuilding = queuedBuildings_.top();
+            buildingsHelper_->changeNumRealBuildings(completedBuilding);
             events_.push(CitySimulationEventPtr(new TestBuildingBuilt(completedBuilding)));
 
             // TODO handle overflow properly using logic in HurryHelper
-            currentProduction = currentProduction - requiredProduction;
+            currentProduction_ = currentProduction_ - requiredProduction_;
             completeBuilding_();
-            requiredProduction = -1;
+            requiredProduction_ = -1;
         }
 
-        happyHelper->advanceTurn();
-        healthHelper->advanceTurn();
+        happyHelper_->advanceTurn();
+        healthHelper_->advanceTurn();
         
         changeWorkingPopulation();
         checkHappyCap();
@@ -462,18 +387,14 @@ namespace AltAI
 
     void CityData::setBuilding(BuildingTypes buildingType)
     {
-        currentProductionModifier -= getBuildingProductionModifier_();
-
         if (buildingType != NO_BUILDING)
         {
-            queuedBuildings.push(buildingType);
-            currentProductionModifier += getBuildingProductionModifier_();
-
-            requiredProduction = 100 * (pCity->getProductionNeeded(buildingType) - pCity->getBuildingProduction(buildingType));
+            queuedBuildings_.push(buildingType);
+            requiredProduction_ = 100 * (pCity_->getProductionNeeded(buildingType) - pCity_->getBuildingProduction(buildingType));
         }
         else
         {
-            requiredProduction = -1;
+            requiredProduction_ = -1;
         }
     }
 
@@ -482,73 +403,82 @@ namespace AltAI
         if (hurryData.hurryPopulation > 0)
         {
             changePopulation(-hurryData.hurryPopulation);
-            happyHelper->getHurryHelper().updateAngryTimer();
+            hurryHelper_->updateAngryTimer();
         }
         
-        currentProduction = requiredProduction + hurryData.extraProduction;
+        currentProduction_ = requiredProduction_ + hurryData.extraProduction;
     }
 
     std::pair<bool, HurryData> CityData::canHurry(HurryTypes hurryType) const
     {
-        return happyHelper->getHurryHelper().canHurry(hurryType, shared_from_this());
+        return hurryHelper_->canHurry(hurryType);
     }
 
     void CityData::completeBuilding_()
     {
-        currentProductionModifier -= getBuildingProductionModifier_();
-        queuedBuildings.pop();
+        queuedBuildings_.pop();
     }
 
     int CityData::getNonWorkingPopulation() const
     {
-        return range(happyHelper->angryPopulation() - happyHelper->happyPopulation(), 0, cityPopulation);
+        return range(happyHelper_->angryPopulation() - happyHelper_->happyPopulation(), 0, cityPopulation_);
     }
 
     void CityData::changePopulation(int change)
     {
-        cityPopulation += change;
-        cityPopulation = std::max<int>(1, cityPopulation);
+        cityPopulation_ += change;
+        cityPopulation_ = std::max<int>(1, cityPopulation_);
 
-        maintenanceHelper->setPopulation(cityPopulation);
-        happyHelper->setPopulation(cityPopulation);
-        healthHelper->setPopulation(cityPopulation);
-        tradeRouteHelper->setPopulation(cityPopulation);
+        maintenanceHelper_->setPopulation(cityPopulation_);
+        happyHelper_->setPopulation(cityPopulation_);
+        healthHelper_->setPopulation(cityPopulation_);
+        tradeRouteHelper_->setPopulation(cityPopulation_);
 
         events_.push(CitySimulationEventPtr(new PopChange(change)));
         changeWorkingPopulation();
 
-        growthThreshold = 100 * CvPlayerAI::getPlayer(owner).getGrowthThreshold(cityPopulation);
+        growthThreshold_ = 100 * CvPlayerAI::getPlayer(owner_).getGrowthThreshold(cityPopulation_);
 
         if (change > 0)
         {
-            currentFood = storedFood;
+            currentFood_ = storedFood_;
         }
     }
 
     void CityData::changeWorkingPopulation()
     {
-        int newWorkingPopulation = cityPopulation - getNonWorkingPopulation();
-        if (newWorkingPopulation != workingPopulation)
+        int newWorkingPopulation = cityPopulation_ - getNonWorkingPopulation();
+        if (newWorkingPopulation != workingPopulation_)
         {
-            events_.push(CitySimulationEventPtr(new WorkingPopChange(newWorkingPopulation - workingPopulation)));
-            workingPopulation = newWorkingPopulation;
+            events_.push(CitySimulationEventPtr(new WorkingPopChange(newWorkingPopulation - workingPopulation_)));
+            workingPopulation_ = newWorkingPopulation;
         }
+    }
+
+    void CityData::setStoredFood(int value)
+    {
+        storedFood_ = value;
+    }
+
+    void CityData::changeFoodKeptPercent(int change)
+    {
+        foodKeptPercent_ += change;
     }
 
     void CityData::checkHappyCap()
     {
-        int newHappyCap = happyHelper->happyPopulation() - happyHelper->angryPopulation();
-        if (newHappyCap != happyCap)
+        int newHappyCap = happyHelper_->happyPopulation() - happyHelper_->angryPopulation();
+        if (newHappyCap != happyCap_)
         {
-            events_.push(CitySimulationEventPtr(new HappyCapChange(newHappyCap - happyCap)));
-            happyCap = newHappyCap;
+            events_.push(CitySimulationEventPtr(new HappyCapChange(newHappyCap - happyCap_)));
+            happyCap_ = newHappyCap;
         }
     }
 
     int CityData::getFood() const
     {
-        int actualYield = cityPlotOutput.actualOutput[YIELD_FOOD];
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        int actualYield = cityPlotOutput_.actualOutput[YIELD_FOOD];
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -556,7 +486,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataListConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(freeSpecOutputs_.begin()), endIter(freeSpecOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -570,7 +500,7 @@ namespace AltAI
 
     int CityData::getLostFood() const
     {
-        return 100 * ::abs(std::min<int>(0, healthHelper->goodHealth() - healthHelper->badHealth()));
+        return 100 * ::abs(std::min<int>(0, healthHelper_->goodHealth() - healthHelper_->badHealth()));
     }
 
     int CityData::getNumUncontrolledPlots(bool includeOnlyOwnedPlots) const
@@ -578,7 +508,7 @@ namespace AltAI
         if (includeOnlyOwnedPlots)
         {
             int count = 0;
-            for (PlotDataListConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
+            for (PlotDataListConstIter iter(unworkablePlots_.begin()), endIter(unworkablePlots_.end()); iter != endIter; ++iter)
             {
                 // if this is true, plot is not controlled by us and is controlled by someone else (not us or it wouldn't be unworkable)
                 if (!iter->cultureData.cultureSourcesMap.empty())
@@ -590,7 +520,7 @@ namespace AltAI
         }
         else
         {
-            return unworkablePlots.size();
+            return unworkablePlots_.size();
         }
     }
 
@@ -598,19 +528,19 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-        os << "Pop: " << cityPopulation << ", angry = " << happyHelper->angryPopulation() << ", happy = " << happyHelper->happyPopulation()
-           << ", working = " << workingPopulation << ", happyCap = " << happyCap << ", unhealthy = " << healthHelper->badHealth() << ", healthy = " << healthHelper->goodHealth()
-           << ", currentFood = " << currentFood << ", surplus = " << (getFood() - getLostFood() - 100 * (cityPopulation * foodPerPop)) << ", production = " << getOutput() << " ";
+        os << "Pop: " << cityPopulation_ << ", angry = " << happyHelper_->angryPopulation() << ", happy = " << happyHelper_->happyPopulation()
+           << ", working = " << workingPopulation_ << ", happyCap_ = " << happyCap_ << ", unhealthy = " << healthHelper_->badHealth() << ", healthy = " << healthHelper_->goodHealth()
+           << ", currentFood_ = " << currentFood_ << ", surplus = " << (getFood() - getLostFood() - 100 * (cityPopulation_ * foodPerPop)) << ", production = " << getOutput() << " ";
 #endif
     }
 
     void CityData::debugCultureData(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
-        os << "\n" << cityPlotOutput.coords.iX << ", " << cityPlotOutput.coords.iY;
-        cityPlotOutput.cultureData.debug(os);
+        os << "\n" << cityPlotOutput_.coords.iX << ", " << cityPlotOutput_.coords.iY;
+        cityPlotOutput_.cultureData.debug(os);
 
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot())
             {
@@ -619,7 +549,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataListConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(unworkablePlots_.begin()), endIter(unworkablePlots_.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot())
             {
@@ -634,7 +564,7 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
 
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot())
             {
@@ -643,7 +573,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataListConstIter iter(unworkablePlots.begin()), endIter(unworkablePlots.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(unworkablePlots_.begin()), endIter(unworkablePlots_.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot())
             {
@@ -657,10 +587,10 @@ namespace AltAI
     int CityData::getBuildingProductionModifier_()
     {
         int productionModifier = 0;
-        if (!queuedBuildings.empty())
+        if (!queuedBuildings_.empty())
         {
-            BuildingTypes buildingType = queuedBuildings.top();
-            productionModifier = buildingHelper->getProductionModifier(buildingType, bonusHelper, religionHelper);
+            BuildingTypes buildingType = queuedBuildings_.top();
+            productionModifier = buildingsHelper_->getProductionModifier(buildingType);
         }
 
         return productionModifier;
@@ -668,12 +598,15 @@ namespace AltAI
 
     TotalOutput CityData::getOutput() const
     {
-        TotalOutput totalOutput(cityPlotOutput.actualOutput);
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+
+        TotalOutput totalOutput(cityPlotOutput_.actualOutput);
 
         // add trade routes
-        totalOutput += makeOutput(tradeRouteHelper->getTradeYield(), yieldModifier_, commerceModifier_, commercePercent_);
+        totalOutput += makeOutput(tradeRouteHelper_->getTradeYield(), yieldModifier, commerceModifier, commercePercent_);
 
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -681,7 +614,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataListConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(freeSpecOutputs_.begin()), endIter(freeSpecOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -689,6 +622,7 @@ namespace AltAI
             }
         }
 
+        // todo - multiply by final yield and commerce modifiers? (just scaling)
         return totalOutput;
     }
 
@@ -698,11 +632,11 @@ namespace AltAI
         TotalOutput totalOutput = getOutput();
 
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-        int foodDelta = totalOutput[OUTPUT_FOOD] - 100 * (cityPopulation * foodPerPop) - getLostFood();
+        int foodDelta = totalOutput[OUTPUT_FOOD] - 100 * (cityPopulation_ * foodPerPop) - getLostFood();
         totalOutput[OUTPUT_FOOD] = foodDelta;
-        if (foodDelta > 0 && foodKeptPercent > 0)
+        if (foodDelta > 0 && foodKeptPercent_ > 0)
         {
-            totalOutput[OUTPUT_FOOD] += (foodDelta * foodKeptPercent) / 100;
+            totalOutput[OUTPUT_FOOD] += (foodDelta * foodKeptPercent_) / 100;
         }
         
         return totalOutput;
@@ -710,18 +644,20 @@ namespace AltAI
 
     PlotYield CityData::getPlotYield() const
     {
-        PlotYield totalPlotYield(cityPlotOutput.plotYield);
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+
+        PlotYield totalPlotYield(cityPlotOutput_.plotYield);
 
         // add trade routes
-        PlotYield tradeYield = tradeRouteHelper->getTradeYield();
+        PlotYield tradeYield = tradeRouteHelper_->getTradeYield();
         for (int i = 0; i < NUM_YIELD_TYPES; ++i)
         {
-            tradeYield[i] = (tradeYield[i] * yieldModifier_[i]) / 100;
+            tradeYield[i] = (tradeYield[i] * yieldModifier[i]) / 100;
         }
 
         totalPlotYield += tradeYield;
 
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -729,7 +665,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataListConstIter iter(freeSpecOutputs.begin()), endIter(freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(freeSpecOutputs_.begin()), endIter(freeSpecOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -742,9 +678,9 @@ namespace AltAI
 
     GreatPersonOutputMap CityData::getGPP() const
     {
-        GreatPersonOutputMap greatPersonOutputMap(cityGreatPersonOutput);
+        GreatPersonOutputMap greatPersonOutputMap(cityGreatPersonOutput_);
 
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked && iter->greatPersonOutput.output != 0)
             {
@@ -759,7 +695,7 @@ namespace AltAI
         // doesn't include city generated gpp (i.e. non-variable sources)
         std::set<UnitTypes> unitTypes;
 
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->greatPersonOutput.output != 0)
             {
@@ -791,25 +727,28 @@ namespace AltAI
     // todo - everything here needs to use helpers so simulated buildings are handled correctly
     void CityData::calcCityOutput_()
     {
-        CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+
+        CvPlot* pPlot = gGlobals.getMap().plot(coords_.iX, coords_.iY);
         PlotYield cityYield(pPlot->getYield());
         Commerce cityCommerce;
 
         for (int i = 0, count = gGlobals.getNumBuildingClassInfos(); i < count; ++i)
         {
-            BuildingTypes buildingType = (BuildingTypes)gGlobals.getCivilizationInfo(pCity->getCivilizationType()).getCivilizationBuildings(i);
+            BuildingTypes buildingType = (BuildingTypes)gGlobals.getCivilizationInfo(pCity_->getCivilizationType()).getCivilizationBuildings(i);
             if (buildingType == NO_BUILDING)
             {
                 continue;
             }
 
-            int buildingCount = buildingHelper->getNumBuildings(buildingType);
+            int buildingCount = buildingsHelper_->getNumBuildings(buildingType);
             if (buildingCount > 0)
             {
                 const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo((BuildingTypes)buildingType);
 
-                cityYield += buildingCount * (PlotYield(buildingInfo.getYieldChangeArray()) + buildingHelper->getBuildingYieldChange((BuildingClassTypes)buildingInfo.getBuildingClassType()));
-                cityCommerce += buildingHelper->getBuildingCommerce(buildingType, religionHelper);
+                cityYield += buildingCount * (PlotYield(buildingInfo.getYieldChangeArray()) + buildingsHelper_->getBuildingYieldChange((BuildingClassTypes)buildingInfo.getBuildingClassType()));
+                cityCommerce += buildingsHelper_->getBuildingCommerce(buildingType);
 
                 // add building great people points
                 int gppRate = buildingInfo.getGreatPeopleRateChange();
@@ -819,10 +758,10 @@ namespace AltAI
                     UnitClassTypes unitClassType = (UnitClassTypes)buildingInfo.getGreatPeopleUnitClass();
                     if (unitClassType != NO_UNITCLASS)
                     {
-                        UnitTypes unitType = getPlayerVersion(owner, unitClassType);
+                        UnitTypes unitType = getPlayerVersion(owner_, unitClassType);
                         if (unitType != NO_UNIT)
 	                	{
-                            cityGreatPersonOutput[unitType] += buildingCount * gppRate;
+                            cityGreatPersonOutput_[unitType] += buildingCount * gppRate;
                         }
                     }
                 }
@@ -830,36 +769,41 @@ namespace AltAI
         }
 
         // add free specialists (e.g. free priest from TofA, scientists from GLib, but not free spec slots)
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
         for (int specialistType = 0, count = gGlobals.getNumSpecialistInfos(); specialistType < count; ++specialistType)
         {
-            int specCount = specialistHelper->getFreeSpecialistCount((SpecialistTypes)specialistType);
+            int specCount = specialistHelper_->getFreeSpecialistCount((SpecialistTypes)specialistType);
             if (specCount > 0)
             {
                 cityYield += specCount * getSpecialistYield(player, (SpecialistTypes)specialistType);
                 cityCommerce += specCount * getSpecialistCommerce(player, (SpecialistTypes)specialistType);
 
-                GreatPersonOutput greatPersonOutput = GameDataAnalysis::getSpecialistUnitTypeAndOutput((SpecialistTypes)specialistType, player.getID());
+                GreatPersonOutput greatPersonOutput = GameDataAnalysis::getSpecialistUnitTypeAndOutput((SpecialistTypes)specialistType, owner_);
                 if (greatPersonOutput.output != 0)
                 {
-                    cityGreatPersonOutput[greatPersonOutput.unitType] += specCount * greatPersonOutput.output;
+                    cityGreatPersonOutput_[greatPersonOutput.unitType] += specCount * greatPersonOutput.output;
                 }
             }
         }
 
         // TODO corps
-        cityPlotOutput = PlotData(cityYield, cityCommerce, makeOutput(cityYield, cityCommerce, yieldModifier_, commerceModifier_, commercePercent_), GreatPersonOutput(),
-                              coords, NO_IMPROVEMENT, NO_FEATURE, pPlot->getRouteType(), PlotData::CultureData(pPlot, player.getID(), pCity));
+        cityPlotOutput_ = PlotData(cityYield, cityCommerce, makeOutput(cityYield, cityCommerce, yieldModifier, commerceModifier, commercePercent_),
+            GreatPersonOutput(), coords_, NO_IMPROVEMENT, NO_FEATURE, pPlot->getRouteType(), PlotData::CultureData(pPlot, owner_, pCity_));
     }
 
     void CityData::doUpgrades_()
     {
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
         const boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis = gGlobals.getGame().getAltAI()->getPlayer(player.getID())->getAnalysis();
         const int timeHorizon = pPlayerAnalysis->getTimeHorizon();
         std::vector<std::pair<ImprovementTypes, XYCoords> > upgrades;
 
-        for (PlotDataListIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+
+        const bool hasPower = buildingsHelper_->isPower() || buildingsHelper_->isDirtyPower();
+
+        for (PlotDataListIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (!iter->upgradeData.upgrades.empty())
             {
@@ -869,7 +813,7 @@ namespace AltAI
                     iter->improvementType = upgrade.improvementType;
                     iter->plotYield += upgrade.extraYield;
 
-                    TotalOutput outputChange = makeOutput(upgrade.extraYield, yieldModifier_, commerceModifier_, commercePercent_);
+                    TotalOutput outputChange = makeOutput(upgrade.extraYield, yieldModifier, commerceModifier, commercePercent_);
                     iter->output = iter->actualOutput + outputChange;
 
                     upgrades.push_back(std::make_pair(iter->improvementType, iter->coords));
@@ -886,7 +830,7 @@ namespace AltAI
     int CityData::getNumPossibleSpecialists(SpecialistTypes specialistType) const
     {
         int specialistCount = 0;
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (!iter->isActualPlot() && (SpecialistTypes)iter->coords.iY == specialistType)
             {
@@ -898,24 +842,27 @@ namespace AltAI
 
     void CityData::addSpecialistSlots(SpecialistTypes specialistType, int count)
     {
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+
         PlotYield yield(getSpecialistYield(player, specialistType));
         Commerce commerce(getSpecialistCommerce(player, specialistType));
-        TotalOutput specialistOutput(makeOutput(yield, commerce, yieldModifier_, commerceModifier_, commercePercent_));
+        TotalOutput specialistOutput(makeOutput(yield, commerce, yieldModifier, commerceModifier, commercePercent_));
 
-        plotOutputs.insert(plotOutputs.end(), count, 
-            PlotData(yield, commerce, specialistOutput, GameDataAnalysis::getSpecialistUnitTypeAndOutput(specialistType, owner), XYCoords(-1, specialistType)));
+        plotOutputs_.insert(plotOutputs_.end(), count, 
+            PlotData(yield, commerce, specialistOutput, GameDataAnalysis::getSpecialistUnitTypeAndOutput(specialistType, owner_), XYCoords(-1, specialistType)));
     }
 
     void CityData::changePlayerFreeSpecialistSlotCount(int change)
     {
-        specialistHelper->changePlayerFreeSpecialistSlotCount(change);
+        specialistHelper_->changePlayerFreeSpecialistSlotCount(change);
         updateFreeSpecialistSlots_(change);
     }
 
     void CityData::changeImprovementFreeSpecialistSlotCount(int change)
     {
-        specialistHelper->changeImprovementFreeSpecialistSlotCount(change);
+        specialistHelper_->changeImprovementFreeSpecialistSlotCount(change);
         updateFreeSpecialistSlots_(change);
     }
 
@@ -923,23 +870,26 @@ namespace AltAI
     {
         // todo - include assignment of plots to city in count (only our plots should count)
         int improvementCount = 0;
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isActualPlot() && iter->improvementType == improvementType)
             {
                 ++improvementCount;
             }
         }
-        specialistHelper->changeFreeSpecialistCountPerImprovement(improvementType, change);
-        specialistHelper->changeImprovementFreeSpecialistSlotCount(change * improvementCount);
+        specialistHelper_->changeFreeSpecialistCountPerImprovement(improvementType, change);
+        specialistHelper_->changeImprovementFreeSpecialistSlotCount(change * improvementCount);
         updateFreeSpecialistSlots_(change);
     }
 
     void CityData::updateFreeSpecialistSlots_(int change)
     {
-        const CvPlayer& player = CvPlayerAI::getPlayer(owner);
+        const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
         int defaultSpecType = gGlobals.getDefineINT("DEFAULT_SPECIALIST");
-        freeSpecOutputs.clear();
+        freeSpecOutputs_.clear();
+
+        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
 
         for (int specialistType = 0, specialistCount = gGlobals.getNumSpecialistInfos(); specialistType < specialistCount; ++specialistType)
         {
@@ -947,30 +897,30 @@ namespace AltAI
 
             if (defaultSpecType == specialistType || player.isSpecialistValid((SpecialistTypes)specialistType))
             {
-                availableSlots = std::max<int>(0, std::min<int>(workingPopulation, specialistHelper->getTotalFreeSpecialistSlotCount()));
+                availableSlots = std::max<int>(0, std::min<int>(workingPopulation_, specialistHelper_->getTotalFreeSpecialistSlotCount()));
             }
             else
             {
-                int maxSpecialistCount = specialistHelper->getMaxSpecialistCount((SpecialistTypes)specialistType);
-                availableSlots = std::max<int>(0, std::min<int>(maxSpecialistCount, specialistHelper->getTotalFreeSpecialistSlotCount()));
+                int maxSpecialistCount = specialistHelper_->getMaxSpecialistCount((SpecialistTypes)specialistType);
+                availableSlots = std::max<int>(0, std::min<int>(maxSpecialistCount, specialistHelper_->getTotalFreeSpecialistSlotCount()));
             }
 
             if (availableSlots > 0)
             {
                 PlotYield yield(getSpecialistYield(player, (SpecialistTypes)specialistType));
                 Commerce commerce(getSpecialistCommerce(player, (SpecialistTypes)specialistType));
-                TotalOutput specialistOutput(makeOutput(yield, commerce, yieldModifier_, commerceModifier_, commercePercent_));
+                TotalOutput specialistOutput(makeOutput(yield, commerce, yieldModifier, commerceModifier, commercePercent_));
                 PlotData specialistData(yield, commerce, specialistOutput, 
                     GameDataAnalysis::getSpecialistUnitTypeAndOutput((SpecialistTypes)specialistType, player.getID()), XYCoords(-1, specialistType));
 
-                freeSpecOutputs.insert(freeSpecOutputs.end(), availableSlots, specialistData);
+                freeSpecOutputs_.insert(freeSpecOutputs_.end(), availableSlots, specialistData);
             }
         }
     }
 
     PlotData CityData::findPlot(XYCoords coords) const
     {
-        for (PlotDataListConstIter iter(plotOutputs.begin()), endIter(plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->coords == coords)
             {
@@ -985,24 +935,24 @@ namespace AltAI
         const CvCity* pWorkingCity = pPlot->getWorkingCity();
         // can't consider if definitely worked by another city which is ours
         // otherwise use cultural control to decide
-        if (pWorkingCity && pWorkingCity != pCity && pWorkingCity->getOwner() == pCity->getOwner())
+        if (pWorkingCity && pWorkingCity != pCity_ && pWorkingCity->getOwner() == pCity_->getOwner())
   	    {
     	    return false;
         }
 
-        if (pPlot->plotCheck(PUF_canSiege, owner))
+        if (pPlot->plotCheck(PUF_canSiege, owner_))
 	    {
 		    return false;
 	    }
 
         if (pPlot->isWater())
         {
-            if (!civHelper->hasTech(GameDataAnalysis::getCanWorkWaterTech()))
+            if (!civHelper_->hasTech(GameDataAnalysis::getCanWorkWaterTech()))
             {
                 return false;
             }
 
-            if (pPlot->getBlockadedCount(pCity->getTeam()) > 0)
+            if (pPlot->getBlockadedCount(pCity_->getTeam()) > 0)
             {
                 return false;
             }

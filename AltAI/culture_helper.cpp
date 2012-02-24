@@ -1,9 +1,10 @@
 #include "./culture_helper.h"
+#include "./city_data.h"
 #include "./city_simulator.h"
 
 namespace AltAI
 {
-    CultureHelper::CultureHelper(const CvCity* pCity)
+    CultureHelper::CultureHelper(const CvCity* pCity, CityData& data) : data_(data)
     {
         owner_ = pCity->getOwner();
         cityCulture_ = pCity->getCulture(owner_);
@@ -11,9 +12,9 @@ namespace AltAI
         CITY_FREE_CULTURE_GROWTH_FACTOR_ = gGlobals.getDefineINT("CITY_FREE_CULTURE_GROWTH_FACTOR");
     }
 
-    void CultureHelper::advanceTurn(CityData& data, bool includeUnclaimedPlots)
+    void CultureHelper::advanceTurn(bool includeUnclaimedPlots)
     {
-        const int cultureOutput = data.getOutput()[OUTPUT_CULTURE];
+        const int cultureOutput = data_.getOutput()[OUTPUT_CULTURE];
         cityCulture_ += cultureOutput / 100;
 
         CultureLevelTypes oldCultureLevel = cultureLevel_;
@@ -34,14 +35,14 @@ namespace AltAI
         bool plotOwnersChanged = false;
         std::vector<std::pair<PlayerTypes, XYCoords> > changedPlotsData;
 
-        updatePlot_(data.cityPlotOutput, culturalLevelChange, data.pCity, cultureOutput);
+        updatePlot_(data_.getCityPlotOutput(), culturalLevelChange, data_.getCity(), cultureOutput);
 
-        PlotDataListIter iter(data.plotOutputs.begin()), endIter(data.plotOutputs.end());
+        PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end());
         while (iter != endIter)
         {
             if (iter->isActualPlot())
             {
-                bool thisPlotChanged = updatePlot_(*iter, culturalLevelChange, data.pCity, cultureOutput);
+                bool thisPlotChanged = updatePlot_(*iter, culturalLevelChange, data_.getCity(), cultureOutput);
 
                 if (thisPlotChanged)
                 {
@@ -49,7 +50,7 @@ namespace AltAI
                     {
                         changedPlotsData.push_back(std::make_pair(iter->cultureData.ownerAndCultureTrumpFlag.first, iter->coords));
                         PlotDataListIter removeIter(iter++);
-                        data.unworkablePlots.splice(data.unworkablePlots.begin(), data.plotOutputs, removeIter);
+                        data_.getUnworkablePlots().splice(data_.getUnworkablePlots().begin(), data_.getPlotOutputs(), removeIter);
                     }
                 }
                 else
@@ -65,18 +66,18 @@ namespace AltAI
             }
         }
 
-        iter = data.unworkablePlots.begin(), endIter = data.unworkablePlots.end();
+        iter = data_.getUnworkablePlots().begin(), endIter = data_.getUnworkablePlots().end();
         while (iter != endIter)
         {
             if (iter->isActualPlot())
             {
-                bool thisPlotChanged = updatePlot_(*iter, culturalLevelChange, data.pCity, cultureOutput);
+                bool thisPlotChanged = updatePlot_(*iter, culturalLevelChange, data_.getCity(), cultureOutput);
 
                 if (thisPlotChanged)
                 {
                     changedPlotsData.push_back(std::make_pair(iter->cultureData.ownerAndCultureTrumpFlag.first, iter->coords));
                     PlotDataListIter removeIter(iter++);
-                    data.plotOutputs.splice(data.plotOutputs.begin(), data.unworkablePlots, removeIter);
+                    data_.getPlotOutputs().splice(data_.getPlotOutputs().begin(), data_.getUnworkablePlots(), removeIter);
                 }
                 else
                 {
@@ -94,13 +95,13 @@ namespace AltAI
 
         if (culturalLevelChange)
         {
-            data.pushEvent(CitySimulationEventPtr(new CultureBorderExpansion()));
+            data_.pushEvent(CitySimulationEventPtr(new CultureBorderExpansion()));
 
 #ifdef ALTAI_DEBUG
             // debug
             //{
-            //    boost::shared_ptr<CityLog> pLog = CityLog::getLog(data.pCity);
-            //    pLog->logCultureData(data);
+            //    boost::shared_ptr<CityLog> pLog = CityLog::getLog(data_.pCity);
+            //    pLog->logCultureData(data_);
             //}
 #endif
         }
@@ -110,11 +111,11 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             // debug
             {
-                boost::shared_ptr<CityLog> pLog = CityLog::getLog(data.pCity);
+                boost::shared_ptr<CityLog> pLog = CityLog::getLog(data_.getCity());
                 pLog->logPlotControlChange(changedPlotsData);   
             }
 #endif
-            data.pushEvent(CitySimulationEventPtr(new PlotControlChange(changedPlotsData)));
+            data_.pushEvent(CitySimulationEventPtr(new PlotControlChange(changedPlotsData)));
         }
     }
 

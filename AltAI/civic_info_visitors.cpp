@@ -6,6 +6,7 @@
 #include "./health_helper.h"
 #include "./trade_route_helper.h"
 #include "./building_helper.h"
+#include "./religion_helper.h"
 #include "./civ_helper.h"
 #include "./city.h"
 
@@ -30,7 +31,7 @@ namespace AltAI
             {
                 if (node.health != 0)
                 {
-                    data_.healthHelper->changePlayerHealthiness(isAdding_ ? node.health : -node.health);
+                    data_.getHealthHelper()->changePlayerHealthiness(isAdding_ ? node.health : -node.health);
                 }
 
                 for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
@@ -43,25 +44,25 @@ namespace AltAI
             {
                 if (node.buildingType != NO_BUILDING)
                 {
-                    int numBuildings = data_.buildingHelper->getNumBuildings(node.buildingType);
+                    int numBuildings = data_.getBuildingsHelper()->getNumBuildings(node.buildingType);
                     if (numBuildings > 0)
                     {
                         if (node.happy > 0)
                         {
-                            data_.happyHelper->changeExtraBuildingGoodHappiness(isAdding_ ? numBuildings * node.happy : -numBuildings * node.happy);
+                            data_.getHappyHelper()->changeExtraBuildingGoodHappiness(isAdding_ ? numBuildings * node.happy : -numBuildings * node.happy);
                         }
                         else if (node.happy < 0)
                         {
-                            data_.happyHelper->changeExtraBuildingBadHappiness(isAdding_ ? numBuildings * node.happy : -numBuildings * node.happy);
+                            data_.getHappyHelper()->changeExtraBuildingBadHappiness(isAdding_ ? numBuildings * node.happy : -numBuildings * node.happy);
                         }
 
                         if (node.health > 0)
                         {
-                            data_.healthHelper->changeExtraBuildingGoodHealthiness(isAdding_ ? numBuildings * node.health : -numBuildings * node.health);
+                            data_.getHealthHelper()->changeExtraBuildingGoodHealthiness(isAdding_ ? numBuildings * node.health : -numBuildings * node.health);
                         }
                         else if (node.health < 0)
                         {
-                            data_.healthHelper->changeExtraBuildingBadHealthiness(isAdding_ ? numBuildings * node.health : -numBuildings * node.health);
+                            data_.getHealthHelper()->changeExtraBuildingBadHealthiness(isAdding_ ? numBuildings * node.health : -numBuildings * node.health);
                         }
                     }
                 }
@@ -72,7 +73,7 @@ namespace AltAI
             {
                 for (size_t i = 0, count = node.improvementTypeAndYieldModifiers.size(); i < count; ++i)
                 {
-                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot() && iter->improvementType == node.improvementTypeAndYieldModifiers[i].first)
                         {
@@ -90,17 +91,17 @@ namespace AltAI
 
                 for (size_t i = 0, count = node.featureTypeAndHappyChanges.size(); i < count; ++i)
                 {
-                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot() && iter->featureType == node.featureTypeAndHappyChanges[i].first)
                         {
                             if (node.featureTypeAndHappyChanges[i].second > 0)
                             {
-                                data_.happyHelper->changeFeatureGoodHappiness(isAdding_ ? node.featureTypeAndHappyChanges[i].second : -node.featureTypeAndHappyChanges[i].second);
+                                data_.getHappyHelper()->changeFeatureGoodHappiness(isAdding_ ? node.featureTypeAndHappyChanges[i].second : -node.featureTypeAndHappyChanges[i].second);
                             }
                             else if (node.featureTypeAndHappyChanges[i].second < 0)
                             {
-                                data_.happyHelper->changeFeatureBadHappiness(isAdding_ ? node.featureTypeAndHappyChanges[i].second : -node.featureTypeAndHappyChanges[i].second);
+                                data_.getHappyHelper()->changeFeatureBadHappiness(isAdding_ ? node.featureTypeAndHappyChanges[i].second : -node.featureTypeAndHappyChanges[i].second);
                             }
                         }
                     }
@@ -108,7 +109,7 @@ namespace AltAI
 
                 if (node.improvementUpgradeRateModifier > 0)
                 {
-                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                     {
                         if (iter->isActualPlot() && !iter->upgradeData.upgrades.empty())
                         {
@@ -125,13 +126,31 @@ namespace AltAI
                 if (!isEmpty(node.yieldModifier))
                 {
                     recalcAllOutputs = true;
-                    data_.changeYieldModifier(isAdding_ ? node.yieldModifier : -node.yieldModifier);
+                    if (node.yieldModifier[YIELD_COMMERCE] != 0)
+                    {
+                        data_.changeCommerceYieldModifier(isAdding_ ? node.yieldModifier[YIELD_COMMERCE] : -node.yieldModifier[YIELD_COMMERCE]);
+                    }
+                    data_.getModifiersHelper()->changePlayerYieldModifier(isAdding_ ? node.yieldModifier : -node.yieldModifier);
                 }
 
-                if (!isEmpty(node.capitalYieldModifier) && data_.pCity->isCapital())
+                if (!isEmpty(node.capitalYieldModifier) && data_.getCity()->isCapital())
                 {
                     recalcAllOutputs = true;
-                    data_.changeYieldModifier(isAdding_ ? node.capitalYieldModifier : -node.capitalYieldModifier);
+                    if (node.capitalYieldModifier[YIELD_COMMERCE] != 0)
+                    {
+                        data_.changeCommerceYieldModifier(isAdding_ ? node.capitalYieldModifier[YIELD_COMMERCE] : -node.capitalYieldModifier[YIELD_COMMERCE]);
+                    }
+                    data_.getModifiersHelper()->changeCapitalYieldModifier(isAdding_ ? node.capitalYieldModifier : -node.capitalYieldModifier);
+                }
+
+                if (!isEmpty(node.stateReligionBuildingProductionModifier))
+                {
+                    ReligionTypes stateReligion = data_.getReligionHelper()->getStateReligion();
+                    if (stateReligion != NO_RELIGION && data_.getReligionHelper()->isHasReligion(stateReligion))
+                    {
+                        data_.getModifiersHelper()->changeStateReligionBuildingProductionModifier(
+                            isAdding_ ? node.stateReligionBuildingProductionModifier : -node.stateReligionBuildingProductionModifier);
+                    }
                 }
 
                 if (recalcAllOutputs)
@@ -147,12 +166,12 @@ namespace AltAI
                 if (!isEmpty(node.commerceModifier))
                 {
                     recalcAllOutputs = true;
-                    data_.changeCommerceModifier(isAdding_ ? node.commerceModifier : -node.commerceModifier);
+                    data_.getModifiersHelper()->changePlayerCommerceModifier(isAdding_ ? node.commerceModifier : -node.commerceModifier);
                 }
 
                 if (!isEmpty(node.extraSpecialistCommerce))
                 {
-                    for (PlotDataListIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                     {
                         if (!iter->isActualPlot())
                         {
@@ -165,12 +184,12 @@ namespace AltAI
                                 iter->commerce -= node.extraSpecialistCommerce;
                             }
 
-                            TotalOutput specialistOutput(makeOutput(iter->plotYield, iter->commerce, data_.getYieldModifier(), data_.getCommerceModifier(), data_.getCommercePercent()));
+                            TotalOutput specialistOutput(makeOutput(iter->plotYield, iter->commerce, makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent()));
                             iter->actualOutput = iter->output = specialistOutput;
                         }
                     }
 
-                    for (PlotDataListIter iter(data_.freeSpecOutputs.begin()), endIter(data_.freeSpecOutputs.end()); iter != endIter; ++iter)
+                    for (PlotDataListIter iter(data_.getFreeSpecOutputs().begin()), endIter(data_.getFreeSpecOutputs().end()); iter != endIter; ++iter)
                     {
                         if (isAdding_)
                         {
@@ -181,7 +200,7 @@ namespace AltAI
                             iter->commerce -= node.extraSpecialistCommerce;
                         }
 
-                        TotalOutput specialistOutput(makeOutput(iter->plotYield, iter->commerce, data_.getYieldModifier(), data_.getCommerceModifier(), data_.getCommercePercent()));
+                        TotalOutput specialistOutput(makeOutput(iter->plotYield, iter->commerce, makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent()));
                         iter->output = specialistOutput;
                         iter->actualOutput = specialistOutput;
                     }
@@ -192,9 +211,9 @@ namespace AltAI
                     if (isAdding_)
                     {
                         int currentSpecCount = data_.getNumPossibleSpecialists(node.validSpecialists[i]);
-                        if (currentSpecCount < data_.cityPopulation)
+                        if (currentSpecCount < data_.getPopulation())
                         {
-                            data_.addSpecialistSlots(node.validSpecialists[i], data_.cityPopulation - currentSpecCount);
+                            data_.addSpecialistSlots(node.validSpecialists[i], data_.getPopulation() - currentSpecCount);
                         }
                     }
                     else  // TODO - need to know if spec count is unlimited
@@ -214,12 +233,12 @@ namespace AltAI
             {
                 if (node.distanceModifier != 0)
                 {
-                    data_.maintenanceHelper->changeDistanceModifier(isAdding_ ? node.distanceModifier : -node.distanceModifier);
+                    data_.getMaintenanceHelper()->changeDistanceModifier(isAdding_ ? node.distanceModifier : -node.distanceModifier);
                 }
                 
                 if (node.numCitiesModifier != 0)
                 {
-                    data_.maintenanceHelper->changeNumCitiesModifier(isAdding_ ? node.numCitiesModifier : -node.numCitiesModifier);
+                    data_.getMaintenanceHelper()->changeNumCitiesModifier(isAdding_ ? node.numCitiesModifier : -node.numCitiesModifier);
                 }
                 
                 if (node.corporationModifier != 0)
@@ -242,20 +261,20 @@ namespace AltAI
             {
                 if (node.extraTradeRoutes > 0)
                 {
-                    data_.tradeRouteHelper->changeNumRoutes(isAdding_ ? node.extraTradeRoutes : -node.extraTradeRoutes);
+                    data_.getTradeRouteHelper()->changeNumRoutes(isAdding_ ? node.extraTradeRoutes : -node.extraTradeRoutes);
                 }
 
-                data_.tradeRouteHelper->setAllowForeignTradeRoutes(isAdding_ ? !node.noForeignTrade : node.noForeignTrade);
+                data_.getTradeRouteHelper()->setAllowForeignTradeRoutes(isAdding_ ? !node.noForeignTrade : node.noForeignTrade);
             }
 
             void operator() (const CivicInfo::HappyNode& node) const
             {
                 if (node.largestCityHappy != 0)
                 {
-                    data_.happyHelper->changeLargestCityHappiness(isAdding_ ? node.largestCityHappy : -node.largestCityHappy);
+                    data_.getHappyHelper()->changeLargestCityHappiness(isAdding_ ? node.largestCityHappy : -node.largestCityHappy);
                 }
 
-                data_.happyHelper->setMilitaryHappiness(node.happyPerUnit);
+                data_.getHappyHelper()->setMilitaryHappiness(node.happyPerUnit);
             }
 
             void operator() (const CivicInfo::MiscEffectNode& node) const
@@ -304,7 +323,7 @@ namespace AltAI
         {
             if (node.buildingType != NO_BUILDING)
             {
-                int numBuildings = data_.buildingHelper->getNumBuildings(node.buildingType);
+                int numBuildings = data_.getBuildingsHelper()->getNumBuildings(node.buildingType);
                 if ((node.happy > 0 || node.health > 0) && numBuildings > 0)
                 {
                     return true;
@@ -324,7 +343,7 @@ namespace AltAI
         {
             for (size_t i = 0, count = node.improvementTypeAndYieldModifiers.size(); i < count; ++i)
             {
-                for (PlotDataListConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                for (PlotDataListConstIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                 {
                     if (iter->isActualPlot() && iter->improvementType == node.improvementTypeAndYieldModifiers[i].first)
                     {
@@ -335,7 +354,7 @@ namespace AltAI
 
             for (size_t i = 0, count = node.featureTypeAndHappyChanges.size(); i < count; ++i)
             {
-                for (PlotDataListConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                for (PlotDataListConstIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                 {
                     if (iter->isActualPlot() && iter->featureType == node.featureTypeAndHappyChanges[i].first)
                     {
@@ -346,7 +365,7 @@ namespace AltAI
 
             if (node.improvementUpgradeRateModifier > 0)
             {
-                for (PlotDataListConstIter iter(data_.plotOutputs.begin()), endIter(data_.plotOutputs.end()); iter != endIter; ++iter)
+                for (PlotDataListConstIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
                 {
                     if (iter->isActualPlot() && !iter->upgradeData.upgrades.empty())
                     {
@@ -364,7 +383,7 @@ namespace AltAI
                 return true;
             }
 
-            if (!isEmpty(node.capitalYieldModifier) && data_.pCity->isCapital())
+            if (!isEmpty(node.capitalYieldModifier) && data_.getCity()->isCapital())
             {
                 return true;
             }
@@ -556,12 +575,12 @@ namespace AltAI
 
     void updateRequestData(const CvCity* pCity, CityData& data, const boost::shared_ptr<PlayerAnalysis>& pPlayerAnalysis, CivicTypes newCivic)
     {
-        CivicTypes currentCivic = data.civHelper->currentCivic((CivicOptionTypes)gGlobals.getCivicInfo(newCivic).getCivicOptionType());
+        CivicTypes currentCivic = data.getCivHelper()->currentCivic((CivicOptionTypes)gGlobals.getCivicInfo(newCivic).getCivicOptionType());
 
         if (currentCivic != newCivic)
         {
             boost::apply_visitor(CityOutputUpdater(pCity, data, false), pPlayerAnalysis->getCivicInfo(currentCivic)->getInfo());
-            data.civHelper->adoptCivic(newCivic);
+            data.getCivHelper()->adoptCivic(newCivic);
             boost::apply_visitor(CityOutputUpdater(pCity, data, true), pPlayerAnalysis->getCivicInfo(newCivic)->getInfo());
             data.recalcOutputs();
         }

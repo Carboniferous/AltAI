@@ -30,20 +30,20 @@ namespace AltAI
             {
                 if (node.baseHealth > 0)
                 {
-                    data_.healthHelper->changeBonusGoodHealthiness(multiplier_ * node.baseHealth);
+                    data_.getHealthHelper()->changeBonusGoodHealthiness(multiplier_ * node.baseHealth);
                 }
                 else if (node.baseHealth < 0)
                 {
-                    data_.healthHelper->changeBonusBadHealthiness(multiplier_ * node.baseHealth);
+                    data_.getHealthHelper()->changeBonusBadHealthiness(multiplier_ * node.baseHealth);
                 }
 
                 if (node.baseHappy > 0)
                 {
-                    data_.happyHelper->changeBonusGoodHappiness(multiplier_ * node.baseHappy);
+                    data_.getHappyHelper()->changeBonusGoodHappiness(multiplier_ * node.baseHappy);
                 }
                 else if (node.baseHappy < 0)
                 {
-                    data_.happyHelper->changeBonusBadHappiness(multiplier_ * node.baseHappy);
+                    data_.getHappyHelper()->changeBonusBadHappiness(multiplier_ * node.baseHappy);
                 }
 
                 for (size_t i = 0, count = node.buildingNodes.size(); i < count; ++i)
@@ -56,20 +56,20 @@ namespace AltAI
             {
                 if (node.bonusHealth > 0)
                 {
-                    data_.healthHelper->changeBonusGoodHealthiness(multiplier_ * node.bonusHealth);
+                    data_.getHealthHelper()->changeBonusGoodHealthiness(multiplier_ * node.bonusHealth);
                 }
                 else if (node.bonusHealth < 0)
                 {
-                    data_.healthHelper->changeBonusBadHealthiness(multiplier_ * node.bonusHealth);
+                    data_.getHealthHelper()->changeBonusBadHealthiness(multiplier_ * node.bonusHealth);
                 }
 
                 if (node.bonusHappy > 0)
                 {
-                    data_.happyHelper->changeBonusGoodHappiness(multiplier_ * node.bonusHappy);
+                    data_.getHappyHelper()->changeBonusGoodHappiness(multiplier_ * node.bonusHappy);
                 }
                 else if (node.bonusHappy < 0)
                 {
-                    data_.happyHelper->changeBonusBadHappiness(multiplier_ * node.bonusHappy);
+                    data_.getHappyHelper()->changeBonusBadHappiness(multiplier_ * node.bonusHappy);
                 }
             }
 

@@ -1,11 +1,12 @@
 #include "./trade_route_helper.h"
+#include "./city_data.h"
 #include "./iters.h"
 #include "./city_log.h"
 
 namespace AltAI
 {
     // does not take into account flag: "IGNORE_PLOT_GROUP_FOR_TRADE_ROUTES" (false for unmodified game)
-    TradeRouteHelper::TradeRouteHelper(const CvCity* pCity) : pCity_(pCity), isDirty_(true)
+    TradeRouteHelper::TradeRouteHelper(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data), isDirty_(true)
     {
         const CvPlayerAI& player = CvPlayerAI::getPlayer(pCity_->getOwner());
 

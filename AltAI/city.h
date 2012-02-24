@@ -28,7 +28,7 @@ namespace AltAI
         XYCoords getCoords() const;
         const CvCity* getCvCity() const;
 
-        boost::tuple<UnitTypes, BuildingTypes, ProcessTypes> getBuild();
+        boost::tuple<UnitTypes, BuildingTypes, ProcessTypes, ProjectTypes> getBuild();
         const ConstructItem& getConstructItem() const;
 
         bool selectImprovement(CvUnit* pUnit, bool simulatedOnly);

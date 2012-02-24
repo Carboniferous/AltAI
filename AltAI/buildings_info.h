@@ -20,6 +20,12 @@ namespace AltAI
             NullNode() {}
         };
 
+        struct RequiredBuildings
+        {
+            std::vector<BuildingTypes> cityBuildings;
+            std::vector<std::pair<BuildingTypes, int> > buildingCounts;
+        };
+
         struct IsRiver
         {
         };
@@ -33,7 +39,7 @@ namespace AltAI
 
         struct BuildOrCondition;
 
-        typedef boost::variant<NullNode, IsRiver, MinArea, boost::recursive_wrapper<BuildOrCondition> > BuildCondition;
+        typedef boost::variant<NullNode, RequiredBuildings, IsRiver, MinArea, boost::recursive_wrapper<BuildOrCondition> > BuildCondition;
 
         struct BuildOrCondition
         {
@@ -46,7 +52,7 @@ namespace AltAI
         {
             YieldNode() : plotCond(NULL), global(false) {}
             PlotYield yield;
-            YieldModifier modifier;
+            YieldModifier modifier, powerModifier;       
             CvPlotFnPtr plotCond;
             bool global;
         };

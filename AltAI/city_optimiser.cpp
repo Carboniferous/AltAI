@@ -269,7 +269,7 @@ namespace AltAI
         }
 
         const int angryPop = pCity->angryPopulation();
-        const int happyCap = pCityData->happyCap;
+        const int happyCap = pCityData->getHappyCap();
         const bool noUnhappiness = pCity->isNoUnhappiness();
         const bool canPopRush = pPlayer->getCvPlayer()->canPopRush();
         const int maxResearchRate = pPlayer->getMaxResearchRate();
@@ -493,7 +493,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         if (debug)
         {
-            std::ostream& os = CityLog::getLog(data_->pCity)->getStream();
+            std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
             os << "\nOutput priorities: " << outputPriorities << " output weights = " << outputWeights << " target yield = " << targetYield_ << " growthtype = " << getGrowthTypeString(growthType);
         }
 #endif
@@ -508,7 +508,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         if (debug)
         {
-            std::ostream& os = CityLog::getLog(data_->pCity)->getStream();
+            std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
             os << "\nOutput priorities: " << outputPriorities << " output weights = " << outputWeights << " target yield = " << targetYield_;
         }
 #endif
@@ -523,7 +523,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         if (debug)
         {
-            std::ostream& os = CityLog::getLog(data_->pCity)->getStream();
+            std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
             os << "\nOutput priorities: " << outputPriorities << " output weights = " << outputWeights << " target yield = " << targetYield_ << " growthtype = " << getGrowthTypeString(growthType)
                 << " process modifier = " << processModifier;
         }
@@ -535,10 +535,10 @@ namespace AltAI
         void CityOptimiser::handleRounding_(ValueAdaptor adaptor, bool debug)
     {
 #ifdef ALTAI_DEBUG
-        std::ostream& os = CityLog::getLog(data_->pCity)->getStream();
+        std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
 #endif
 
-        std::list<PlotData>::reverse_iterator lastWorkedIter = data_->plotOutputs.rbegin(), rendIter = data_->plotOutputs.rend();
+        std::list<PlotData>::reverse_iterator lastWorkedIter = data_->getPlotOutputs().rbegin(), rendIter = data_->getPlotOutputs().rend();
         for (; lastWorkedIter != rendIter; ++lastWorkedIter)
         {
             if (lastWorkedIter->isWorked)
@@ -549,9 +549,9 @@ namespace AltAI
 
         TotalOutput actualOutput = isFoodProduction_ ? data_->getOutput() : data_->getActualOutput();
 
-        if (lastWorkedIter != data_->plotOutputs.rend())
+        if (lastWorkedIter != data_->getPlotOutputs().rend())
         {
-            for (PlotDataListIter iter(data_->plotOutputs.begin()), endIter(data_->plotOutputs.end()); iter != endIter; ++iter)
+            for (PlotDataListIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
             {
                 if (!iter->isWorked)
                 {
@@ -589,7 +589,7 @@ namespace AltAI
     {
         isFoodProduction_ = true;
         // angry people don't need feeding for food production builds
-        int requiredYield = 100 * (data_->cityPopulation - std::max<int>(0, data_->angryPopulation() - data_->happyPopulation())) * foodPerPop_ + data_->getLostFood();
+        int requiredYield = 100 * (data_->getPopulation() - std::max<int>(0, data_->angryPopulation() - data_->happyPopulation())) * foodPerPop_ + data_->getLostFood();
         targetYield_ = Range(requiredYield, Range::LowerBound);
         TotalOutputWeights outputWeights;
         outputWeights.assign(1);
@@ -598,7 +598,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         if (debug)
         {
-            std::ostream& os = CityLog::getLog(data_->pCity)->getStream();
+            std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
             os << "\n(Food Production) Output weights = " << outputWeights;
         }
 #endif
@@ -619,7 +619,7 @@ namespace AltAI
 
     void CityOptimiser::calibrate_(bool debug)
     {
-        targetYield_ = Range(100 * (data_->cityPopulation * foodPerPop_));
+        targetYield_ = Range(100 * (data_->getPopulation() * foodPerPop_));
 
         TotalOutputWeights weights;
         maxOutputs_.first = TotalOutput();
@@ -639,8 +639,8 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                 if (debug)
                 {
-                    CityLog::getLog(data_->pCity)->logPlots(*this);
-                    CityLog::getLog(data_->pCity)->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
+                    CityLog::getLog(data_->getCity())->logPlots(*this);
+                    CityLog::getLog(data_->getCity())->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
                 }
 #endif
                 continue;
@@ -677,17 +677,17 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                     if (debug)
                     {
-                        CityLog::getLog(data_->pCity)->logPlots(*this);
-                        CityLog::getLog(data_->pCity)->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
+                        CityLog::getLog(data_->getCity())->logPlots(*this);
+                        CityLog::getLog(data_->getCity())->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
                     }
 #endif
                     if (output[i] > maxOutputs_.first[i])  // don't expect this to happen much, if at all
                     {
                         maxOutputs_.first[i] = output[i];
-
-                        CityLog::getLog(data_->pCity)->logPlots(*this);
-                        CityLog::getLog(data_->pCity)->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
-
+#ifdef ALTAI_DEBUG
+                        CityLog::getLog(data_->getCity())->logPlots(*this);
+                        CityLog::getLog(data_->getCity())->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
+#endif
                         break;
                     }
                 }
@@ -716,17 +716,17 @@ namespace AltAI
     {
         MixedWeightedTotalOutputOrderFunctor valueF(makeTotalOutputSinglePriority(OUTPUT_FOOD), makeOutputW(1, 1, 1, 1, 1, 1));
         PlotDataAdaptor<MixedWeightedTotalOutputOrderFunctor> valueAdaptor(valueF);
-        data_->plotOutputs.sort(valueAdaptor);
+        data_->getPlotOutputs().sort(valueAdaptor);
 
         int output = 0;
-        PlotDataListIter plotIter(data_->plotOutputs.begin()), endIter(data_->plotOutputs.end());
-        for (int i = 0; i < data_->workingPopulation && plotIter != endIter; ++i)
+        PlotDataListIter plotIter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end());
+        for (int i = 0; i < data_->getWorkingPopulation() && plotIter != endIter; ++i)
         {
             output += plotIter->actualOutput[OUTPUT_FOOD];
             ++plotIter;
         }
 
-        output += data_->cityPlotOutput.actualOutput[OUTPUT_FOOD];
+        output += data_->getCityPlotOutput().actualOutput[OUTPUT_FOOD];
         output -= data_->getLostFood();
 
         return output;
@@ -736,25 +736,25 @@ namespace AltAI
         CityOptimiser::OptState CityOptimiser::optimise_(ValueAdaptor valueAdaptor, bool debug)
     {
         OptState optState = OK;
-        const int plotCount = data_->plotOutputs.size();
+        const int plotCount = data_->getPlotOutputs().size();
 
         reclaimSpecialistSlots_();
 
-        for (PlotDataListIter iter(data_->plotOutputs.begin()), endIter(data_->plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
         {
             iter->isWorked = false;
         }
 
-        for (PlotDataListIter iter(data_->freeSpecOutputs.begin()), endIter(data_->freeSpecOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(data_->getFreeSpecOutputs().begin()), endIter(data_->getFreeSpecOutputs().end()); iter != endIter; ++iter)
         {
             iter->isWorked = false;
         }
 
         // todo: if free specs give food, need to include those in food optimisation
         // this is not that likely, as leads to runaway specialist count (if health and happy not issue)
-        data_->freeSpecOutputs.sort(valueAdaptor);
-        PlotDataListIter plotIter = data_->freeSpecOutputs.begin();
-        for (int i = 0; i < data_->specialistHelper->getTotalFreeSpecialistSlotCount(); ++i)
+        data_->getFreeSpecOutputs().sort(valueAdaptor);
+        PlotDataListIter plotIter = data_->getFreeSpecOutputs().begin();
+        for (int i = 0; i < data_->getSpecialistHelper()->getTotalFreeSpecialistSlotCount(); ++i)
         {
             plotIter->isWorked = true;
             removeSpecialistSlot_((SpecialistTypes)plotIter->coords.iY);  // used a 'free' slot, so make sure we don't use it again in the main plots' slots
@@ -762,19 +762,19 @@ namespace AltAI
         }
 
         // Nothing to do (more population than plots/specialists available or only one/zero plots)
-        if (plotCount < 2 || data_->cityPopulation > plotCount)
+        if (plotCount < 2 || data_->getPopulation() > plotCount)
         {
-            for (PlotDataListIter iter(data_->plotOutputs.begin()), endIter(data_->plotOutputs.end()); iter != endIter; ++iter)
+            for (PlotDataListIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
             {
                 iter->isWorked = true;
             }
         }
         else
         {
-            data_->plotOutputs.sort(valueAdaptor);
+            data_->getPlotOutputs().sort(valueAdaptor);
 
-            plotIter = data_->plotOutputs.begin();
-            for (int i = 0; i < data_->workingPopulation && i < plotCount; ++i)
+            plotIter = data_->getPlotOutputs().begin();
+            for (int i = 0; i < data_->getWorkingPopulation() && i < plotCount; ++i)
             {
                 plotIter->isWorked = true;
                 ++plotIter;
@@ -786,27 +786,27 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             if (debug)
             {
-                std::ostream& os = CityLog::getLog(data_->pCity)->getStream();
-                os << "\nPop = " << data_->cityPopulation << " (working = " << data_->workingPopulation << ") "
+                std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
+                os << "\nPop = " << data_->getPopulation() << " (working = " << data_->getWorkingPopulation() << ") "
                     << "Reqd = " << targetYield_ << ", actual = " << actualYield;
             }
 #endif
             // actual food yield is below desired range
             if (targetYield_.valueBelow(actualYield))
             {
-                //CityLog::getLog(data_->pCity)->getStream() << "\n before = " << actualYield << " target = " << targetYield_;
+                //CityLog::getLog(data_->getCity())->getStream() << "\n before = " << actualYield << " target = " << targetYield_;
                 boost::tie(actualYield, swapData) = optimiseOutputs_(valueAdaptor);
                 if (targetYield_.valueBelow(actualYield)) optState = FailedInsufficientFood;
 
 #ifdef ALTAI_DEBUG
                 if (debug)
                 {
-                    CityLog::getLog(data_->pCity)->getStream() << " after = " << actualYield;
+                    CityLog::getLog(data_->getCity())->getStream() << " after = " << actualYield;
                 
-                    if (!swapData.empty()) CityLog::getLog(data_->pCity)->getStream() << "\nSwaps: ";
+                    if (!swapData.empty()) CityLog::getLog(data_->getCity())->getStream() << "\nSwaps: ";
                     for (size_t i = 0, count = swapData.size(); i < count; ++i)
                     {
-                        CityLog::getLog(data_->pCity)->getStream() << " (" << swapData[i].first.output << " instead of " << swapData[i].second.output << ") ";
+                        CityLog::getLog(data_->getCity())->getStream() << " (" << swapData[i].first.output << " instead of " << swapData[i].second.output << ") ";
                     }
                 }
 #endif
@@ -818,7 +818,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                 if (debug)
                 {
-                    CityLog::getLog(data_->pCity)->getStream() << "\n before = " << actualYield << " target = " << targetYield_;
+                    CityLog::getLog(data_->getCity())->getStream() << "\n before = " << actualYield << " target = " << targetYield_;
                 }
 #endif
                 boost::tie(actualYield, swapData) = optimiseExcessFood_(valueAdaptor);
@@ -830,12 +830,12 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                 if (debug)
                 {
-                    CityLog::getLog(data_->pCity)->getStream() << " after = " << actualYield;
+                    CityLog::getLog(data_->getCity())->getStream() << " after = " << actualYield;
 
-                    if (!swapData.empty()) CityLog::getLog(data_->pCity)->getStream() << "\nSwaps: ";
+                    if (!swapData.empty()) CityLog::getLog(data_->getCity())->getStream() << "\nSwaps: ";
                     for (size_t i = 0, count = swapData.size(); i < count; ++i)
                     {
-                        CityLog::getLog(data_->pCity)->getStream() << " (" << swapData[i].first.output << " instead of " << swapData[i].second.output << ") ";
+                        CityLog::getLog(data_->getCity())->getStream() << " (" << swapData[i].first.output << " instead of " << swapData[i].second.output << ") ";
                     }
                 }
 #endif
@@ -848,11 +848,11 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             if (debug)
             {
-                std::ostream& os = CityLog::getLog(data_->pCity)->getStream();
+                std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
                 if (targetYield_.valueBelow(actualYield) || targetYield_.valueAbove(actualYield))
                 {
-                    os << "\nPop = " << data_->cityPopulation << " (working = " << data_->workingPopulation << ") "
-                       << "Reqd = " << 100 * (data_->cityPopulation * foodPerPop_) << ", actual = " << actualYield
+                    os << "\nPop = " << data_->getPopulation() << " (working = " << data_->getWorkingPopulation() << ") "
+                       << "Reqd = " << 100 * (data_->getPopulation() * foodPerPop_) << ", actual = " << actualYield
                        << ", target = " << targetYield_
                        << " achieved = " << actualYield << " weights = " << valueAdaptor.pred.outputWeights
                        << " swaps = " << swapData.size();
@@ -861,7 +861,7 @@ namespace AltAI
                     {
                         os << " (" << swapData[i].first.output << ", " << swapData[i].second.output << ") ";
                     }
-                    os << " (" << data_->getFood() << ", food = " << data_->currentFood << ")\n";
+                    os << " (" << data_->getFood() << ", food = " << data_->getCurrentFood() << ")\n";
                     this->debug(os, true);
                 }
             }
@@ -876,24 +876,24 @@ namespace AltAI
         // is there a pair of unselected plots which taken together are better than a pair of selected plots
         SwapData juggledSwapData;
         
-        if (data_->plotOutputs.size() < 4 || data_->cityPopulation < 2)
+        if (data_->getPlotOutputs().size() < 4 || data_->getPopulation() < 2)
         {
             return std::make_pair(0, juggledSwapData);
         }
 
         // find worst worked plots not in swap data according to pred
-        data_->plotOutputs.sort(valueAdaptor);
+        data_->getPlotOutputs().sort(valueAdaptor);
 
         SpecialFoodOutputOrderF<ValueAdaptor::Pred> foodP(valueAdaptor.pred);
 
         while (true)
         {
             
-            PlotDataListIter endIter = data_->plotOutputs.end();
+            PlotDataListIter endIter = data_->getPlotOutputs().end();
             std::pair<PlotDataListIter, PlotDataListIter> worstPlots(endIter, endIter);
             std::pair<PlotDataListIter, PlotDataListIter> bestUnworkedPlots(endIter, endIter);
 
-            for (PlotDataListIter iter(data_->plotOutputs.begin()); iter != endIter; ++iter)
+            for (PlotDataListIter iter(data_->getPlotOutputs().begin()); iter != endIter; ++iter)
             {
                 if (iter->isWorked)
                 {
@@ -946,10 +946,10 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         if (debug)
         {
-            if (!juggledSwapData.empty()) CityLog::getLog(data_->pCity)->getStream() << "\nSwaps (juggled): ";
+            if (!juggledSwapData.empty()) CityLog::getLog(data_->getCity())->getStream() << "\nSwaps (juggled): ";
             for (size_t i = 0, count = juggledSwapData.size(); i < count; ++i)
             {
-                CityLog::getLog(data_->pCity)->getStream() << " (" << juggledSwapData[i].first.output << " instead of " << juggledSwapData[i].second.output << ") ";
+                CityLog::getLog(data_->getCity())->getStream() << " (" << juggledSwapData[i].first.output << " instead of " << juggledSwapData[i].second.output << ") ";
             }
         }
 #endif
@@ -963,20 +963,20 @@ namespace AltAI
 
         bool ignoreDeficitFoodDiffs = true;
 
-        data_->plotOutputs.sort(SpecialFoodOutputOrderF<ValueAdaptor::Pred>(valueAdaptor.pred));
+        data_->getPlotOutputs().sort(SpecialFoodOutputOrderF<ValueAdaptor::Pred>(valueAdaptor.pred));
 
         SwapData swapData;
         int actualYield = data_->getFood();
-        const int plotCount = data_->plotOutputs.size();
-        const int maxSwapCount = data_->plotOutputs.size() - data_->workingPopulation;
+        const int plotCount = data_->getPlotOutputs().size();
+        const int maxSwapCount = data_->getPlotOutputs().size() - data_->getWorkingPopulation();
         int swapCount = 1;
 
         // try to get actual yield up into our target range by repeatedly swapping worst used value with best unused one
         while (targetYield_.valueBelow(actualYield) && swapCount < maxSwapCount)
         {
-            PlotDataRIter worstWorkedPlotIter = std::find_if(data_->plotOutputs.rbegin(), data_->plotOutputs.rend(), IsWorked());
-            PlotDataListIter bestUnworkedPlotIter = std::find_if(data_->plotOutputs.begin(), data_->plotOutputs.end(), Unworked());
-            if (worstWorkedPlotIter == data_->plotOutputs.rend() || bestUnworkedPlotIter == data_->plotOutputs.end())
+            PlotDataRIter worstWorkedPlotIter = std::find_if(data_->getPlotOutputs().rbegin(), data_->getPlotOutputs().rend(), IsWorked());
+            PlotDataListIter bestUnworkedPlotIter = std::find_if(data_->getPlotOutputs().begin(), data_->getPlotOutputs().end(), Unworked());
+            if (worstWorkedPlotIter == data_->getPlotOutputs().rend() || bestUnworkedPlotIter == data_->getPlotOutputs().end())
             {
                 break;
             }
@@ -996,7 +996,7 @@ namespace AltAI
                 if (ignoreDeficitFoodDiffs)
                 {
                     ignoreDeficitFoodDiffs = false;
-                    data_->plotOutputs.sort(SpecialFoodOutputOrderF<ValueAdaptor::Pred>(valueAdaptor.pred, false));
+                    data_->getPlotOutputs().sort(SpecialFoodOutputOrderF<ValueAdaptor::Pred>(valueAdaptor.pred, false));
                     swapCount = 0;
                 }
                 else
@@ -1016,20 +1016,20 @@ namespace AltAI
 
         bool ignoreDeficitFoodDiffs = true;
 
-        data_->plotOutputs.sort(ReverseSpecialFoodOutputOrderF<ValueAdaptor::Pred>(valueAdaptor.pred));
+        data_->getPlotOutputs().sort(ReverseSpecialFoodOutputOrderF<ValueAdaptor::Pred>(valueAdaptor.pred));
 
         SwapData swapData;
         int actualYield = data_->getFood();
-        const int plotCount = data_->plotOutputs.size();
-        const int maxSwapCount = data_->plotOutputs.size() - data_->workingPopulation;
+        const int plotCount = data_->getPlotOutputs().size();
+        const int maxSwapCount = data_->getPlotOutputs().size() - data_->getWorkingPopulation();
         int swapCount = 1;
 
         // try to get actual yield down into our target range by repeatedly swapping worst (i.e. most food) used value with best unused one
         while (targetYield_.valueAbove(actualYield) && swapCount < maxSwapCount)
         {
-            PlotDataRIter worstWorkedPlotIter = std::find_if(data_->plotOutputs.rbegin(), data_->plotOutputs.rend(), IsWorked());
+            PlotDataRIter worstWorkedPlotIter = std::find_if(data_->getPlotOutputs().rbegin(), data_->getPlotOutputs().rend(), IsWorked());
 
-            PlotDataListIter bestUnworkedPlotIter = data_->plotOutputs.begin(), endIter = data_->plotOutputs.end();
+            PlotDataListIter bestUnworkedPlotIter = data_->getPlotOutputs().begin(), endIter = data_->getPlotOutputs().end();
             // e.g. plot we are removing has food yield 6(00) and we are 4(00) over our target (targetYield_.upper), want min yield on replacement plot of 200
             int minFoodToKeep = std::max<int>(0, worstWorkedPlotIter->output[YIELD_FOOD] - (actualYield - targetYield_.upper));
             //while (!bestUnworkedPlotIter->isWorked && bestUnworkedPlotIter->output[YIELD_FOOD] < minFoodToKeep && ++bestUnworkedPlotIter != endIter);
@@ -1042,7 +1042,7 @@ namespace AltAI
                 ++bestUnworkedPlotIter;
             }
 
-            if (worstWorkedPlotIter == data_->plotOutputs.rend() || bestUnworkedPlotIter == endIter)
+            if (worstWorkedPlotIter == data_->getPlotOutputs().rend() || bestUnworkedPlotIter == endIter)
             {
                 break;
             }
@@ -1072,8 +1072,8 @@ namespace AltAI
         if (printAllPlots)
         {
             int i = 0;
-            os << "\n (home plot): " << data_->cityPlotOutput.output << " ";
-            for (PlotDataListConstIter iter(data_->plotOutputs.begin()), endIter(data_->plotOutputs.end()); iter != endIter; ++iter)
+            os << "\n (home plot): " << data_->getCityPlotOutput().output << " ";
+            for (PlotDataListConstIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
             {
                 if (i++ > 0) os << ", ";
                 os << iter->output;
@@ -1084,7 +1084,7 @@ namespace AltAI
         os << "\n Chosen: ";
         TotalOutput totalOutput;
         int j = 0;
-        for (PlotDataListConstIter iter(data_->plotOutputs.begin()), endIter(data_->plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -1094,10 +1094,10 @@ namespace AltAI
             }
         }
 
-        if (data_->specialistHelper->getTotalFreeSpecialistSlotCount() > 0)
+        if (data_->getSpecialistHelper()->getTotalFreeSpecialistSlotCount() > 0)
         {
             os << "\n Free Specs: ";
-            for (PlotDataListConstIter iter(data_->freeSpecOutputs.begin()), endIter(data_->freeSpecOutputs.end()); iter != endIter; ++iter)
+            for (PlotDataListConstIter iter(data_->getFreeSpecOutputs().begin()), endIter(data_->getFreeSpecOutputs().end()); iter != endIter; ++iter)
             {
                 if (iter->isWorked)
                 {
@@ -1116,7 +1116,7 @@ namespace AltAI
     {
         GrowthType growthType = Not_Set;
 
-        int requiredYield = 100 * data_->cityPopulation * foodPerPop_ + data_->getLostFood();
+        int requiredYield = 100 * data_->getPopulation() * foodPerPop_ + data_->getLostFood();
         int angryPopulation = data_->angryPopulation();
         int happyPopulation = data_->happyPopulation();
         if (angryPopulation >= happyPopulation)  // unhappy or about to be
@@ -1137,8 +1137,8 @@ namespace AltAI
 
     Range CityOptimiser::calcTargetYieldSurplus(GrowthType growthType) const
     {
-        int requiredYield = 100 * data_->cityPopulation * foodPerPop_ + data_->getLostFood();
-        const int angryPop = data_->happyHelper->angryPopulation();
+        int requiredYield = 100 * data_->getPopulation() * foodPerPop_ + data_->getLostFood();
+        const int angryPop = data_->getHappyHelper()->angryPopulation();
 
         if (growthType == Not_Set)
         {
@@ -1182,12 +1182,12 @@ namespace AltAI
 
     void CityOptimiser::removeSpecialistSlot_(SpecialistTypes specialistType)
     {
-        PlotDataListIter iter(data_->plotOutputs.begin()), endIter(data_->plotOutputs.end());
+        PlotDataListIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end());
         while (iter != endIter)
         {
             if (!iter->isActualPlot() && (SpecialistTypes)iter->coords.iY == specialistType)
             {
-                data_->unworkablePlots.splice(data_->unworkablePlots.begin(), data_->plotOutputs, iter);
+                data_->getUnworkablePlots().splice(data_->getUnworkablePlots().begin(), data_->getPlotOutputs(), iter);
                 break;
             }
             ++iter;
@@ -1196,13 +1196,13 @@ namespace AltAI
 
     void CityOptimiser::reclaimSpecialistSlots_()
     {
-        PlotDataListIter iter(data_->unworkablePlots.begin()), endIter(data_->unworkablePlots.end());
+        PlotDataListIter iter(data_->getUnworkablePlots().begin()), endIter(data_->getUnworkablePlots().end());
         while (iter != endIter)
         {
             if (!iter->isActualPlot())
             {
                 PlotDataListIter removeIter(iter++);
-                data_->plotOutputs.splice(data_->plotOutputs.begin(), data_->unworkablePlots, removeIter);
+                data_->getPlotOutputs().splice(data_->getPlotOutputs().begin(), data_->getUnworkablePlots(), removeIter);
             }
             else
             {

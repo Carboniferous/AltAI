@@ -7,7 +7,7 @@ namespace AltAI
     {
         struct SpecInfoRequestData
         {
-            SpecInfoRequestData(SpecialistTypes specialistType_ = NO_SPECIALIST, PlayerTypes playerType_ = NO_PLAYER) : specialistType(specialistType_), playerType(playerType_)
+            explicit SpecInfoRequestData(SpecialistTypes specialistType_ = NO_SPECIALIST, PlayerTypes playerType_ = NO_PLAYER) : specialistType(specialistType_), playerType(playerType_)
             {
             }
             SpecialistTypes specialistType;

@@ -18,6 +18,7 @@ namespace AltAI
 {
     class PlayerAnalysis;
     class CivHelper;
+    class AreaHelper;
     class IPlotEvent;
     class City;
     class SettlerManager;
@@ -50,6 +51,7 @@ namespace AltAI
 
         const boost::shared_ptr<PlayerAnalysis>& getAnalysis() const;
         const boost::shared_ptr<CivHelper>& getCivHelper() const;
+        const boost::shared_ptr<AreaHelper>& getAreaHelper(int areaID);
 
         std::vector<BuildTypes> addAdditionalPlotBuilds(const CvPlot* pPlot, BuildTypes buildType) const;
         bool checkResourcesOutsideCities(CvUnitAI* pUnit) const;
@@ -122,6 +124,7 @@ namespace AltAI
         CvPlayer* pPlayer_;
         boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis_;
         boost::shared_ptr<CivHelper> pCivHelper_;
+        std::map<int, boost::shared_ptr<AreaHelper> > areaHelpersMap_;
         boost::shared_ptr<SettlerManager> pSettlerManager_;
 
         ResearchTech researchTech_;

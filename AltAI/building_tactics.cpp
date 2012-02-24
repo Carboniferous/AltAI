@@ -272,7 +272,7 @@ namespace AltAI
             }
 
             const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-            if (pCityData->happyCap <= 0 && city.getMaxOutputs()[OUTPUT_FOOD] > 100 * foodPerPop * pCity->getPopulation())
+            if (pCityData->getHappyCap() <= 0 && city.getMaxOutputs()[OUTPUT_FOOD] > 100 * foodPerPop * pCity->getPopulation())
             {
                 if (constructItem.economicFlags & EconomicFlags::Output_Happy)
                 {

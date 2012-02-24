@@ -16,6 +16,7 @@ namespace AltAI
     class CivicInfo;
     class TechInfo;
     class ResourceInfo;
+    class ProjectInfo;
 
     class PlayerAnalysis
     {
@@ -82,11 +83,15 @@ namespace AltAI
 
         boost::shared_ptr<UnitInfo> getUnitInfo(UnitTypes unitType) const;
         boost::shared_ptr<BuildingInfo> getBuildingInfo(BuildingTypes buildingType) const;
+        boost::shared_ptr<ProjectInfo> getProjectInfo(ProjectTypes projectType) const;
         boost::shared_ptr<TechInfo> getTechInfo(TechTypes techType) const;
         boost::shared_ptr<CivicInfo> getCivicInfo(CivicTypes civicType) const;
         boost::shared_ptr<ResourceInfo> getResourceInfo(BonusTypes bonusType) const;
 
         SpecialistTypes getBestSpecialist(OutputTypes outputType) const;
+
+        int getPlayerUnitProductionModifier(UnitTypes unitType) const;
+        int getPlayerBuildingProductionModifier(BuildingTypes buildingType) const;
 
         void analyseCities();
         void analyseCity(const CvCity* pCity);
@@ -112,6 +117,7 @@ namespace AltAI
 
         void analyseUnits_();
         void analyseBuildings_();
+        void analyseProjects_();
         void analyseTechs_();
         void analyseCivics_();
         void analyseResources_();
@@ -119,9 +125,13 @@ namespace AltAI
 
         std::map<UnitTypes, boost::shared_ptr<UnitInfo> > unitsInfo_;
         std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> > buildingsInfo_;
+        std::map<ProjectTypes, boost::shared_ptr<ProjectInfo> > projectsInfo_;
         std::map<TechTypes, boost::shared_ptr<TechInfo> > techsInfo_;
         std::map<CivicTypes, boost::shared_ptr<CivicInfo> > civicsInfo_;
         std::map<BonusTypes, boost::shared_ptr<ResourceInfo> > resourcesInfo_;
+
+        std::map<UnitTypes, int> unitProductionModifiersMap_;
+        std::map<BuildingTypes, int> buildingProductionModifiersMap_;
 
         std::map<OutputTypes, SpecialistTypes> bestSpecialistTypesMap_;
 

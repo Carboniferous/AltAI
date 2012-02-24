@@ -5,7 +5,7 @@
 
 namespace AltAI
 {
-    struct CityData;
+    class CityData;
 
     struct AvailableImprovements
     {

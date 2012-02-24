@@ -7,6 +7,27 @@ namespace AltAI
         return os << "(Empty Node) ";
     }
 
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::RequiredBuildings& node)
+    {
+        for (size_t i = 0, count = node.buildingCounts.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            else os << " requires: ";
+            os << node.buildingCounts[i].second << " " << gGlobals.getBuildingInfo(node.buildingCounts[i].first).getType();
+        }
+
+        for (size_t i = 0, count = node.cityBuildings.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            else os << " requires: ";
+            os << gGlobals.getBuildingInfo(node.cityBuildings[i]).getType();
+        }
+
+        if (!node.cityBuildings.empty()) os << " in city ";
+
+        return os;
+    }
+
     std::ostream& operator << (std::ostream& os, const BuildingInfo::IsRiver& node)
     {
         return os << "requires river ";
@@ -79,6 +100,10 @@ namespace AltAI
         if (!isEmpty(node.modifier))
         {
             os << " yield modifier = " << node.modifier;
+        }
+        if (!isEmpty(node.powerModifier))
+        {
+            os << " power yield modifier = " << node.powerModifier;
         }
         if (!isEmpty(node.yield))
         {
@@ -164,19 +189,15 @@ namespace AltAI
 
     std::ostream& operator << (std::ostream& os, const BuildingInfo::PowerNode& node)
     {
-        os << "\n\t";
+        os << "\n\tprovides " << (node.isDirty ? " dirty " : " clean ") << " power ";
+        if (node.areaCleanPower)
+        {
+            os << " for all cities in area ";
+        }
         if (node.bonusType != NO_BONUS)
         {
             os << " requires: " << gGlobals.getBonusInfo(node.bonusType).getType();
-        }
-        if (node.isDirty)
-        {
-            os << " is dirty ";
-        }
-        if (node.areaCleanPower)
-        {
-            os << " clean power for all cities in area ";
-        }
+        }        
         return os;
     }
 

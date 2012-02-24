@@ -1,18 +1,22 @@
 #pragma once
 
 #include "./utils.h"
-#include "./city_data.h"
 
 namespace AltAI
 {
+    class CityData;
+    struct PlotData;
+
     class CultureHelper
     {
     public:
-        explicit CultureHelper(const CvCity* pCity);
+        CultureHelper(const CvCity* pCity, CityData& data);
 
-        void advanceTurn(CityData& data, bool includeUnclaimedPlots);
+        void advanceTurn(bool includeUnclaimedPlots);
 
     private:
+        CityData& data_;
+
         bool checkCulturalLevel_();
         bool updatePlot_(PlotData& plotData, bool culturalLevelChange, const CvCity* pCity, int cultureOutput);
 
@@ -21,4 +25,6 @@ namespace AltAI
         CultureLevelTypes cultureLevel_;
         int CITY_FREE_CULTURE_GROWTH_FACTOR_;
     };
+
+    typedef boost::shared_ptr<CultureHelper> CultureHelperPtr;
 }

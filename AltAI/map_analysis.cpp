@@ -1309,7 +1309,7 @@ namespace AltAI
                     weights = simulation.getCityOptimiser()->getMaxOutputWeights();
 #ifdef ALTAI_DEBUG
                     {  // debug
-                        CityLog::getLog(pCityData->pCity)->getStream() << "\nPlots with shared plot: " << (*plotsIter)->coords << "\n";
+                        CityLog::getLog(pCityData->getCity())->getStream() << "\nPlots with shared plot: " << (*plotsIter)->coords << "\n";
                         simulation.logPlots(true);
                     }
 #endif
@@ -1326,7 +1326,7 @@ namespace AltAI
                     weights = mergeMax(simulation.getCityOptimiser()->getMaxOutputWeights(), weights);
 #ifdef ALTAI_DEBUG
                     {  // debug
-                        CityLog::getLog(pCityData->pCity)->getStream() << "\nPlots without shared plot: " << (*plotsIter)->coords << "\n";
+                        CityLog::getLog(pCityData->getCity())->getStream() << "\nPlots without shared plot: " << (*plotsIter)->coords << "\n";
                         simulation.logPlots(true);
                     }
 #endif

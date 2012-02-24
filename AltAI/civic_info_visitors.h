@@ -4,7 +4,7 @@
 
 namespace AltAI
 {
-    struct CityData;
+    class CityData;
     class PlayerAnalysis;
     class CivicInfo;
 

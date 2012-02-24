@@ -4,7 +4,7 @@
 
 namespace AltAI
 {
-    struct CityData;
+    class CityData;
     class ResourceInfo;
 
     boost::shared_ptr<ResourceInfo> makeResourceInfo(BonusTypes bonusType, PlayerTypes playerType);

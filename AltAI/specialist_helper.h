@@ -4,10 +4,12 @@
 
 namespace AltAI
 {
+    class CityData;
+
     class SpecialistHelper
     {
     public:
-        explicit SpecialistHelper(const CvCity* pCity);
+        SpecialistHelper(const CvCity* pCity, CityData& data);
 
         int getMaxSpecialistCount(SpecialistTypes specialistType) const;
         int getFreeSpecialistCount(SpecialistTypes specialistType) const;
@@ -22,10 +24,13 @@ namespace AltAI
         void changeFreeSpecialistCountPerImprovement(ImprovementTypes improvementType, int change);
 
     private:
+        CityData& data_;
         std::vector<int> freeSpecialistCounts_;
         std::vector<int> maxSpecialistCounts_;
         std::vector<int> improvementFreeSpecialists_;
 
         int cityFreeSpecSlotCount_, areaFreeSpecSlotCount_, playerFreeSpecSlotCount_, improvementFreeSpecSlotCount_;
     };
+
+    typedef boost::shared_ptr<SpecialistHelper> SpecialistHelperPtr;
 }

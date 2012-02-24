@@ -18,6 +18,7 @@ namespace AltAI
         void updateBuildingTactics();
         void updateTechTactics();
         void updateUnitTactics();
+        void updateProjectTactics();
 
         void updateFirstToTechTactics(TechTypes techType);
 
@@ -25,6 +26,8 @@ namespace AltAI
         void selectUnitTactics();
         void selectBuildingTactics();
         void selectBuildingTactics(const City& city);
+        void selectProjectTactics();
+        void selectProjectTactics(const City& city);
 
         ConstructItem getBuildItem(const City& city);
 
@@ -34,8 +37,8 @@ namespace AltAI
 
         std::list<ResearchTech> possibleTechTactics_, selectedTechTactics_;
         ConstructList possibleUnitTactics_, selectedUnitTactics_;
-        ConstructList possibleBuildingTactics_;
-        std::map<IDInfo, ConstructList > selectedCityBuildingTactics_;
+        ConstructList possibleBuildingTactics_, possibleProjectTactics_;
+        std::map<IDInfo, ConstructList> selectedCityBuildingTactics_, selectedCityProjectTactics_;
 
         Player& player;
 

@@ -81,6 +81,21 @@ namespace AltAI
             }
         };
 
+        struct ProjectSelectionHelper
+        {
+            ProjectSelectionHelper() : constructItem(NO_PROJECT) {}
+            explicit ProjectSelectionHelper(ConstructItem constructItem_) : constructItem(constructItem_) {}
+
+            void debug(std::ostream& os) const
+            {
+#ifdef ALTAI_DEBUG
+                os << "\nProjectSelectionHelper: " << constructItem;
+#endif
+            }
+
+            ConstructItem constructItem;
+        };
+
         struct CityBuildSelectionData
         {
             CityBuildSelectionData(const PlayerTactics& playerTactics_, const City& city_)
@@ -90,7 +105,7 @@ namespace AltAI
             {
                 warPlanCount = CvTeamAI::getTeam(player.getTeamID()).getAnyWarPlanCount(true);
                 atWarCount = CvTeamAI::getTeam(player.getTeamID()).getAtWarCount(true);
-                happyCap = city.getCityData()->happyCap;
+                happyCap = city.getCityData()->getHappyCap();
                 militaryFlagsUnion = 0, unitEconomicFlagsUnion = 0;
                 existingSettlersCount = 0, existingWorkersCount = 0, workerBuildCount = 0, existingConsumedWorkersCount = 0, consumedWorkerBuildCount = 0;
                 unworkedGoodImprovementCount = 0;
@@ -308,6 +323,34 @@ namespace AltAI
                 }
             }
 
+            void processProjects()
+            {
+#ifdef ALTAI_DEBUG
+                // debug
+                boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
+                std::ostream& os = pCivLog->getStream();
+                os << "\n(getConstructItem): Turn = " << gGlobals.getGame().getGameTurn();
+#endif
+                ConstructList projectsList;
+        
+                const int nTurns = gGlobals.getGame().getMaxTurns() / 10;
+
+                std::map<IDInfo, ConstructList >::const_iterator ci(playerTactics.selectedCityProjectTactics_.find(city.getCvCity()->getIDInfo()));
+                if (ci != playerTactics.selectedCityProjectTactics_.end())
+                {
+                    projectsList = ci->second;
+
+                    for (ConstructListConstIter iter(projectsList.begin()), endIter(projectsList.end()); iter != endIter; ++iter)
+                    {
+                        if (iter->projectType != NO_PROJECT && player.getCvPlayer()->canCreate(iter->projectType))
+                        {
+                            ProjectSelectionHelper projectSelectionHelper(*iter);
+                            projectSelectionData[iter->projectType] = projectSelectionHelper;
+                        }
+                    }
+                }
+            }
+
             void debug()
             {
 #ifdef ALTAI_DEBUG
@@ -324,6 +367,11 @@ namespace AltAI
                 }
 
                 for (UnitSelectionData::const_iterator ci(unitSelectionData.begin()), ciEnd(unitSelectionData.end()); ci != ciEnd; ++ci)
+                {
+                    ci->second.debug(os);
+                }
+
+                for (std::map<ProjectTypes, ProjectSelectionHelper>::const_iterator ci(projectSelectionData.begin()), ciEnd(projectSelectionData.end()); ci != ciEnd; ++ci)
                 {
                     ci->second.debug(os);
                 }
@@ -986,6 +1034,27 @@ namespace AltAI
                 return false;
             }
 
+            bool chooseProject()
+            {
+#ifdef ALTAI_DEBUG
+                std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+#endif
+                for (std::map<ProjectTypes, ProjectSelectionHelper>::const_iterator ci(projectSelectionData.begin()), ciEnd(projectSelectionData.end());
+                    ci != ciEnd; ++ci)
+                {
+                    int victoryFlags = ci->second.constructItem.victoryFlags;
+                    if (victoryFlags & VictoryFlags::Prereq_Project || victoryFlags & VictoryFlags::Component_Project)
+                    {
+                        if (setConstructItem(ci->first))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+
             bool chooseLandScoutUnit()
             {
 #ifdef ALTAI_DEBUG
@@ -1414,6 +1483,11 @@ namespace AltAI
                             return selection;
                         }
 
+                        if (chooseProject())
+                        {
+                            return selection;
+                        }
+
                         if (combatUnitCount < (5 * cityCount) / 2 || combatUnitCount < (1 + 2 * popCount / 5))
                         {
                             if (bestMilitaryBuilding != NO_BUILDING && setConstructItem(bestMilitaryBuilding))
@@ -1572,6 +1646,17 @@ namespace AltAI
                 return false;
             }
 
+            bool setConstructItem(ProjectTypes projectType)
+            {
+                std::map<ProjectTypes, ProjectSelectionHelper>::const_iterator iter = projectSelectionData.find(projectType);
+                if (iter != projectSelectionData.end())
+                {
+                    selection = iter->second.constructItem;
+                    return true;
+                }
+                return false;
+            }
+
             ConstructItem findConstructItem(BuildingTypes buildingType) const
             {
                 std::map<BuildingTypes, BuildingSelectionHelper>::const_iterator ci(buildingSelectionData.find(buildingType));
@@ -1589,6 +1674,7 @@ namespace AltAI
             std::map<ProcessTypes, BuildingSelectionHelper> processSelectionData;
             typedef std::multimap<UnitTypes, UnitSelectionHelper> UnitSelectionData;
             UnitSelectionData unitSelectionData;
+            std::map<ProjectTypes, ProjectSelectionHelper> projectSelectionData;
 
             const PlayerTactics& playerTactics;
             const Player& player;
@@ -1629,6 +1715,7 @@ namespace AltAI
 
         selectionData.processUnits();
         selectionData.processBuildings();
+        selectionData.processProjects();
 
         selectionData.calculateSmallCultureBuilding();
         selectionData.calculateBestEconomicBuilding();

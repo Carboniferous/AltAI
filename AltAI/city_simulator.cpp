@@ -268,7 +268,7 @@ namespace AltAI
             PlotImprovementSimulationResult plotResults;
             SimulationOutput simOutput = simulation.simulateAsIs(nTurns);
             plotResults.push_back(boost::make_tuple(NO_FEATURE, NO_IMPROVEMENT, simOutput));
-            outputs.push_back(std::make_pair(cityData.cityPlotOutput.coords, plotResults));
+            outputs.push_back(std::make_pair(cityData.getCityPlotOutput().coords, plotResults));
 
             outputWeights = simulation.getCityOptimiser()->getMaxOutputWeights();
 
@@ -278,7 +278,7 @@ namespace AltAI
 #endif
         }
 
-        for (PlotDataListIter iter(cityData.plotOutputs.begin()), endIter(cityData.plotOutputs.end()); iter != endIter; ++iter)
+        for (PlotDataListIter iter(cityData.getPlotOutputs().begin()), endIter(cityData.getPlotOutputs().end()); iter != endIter; ++iter)
         {
             if (iter->controlled && (!ignoreExisting || iter->improvementType == NO_IMPROVEMENT))
             {
@@ -389,8 +389,8 @@ namespace AltAI
 
             TotalOutput delta = SimulationOutput::getDelta(buildingResults[i].normalBuild, buildingResults[i].baseline);
             os << "Delta = " << delta;
-            delta[OUTPUT_FOOD] += buildingResults[i].normalBuild.pCityData->currentFood;
-            delta[OUTPUT_FOOD] -= buildingResults[i].baseline.pCityData->currentFood;
+            delta[OUTPUT_FOOD] += buildingResults[i].normalBuild.pCityData->getCurrentFood();
+            delta[OUTPUT_FOOD] -= buildingResults[i].baseline.pCityData->getCurrentFood();
             os << " delta with food difference = " << delta;
 
             os << " Turn built = " << buildingResults[i].baseline.cumulativeOutput.size() - buildingResults[i].normalBuild.cumulativeOutput.size();
@@ -441,7 +441,7 @@ namespace AltAI
     void SimulationOutput::addTurn(const boost::shared_ptr<CityData>& cityOutputData)
     {
         TotalOutput output = cityOutputData->getActualOutput();
-        int cost = cityOutputData->maintenanceHelper->getMaintenance();
+        int cost = cityOutputData->getMaintenanceHelper()->getMaintenance();
 
         cumulativeOutput.push_back(cumulativeOutput.empty() ? output : output + *cumulativeOutput.rbegin());
         cumulativeCost.push_back(cumulativeCost.empty() ? cost : cost + *cumulativeCost.rbegin());
@@ -676,7 +676,7 @@ namespace AltAI
         while (CitySimulationEventPtr pEvent = pCityData_->getEvent())
         {
 #ifdef ALTAI_DEBUG
-            pEvent->stream(CityLog::getLog(pCityData_->pCity)->getStream());
+            pEvent->stream(CityLog::getLog(pCityData_->getCity())->getStream());
 #endif
             pEvent->handleEvent(*this);
         }
