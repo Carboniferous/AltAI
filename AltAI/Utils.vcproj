@@ -226,6 +226,18 @@
 				RelativePath=".\plot_info.h">
 			</File>
 			<File
+				RelativePath=".\project_info.cpp">
+			</File>
+			<File
+				RelativePath=".\project_info.h">
+			</File>
+			<File
+				RelativePath=".\project_info_streams.cpp">
+			</File>
+			<File
+				RelativePath=".\project_info_streams.h">
+			</File>
+			<File
 				RelativePath=".\resource_info.cpp">
 			</File>
 			<File
@@ -271,6 +283,12 @@
 		<Filter
 			Name="Helpers"
 			Filter="">
+			<File
+				RelativePath=".\area_helper.cpp">
+			</File>
+			<File
+				RelativePath=".\area_helper.h">
+			</File>
 			<File
 				RelativePath=".\bonus_helper.cpp">
 			</File>
@@ -324,6 +342,12 @@
 			</File>
 			<File
 				RelativePath=".\maintenance_helper.h">
+			</File>
+			<File
+				RelativePath=".\modifiers_helper.cpp">
+			</File>
+			<File
+				RelativePath=".\modifiers_helper.h">
 			</File>
 			<File
 				RelativePath=".\religion_helper.cpp">
@@ -425,6 +449,12 @@
 			</File>
 			<File
 				RelativePath=".\plot_info_visitors_streams.h">
+			</File>
+			<File
+				RelativePath=".\project_info_visitors.cpp">
+			</File>
+			<File
+				RelativePath=".\project_info_visitors.h">
 			</File>
 			<File
 				RelativePath=".\resource_info_visitors.cpp">
@@ -567,6 +597,18 @@
 			</File>
 			<File
 				RelativePath=".\city_tactics.h">
+			</File>
+			<File
+				RelativePath=".\project_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\project_tactics.h">
+			</File>
+			<File
+				RelativePath=".\project_tactics_visitors.cpp">
+			</File>
+			<File
+				RelativePath=".\project_tactics_visitors.h">
 			</File>
 			<File
 				RelativePath=".\tactic_actions.cpp">

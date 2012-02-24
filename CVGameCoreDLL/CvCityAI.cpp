@@ -686,7 +686,7 @@ void CvCityAI::AI_chooseProduction()
 
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
-        boost::tuple<UnitTypes, BuildingTypes, ProcessTypes> build = GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).getBuild();
+        boost::tuple<UnitTypes, BuildingTypes, ProcessTypes, ProjectTypes> build = GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).getBuild();
         if (boost::get<0>(build) != NO_UNIT)
         {
             pushOrder(ORDER_TRAIN, boost::get<0>(build), -1, false, false, false);
@@ -700,6 +700,11 @@ void CvCityAI::AI_chooseProduction()
         else if (boost::get<2>(build) != NO_PROCESS)
         {
             pushOrder(ORDER_MAINTAIN, boost::get<2>(build), -1, false, false, false);
+            return;
+        }
+        else if (boost::get<3>(build) != NO_PROJECT)
+        {
+            pushOrder(ORDER_CREATE, boost::get<3>(build), -1, false, false, false);
             return;
         }
     }
