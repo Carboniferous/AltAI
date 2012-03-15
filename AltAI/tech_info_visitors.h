@@ -25,4 +25,6 @@ namespace AltAI
     std::vector<RouteTypes> availableRoutes(const boost::shared_ptr<TechInfo>& pTechInfo);
     
     std::vector<TechTypes> getOrTechs(const boost::shared_ptr<TechInfo>& pTechInfo);
+
+    std::vector<BuildingTypes> getPossibleBuildings(const boost::shared_ptr<TechInfo>& pTechInfo);
 }

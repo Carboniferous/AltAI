@@ -60,12 +60,12 @@ namespace AltAI
             modifier += powerYieldModifier_;
         }
 
-        return modifier;
+        return makeYield(100, 100, 100) + modifier;
     }
 
     CommerceModifier ModifiersHelper::getTotalCommerceModifier() const
     {
-        return commerceModifier_ + playerCommerceModifier_ + capitalCommerceModifier_;
+        return makeCommerce(100, 100, 100, 100) + commerceModifier_ + playerCommerceModifier_ + capitalCommerceModifier_;
     }
 
     int ModifiersHelper::getUnitProductionModifier(UnitTypes unitType) const

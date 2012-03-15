@@ -18,7 +18,7 @@ namespace AltAI
             OptStateNotSet = -1, OK = 0, FailedInsufficientFood, FailedExcessFood
         };
 
-        explicit CityOptimiser(const boost::shared_ptr<CityData>& data, std::pair<TotalOutput, TotalOutputWeights> maxOutputs = std::pair<TotalOutput, TotalOutputWeights>());
+        explicit CityOptimiser(const CityDataPtr& data, std::pair<TotalOutput, TotalOutputWeights> maxOutputs = std::pair<TotalOutput, TotalOutputWeights>());
 
         OptState optimise(OutputTypes outputType = NO_OUTPUT, GrowthType growthType = Not_Set, bool debug = false);
         OptState optimise(UnitTypes specType, GrowthType growthType = Not_Set, bool debug = false);
@@ -28,21 +28,19 @@ namespace AltAI
             OptState optimise(TotalOutputPriority outputPriorities, TotalOutputWeights outputWeights, GrowthType growthType, CommerceModifier processModifier, bool debug = false);
 
         template <typename F>
-            OptState optimise(TotalOutputPriority outputPriorities, TotalOutputWeights outputWeights, Range targetYield, bool debug = false);
+            OptState optimise(TotalOutputPriority outputPriorities, TotalOutputWeights outputWeights, Range<> targetYield, bool debug = false);
 
         template <typename F>
             OptState optimise(TotalOutputPriority outputPriorities, TotalOutputWeights outputWeights, GrowthType growthType, bool debug = false);
 
         OptState optimiseFoodProduction(UnitTypes unitType, bool debug = false);
 
-        const boost::shared_ptr<CityData>& getOutput() const { return data_; }
-        Range getTargetYield() const { return targetYield_; }
+        const CityDataPtr& getOutput() const { return data_; }
+        Range<> getTargetYield() const { return targetYield_; }
 
         GrowthType getGrowthType() const;
-        Range calcTargetYieldSurplus(GrowthType growthType) const;
+        Range<> calcTargetYieldSurplus(GrowthType growthType);
  
-        TotalOutput getMaxOutputs() const;
-        TotalOutputWeights getMaxOutputWeights() const;
         int getMaxFood();
 
         void debug(std::ostream& os, bool printAllPlots = true) const;
@@ -52,13 +50,12 @@ namespace AltAI
 
     private:
 
-        boost::shared_ptr<CityData> data_;
+        CityDataPtr data_;
         std::pair<TotalOutput, TotalOutputWeights> maxOutputs_;
         int foodPerPop_;
-        Range targetYield_;
+        Range<> targetYield_;
         bool isFoodProduction_;
  
-        void calibrate_(bool debug = false);
         void setTargetYieldSurplus_(GrowthType growthType);
         void removeSpecialistSlot_(SpecialistTypes specialistType);
         void reclaimSpecialistSlots_();
@@ -85,12 +82,12 @@ namespace AltAI
         TotalOutputWeights outputWeights;
         TotalOutputPriority outputPriorities;
         CityOptimiser::GrowthType growthType;
-        Range targetFoodYield;
+        Range<> targetFoodYield;
         SpecialistTypes specialistType;
     };
 
     struct ConstructItem;
-    PlotAssignmentSettings makePlotAssignmentSettings(const boost::shared_ptr<CityData>& pCityData, const CvCity* pCity, const ConstructItem& constructItem);
+    PlotAssignmentSettings makePlotAssignmentSettings(const CityDataPtr& pCityData, const CvCity* pCity, const ConstructItem& constructItem);
 
     struct DotMapItem;
 

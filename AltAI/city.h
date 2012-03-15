@@ -4,6 +4,7 @@
 #include "./city_data.h"
 #include "./city_optimiser.h"
 #include "./tactic_actions.h"
+#include "./city_projections.h"
 
 namespace AltAI
 {
@@ -61,7 +62,7 @@ namespace AltAI
 
         PlotAssignmentSettings getPlotAssignmentSettings() const;
 
-        const boost::shared_ptr<CityData>& getCityData() const;
+        const CityDataPtr& getCityData() const;
 
         // save/load functions
         void write(FDataStreamBase* pStream) const;
@@ -79,11 +80,12 @@ namespace AltAI
 
         Player& player_;
         CvCity* pCity_;
-        boost::shared_ptr<CityData> pCityData_;
+        CityDataPtr pCityData_;
 
         TotalOutput maxOutputs_;
         TotalOutputWeights optWeights_;
         PlotAssignmentSettings plotAssignmentSettings_;
+        ProjectionLadder currentOutputProjection_;
 
         int flags_;
         ConstructItem constructItem_;

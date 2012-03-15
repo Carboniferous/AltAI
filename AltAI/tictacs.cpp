@@ -1,6 +1,7 @@
 #include "./tictacs.h"
 #include "./tactic_actions.h"
 #include "./tactic_streams.h"
+#include "./building_tactics_items.h"
 #include "./tech_tactics.h"
 #include "./building_tactics.h"
 #include "./city_tactics.h"
@@ -8,6 +9,7 @@
 #include "./project_tactics.h"
 #include "./building_tactics_visitors.h"
 #include "./tech_tactics_visitors.h"
+#include "./tech_info_visitors.h"
 #include "./player.h"
 #include "./player_analysis.h"
 #include "./map_analysis.h"
@@ -99,6 +101,19 @@ namespace AltAI
         }
         
         selectTechTactics();
+    }
+
+    void PlayerTactics::updateCityBuildingTactics(const boost::shared_ptr<TechInfo>& pTechInfo)
+    {
+        std::vector<BuildingTypes> possibleBuildings = getPossibleBuildings(pTechInfo);
+
+        for (size_t i = 0, count = possibleBuildings.size(); i < count; ++i)
+        {
+            CityIter iter(*player.getCvPlayer());
+            while (CvCity* pCity = iter())
+            {
+            }
+        }
     }
 
     void PlayerTactics::updateUnitTactics()
@@ -482,6 +497,20 @@ namespace AltAI
             os << *ci << "\n";
         }
         os << "\n";
+
+        os << "\nCity building tactics:\n";
+        for (CityBuildingTacticsMap::const_iterator ci(cityBuildingTacticsMap_.begin()), ciEnd(cityBuildingTacticsMap_.end()); ci != ciEnd; ++ci)
+        {
+            const CvCity* pCity = getCity(ci->first);
+            if (pCity)
+            {
+                os << "\nCity: " << narrow(pCity->getName()) << "\n";
+            }
+            for (CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
+            {
+                (*li)->debug(os);
+            }            
+        }
 #endif
     }
 }

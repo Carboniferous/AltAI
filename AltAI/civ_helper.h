@@ -5,13 +5,13 @@
 namespace AltAI
 {
     class CityData;
+    class Player;
 
     class CivHelper
     {
     public:
-        explicit CivHelper(const CvPlayer& player);
-        explicit CivHelper(PlayerTypes playerType);
-        CivHelper(const CivHelper& other);
+        explicit CivHelper(const Player& player);
+        void init();
 
         bool hasTech(TechTypes techType) const;
         void addTech(TechTypes techType);
@@ -30,14 +30,18 @@ namespace AltAI
         void adoptCivic(CivicTypes civicType);
         void makeAllCivicsAvailable();
 
-    private:
-        void init_();
+        const std::vector<CivicTypes>& getCurrentCivics() const;
 
-        const CvPlayer& player_;
+        int getSpecialBuildingNotRequiredCount(SpecialBuildingTypes specialBuildingType) const;
+
+    private:
+        const Player& player_;
         std::set<TechTypes> techs_;
         std::list<TechTypes> techsToResearch_;
         std::set<CivicTypes> availableCivics_;
         std::vector<CivicTypes> currentCivics_;
+
+        std::vector<int> specialBuildingNotRequiredCounts_;
     };
 
     typedef boost::shared_ptr<CivHelper> CivHelperPtr;

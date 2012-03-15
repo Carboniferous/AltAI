@@ -25,6 +25,8 @@ namespace AltAI
 {
     namespace
     {
+        static const int MAX_IRRIGATION_CHAIN_SEARCH_RADIUS = 5;
+
         bool plotIsWorkedAndImproved(const CvPlot* pPlot)
         {
             const CvCity* pCity = pPlot->getWorkingCity();
@@ -676,7 +678,7 @@ namespace AltAI
         }
 #endif
 
-        boost::shared_ptr<CityData> pCityData(new CityData(pCity, includeUnclaimedPlots_));
+        CityDataPtr pCityData(new CityData(pCity, includeUnclaimedPlots_));
         PlotImprovementSimulationResults simulatorResults(simulator.evaluateImprovements(plotsAndImprovements, *pCityData, 20, false));
 
         std::vector<boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, TotalOutput> > bestSimulatedImprovements = simulator.getBestImprovements(outputWeights, simulatorResults);
@@ -887,7 +889,7 @@ namespace AltAI
 
         std::map<int, XYCoords> pathCostMap;
 
-        for (int i = 1; i <= 5; ++i)
+        for (int i = 1; i <= MAX_IRRIGATION_CHAIN_SEARCH_RADIUS; ++i)
         {
             CultureRangePlotIter iter(pPlot, (CultureLevelTypes)i);
         

@@ -6,6 +6,7 @@ namespace AltAI
 {
     struct CityLogFileHandles;
     class CityData;
+    typedef boost::shared_ptr<CityData> CityDataPtr;
     struct HurryData;
     class CityOptimiser;
     struct BuildingSimulationResults;
@@ -20,7 +21,7 @@ namespace AltAI
         void logBuilding(BuildingTypes buildingType);
         void logHurryBuilding(BuildingTypes buildingType, const HurryData& hurryData);
         void logTurn(int turn, TotalOutput output);
-        void logCityData(const boost::shared_ptr<CityData>& pCityData);
+        void logCityData(const CityDataPtr& pCityData);
         void logCultureData(const CityData& cityData);
         void logUpgradeData(const CityData& cityData);
         void logCultureLevelChange(CultureLevelTypes oldLevel, CultureLevelTypes newLevel);

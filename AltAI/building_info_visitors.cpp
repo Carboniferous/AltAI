@@ -29,9 +29,9 @@ namespace AltAI
         class CityOutputUpdater : public boost::static_visitor<>
         {
         public:
-            CityOutputUpdater(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
+            explicit CityOutputUpdater(CityData& data) : data_(data)
             {
-                pPlayer_ = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner()); 
+                pPlayer_ = gGlobals.getGame().getAltAI()->getPlayer(data.getOwner()); 
             }
 
             template <typename T>
@@ -81,8 +81,7 @@ namespace AltAI
                             iter->commerce += node.extraCommerce;
 
                             TotalOutput specialistOutput(makeOutput(iter->plotYield, iter->commerce, makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent()));
-                            iter->output = specialistOutput;
-                            iter->actualOutput = specialistOutput;
+                            iter->actualOutput = iter->output = specialistOutput;
                         }
                     }
                 }
@@ -90,7 +89,7 @@ namespace AltAI
 
             void operator() (const BuildingInfo::SpecialistSlotNode& node) const
             {
-                const CvPlayer& player = CvPlayerAI::getPlayer(pCity_->getOwner());
+                const CvPlayer& player = CvPlayerAI::getPlayer(data_.getOwner());
 
                 // add any 'plots' for new specialist slots (if we aren't maxed out already for that type)
                 for (size_t i = 0, count = node.specialistTypes.size(); i < count; ++i)
@@ -297,15 +296,14 @@ namespace AltAI
             }
 
         private:
-            const CvCity* pCity_;
             boost::shared_ptr<Player> pPlayer_;
             CityData& data_;
         };
     }
 
-    void updateRequestData(const CvCity* pCity, CityData& data, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    void updateRequestData(CityData& data, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
     {
-        boost::apply_visitor(CityOutputUpdater(pCity, data), pBuildingInfo->getInfo());
+        boost::apply_visitor(CityOutputUpdater(data), pBuildingInfo->getInfo());
         data.recalcOutputs();
     }
 

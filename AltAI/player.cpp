@@ -28,15 +28,17 @@ namespace AltAI
 {
     Player::Player(CvPlayer* pPlayer)
         : pPlayer_(pPlayer)
-    {
-        
+    {        
         pPlayerAnalysis_ = boost::shared_ptr<PlayerAnalysis>(new PlayerAnalysis(*this));
-        pCivHelper_ = boost::shared_ptr<CivHelper>(new CivHelper(*pPlayer_));
+        pCivHelper_ = boost::shared_ptr<CivHelper>(new CivHelper(*this));
         pSettlerManager_ = boost::shared_ptr<SettlerManager>(new SettlerManager(pPlayerAnalysis_->getMapAnalysis()));
     }
 
     void Player::init()
     {
+        pPlayerAnalysis_->init();
+        pCivHelper_->init();
+
         AreaIter iter(&gGlobals.getMap());
 
         while (CvArea* pArea = iter())
@@ -46,8 +48,6 @@ namespace AltAI
                 areaHelpersMap_[pArea->getID()] = boost::shared_ptr<AreaHelper>(new AreaHelper(*pPlayer_, pArea));
             }
         }
-
-        pPlayerAnalysis_->init();
 
         pPlayerAnalysis_->getMapAnalysis()->init();
 
@@ -214,10 +214,10 @@ namespace AltAI
             {
                 TotalOutput civWideOutput;
                 
-                std::vector<boost::shared_ptr<CityData> > cityData;
+                std::vector<CityDataPtr > cityData;
                 for (CityMap::const_iterator ci(cities_.begin()), ciEnd(cities_.end()); ci != ciEnd; ++ci)
                 {
-                    cityData.push_back(boost::shared_ptr<CityData>(new CityData(ci->second.getCvCity())));
+                    cityData.push_back(CityDataPtr(new CityData(ci->second.getCvCity())));
                 }
 
                 bool hasEconomicValue = false;
@@ -731,6 +731,9 @@ namespace AltAI
 
     int Player::getMaxResearchRate(std::pair<int, int> fixedIncomeAndExpenses) const
     {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
+#endif
         std::vector<std::pair<int, int> > outputs(11, std::make_pair(0, 0));
         int processGold = 0;
 
@@ -746,8 +749,12 @@ namespace AltAI
                 processGold += (100 * modifier * pCity->getYieldRate(YIELD_PRODUCTION)) / 100;
             }
 
-            boost::shared_ptr<CityData> pCityData(new CityData(pCity));
+            CityDataPtr pCityData(new CityData(pCity));
             CityOptimiser opt(pCityData);
+
+#ifdef ALTAI_DEBUG
+            os << "\n\tCity = " << narrow(pCity->getName());
+#endif
 
             for (int i = 0; i <= 10; ++i)
             {
@@ -758,14 +765,15 @@ namespace AltAI
                 TotalOutput output = pCityData->getOutput();
                 outputs[i].first += output[OUTPUT_GOLD];
                 outputs[i].second += output[OUTPUT_RESEARCH];
+#ifdef ALTAI_DEBUG
+                os << "\n\ti = " << i << " gold = " << output[OUTPUT_GOLD] << ", research = " << output[OUTPUT_RESEARCH];
+#endif
             }
         }
 
 #ifdef ALTAI_DEBUG
-        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*pPlayer_);
-        std::ostream& os = pCivLog->getStream();
         os << "\nProcess gold = " << processGold;
-        //os << "\nFixed income = " << fixedIncomeAndExpenses.first << ", fixed expenses = " << fixedIncomeAndExpenses.second;
+        os << "\nFixed income = " << fixedIncomeAndExpenses.first << ", fixed expenses = " << fixedIncomeAndExpenses.second;
 #endif
 
         int maxRate = 0, maxRateWithProcesses = 0;
@@ -783,10 +791,10 @@ namespace AltAI
         }
 
 #ifdef ALTAI_DEBUG
-        //for (int i = 0; i <= 10; ++i)
-        //{
-        //    os << "\nResearch = " << (100 - 10 * i) << "%, city gold total = " << outputs[i].first << ", research total = " << outputs[i].second;
-        //}
+        for (int i = 0; i <= 10; ++i)
+        {
+            os << "\nResearch = " << (100 - 10 * i) << "%, city gold total = " << outputs[i].first << ", research total = " << outputs[i].second;
+        }
         os << "\nMax research rate = " << maxRate << "%, max rate with processes= " << maxRateWithProcesses;
 #endif
         return maxRate;
@@ -830,7 +838,7 @@ namespace AltAI
                 processGold += (100 * modifier * pCity->getYieldRate(YIELD_PRODUCTION)) / 100;
             }
 
-            boost::shared_ptr<CityData> pCityData(new CityData(pCity));
+            CityDataPtr pCityData(new CityData(pCity));
             CityOptimiser opt(pCityData);
 
             for (int i = 0; i <= 10; ++i)
@@ -961,6 +969,9 @@ namespace AltAI
             {
                 iter->second.setFlag(City::NeedsBuildingCalcs);
             }
+
+            // add any new buildings this tech makes available, and update existing building tactics data
+            pPlayerAnalysis_->getPlayerTactics()->updateCityBuildingTactics(pTechInfo);
         }
 
         if (techAffectsImprovements(pTechInfo))

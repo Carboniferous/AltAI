@@ -43,6 +43,9 @@ namespace AltAI
 
                 if (!haveTechPrereqs)
                 {
+#ifdef ALTAI_DEBUG
+                    os << "\nSkipping project: " << gGlobals.getProjectInfo((ProjectTypes)i).getType();
+#endif
                     continue;
                 }
 #ifdef ALTAI_DEBUG
@@ -118,7 +121,7 @@ namespace AltAI
                 couldConstructProject(player, city, 2, player.getAnalysis()->getProjectInfo(constructItem.projectType)) && 
                 pCity->getFirstProjectOrder(constructItem.projectType) == -1))
             {
-                const boost::shared_ptr<CityData>& pCityData = city.getCityData();
+                const CityDataPtr& pCityData = city.getCityData();
 
                 const int cityCount = pPlayer->getNumCities();
                 const std::pair<int, int> rankAndMaxProduction = player.getCityRank(pCity->getIDInfo(), OUTPUT_PRODUCTION);
@@ -128,6 +131,7 @@ namespace AltAI
     #endif
                 if (rankAndMaxProduction.first > 0 && rankAndMaxProduction.first <= std::max<int>(1, cityCount / 3))
                 {
+                    selectedConstructItem.projectType = constructItem.projectType;
                     for (size_t i = 0, count = constructItem.positiveBonuses.size(); i < count; ++i)
                     {
                         if (pCity->hasBonus(constructItem.positiveBonuses[i]))
@@ -143,9 +147,9 @@ namespace AltAI
 #endif
         }
 
-        if (!selectedConstructItem.isEmpty())
+        if (selectedConstructItem.projectType != NO_PROJECT)
         {
-            selectedConstructItem.projectType = constructItem.projectType;
+            //selectedConstructItem.projectType = constructItem.projectType;
             selectedConstructItem.victoryFlags |= constructItem.victoryFlags;
 
             TechTypes requiredTech;

@@ -1301,12 +1301,12 @@ namespace AltAI
             if (pCity && !pCity->isOccupation() && pCity->canWork(pPlot))
             {
                 {
-                    boost::shared_ptr<CityData> pCityData(new CityData(pCity));
+                    CityDataPtr pCityData(new CityData(pCity));
                     CitySimulation simulation(pCity, pCityData);
                     SimulationOutput simOutput = simulation.simulateAsIs(10);
 
                     output = *simOutput.cumulativeOutput.rbegin();
-                    weights = simulation.getCityOptimiser()->getMaxOutputWeights();
+                    weights = makeOutputW(3, 4, 3, 3, 1, 1);//simulation.getCityOptimiser()->getMaxOutputWeights();
 #ifdef ALTAI_DEBUG
                     {  // debug
                         CityLog::getLog(pCityData->getCity())->getStream() << "\nPlots with shared plot: " << (*plotsIter)->coords << "\n";
@@ -1319,11 +1319,11 @@ namespace AltAI
                 pPlot->setWorkingCityOverride(pOtherCity);
                 //plotsIter->assignedCity = IDInfo();
                 {
-                    boost::shared_ptr<CityData> pCityData(new CityData(pCity));
+                    CityDataPtr pCityData(new CityData(pCity));
                     CitySimulation simulation(pCity, pCityData);
                     SimulationOutput simOutput = simulation.simulateAsIs(10);
                     baseline = *simOutput.cumulativeOutput.rbegin();
-                    weights = mergeMax(simulation.getCityOptimiser()->getMaxOutputWeights(), weights);
+                    //weights = mergeMax(simulation.getCityOptimiser()->getMaxOutputWeights(), weights);
 #ifdef ALTAI_DEBUG
                     {  // debug
                         CityLog::getLog(pCityData->getCity())->getStream() << "\nPlots without shared plot: " << (*plotsIter)->coords << "\n";

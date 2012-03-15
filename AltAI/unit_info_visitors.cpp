@@ -41,9 +41,30 @@ namespace AltAI
             return false;
         }
 
+        bool operator() (const UnitInfo::ReligionNode& node) const
+        {
+            if (node.prereqReligion != NO_RELIGION)
+            {
+                CityIter cityIter(*player_.getCvPlayer());
+                CvCity* pCity;
+
+                while (pCity = cityIter())
+                {
+                    if (pCity->isHasReligion(node.prereqReligion))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         bool operator() (const UnitInfo::BaseNode& node) const
         {
+#ifdef ALTAI_DEBUG
             //std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
 
             for (size_t i = 0, count = node.techTypes.size(); i < count; ++i)
             {
@@ -57,7 +78,18 @@ namespace AltAI
 
             // todo - add religion and any other checks
             bool passedAreaCheck = !(node.minAreaSize > -1), passedBonusCheck = node.andBonusTypes.empty() && node.orBonusTypes.empty();
-            //os << "\narea check = " << passedAreaCheck << ", bonus check = " << passedBonusCheck;
+            bool passedBuildingCheck = node.prereqBuildingType == NO_BUILDING;
+            if (!passedBuildingCheck)
+            {
+                SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)gGlobals.getBuildingInfo(node.prereqBuildingType).getSpecialBuildingType();
+                if (specialBuildingType != NO_SPECIALBUILDING)
+                {
+                    passedBuildingCheck = player_.getCivHelper()->getSpecialBuildingNotRequiredCount(specialBuildingType) > 0;
+                }
+            }
+#ifdef ALTAI_DEBUG
+            //os << "\narea check = " << passedAreaCheck << ", bonus check = " << passedBonusCheck << ", building check = " << passedBuildingCheck;
+#endif
 
             CityIter cityIter(*player_.getCvPlayer());
             CvCity* pCity;
@@ -111,8 +143,13 @@ namespace AltAI
                         passedBonusCheck = true;
                     }
                 }
+
+                if (!passedBuildingCheck)
+                {
+                    passedBuildingCheck = pCity->getNumBuilding(node.prereqBuildingType) > 0;
+                }
             }
-            return passedAreaCheck && passedBonusCheck;
+            return passedAreaCheck && passedBonusCheck && passedBuildingCheck;
         }
 
     private:

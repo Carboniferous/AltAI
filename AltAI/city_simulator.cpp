@@ -35,7 +35,7 @@ namespace AltAI
         BuildingSimulationResults results;
 
         // simulate baseline
-        CitySimulation simulation(pCity_, boost::shared_ptr<CityData>(new CityData(pCity_)));
+        CitySimulation simulation(pCity_, CityDataPtr(new CityData(pCity_)));
         results.noBuildingBaseline = simulation.simulateAsIs(nTurns, OUTPUT_PRODUCTION);
 
         const boost::shared_ptr<PlayerAnalysis>& pPlayerAnalysis = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getAnalysis();
@@ -46,7 +46,7 @@ namespace AltAI
 
             if ((pCity_->canConstruct(buildingType) || pCity_->getFirstBuildingOrder(buildingType) != -1) && !isLimitedWonderClass(getBuildingClass(buildingType)))
             {
-                boost::shared_ptr<CityData> pCityData = boost::shared_ptr<CityData>(new CityData(pCity_));
+                CityDataPtr pCityData = CityDataPtr(new CityData(pCity_));
                 if (buildingHasEconomicImpact(*pCityData, pPlayerAnalysis->getBuildingInfo(buildingType)))
                 {
                     CitySimulation simulation(pCity_, pCityData, ConstructItem(buildingType));
@@ -70,7 +70,7 @@ namespace AltAI
         std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
 #endif
         // simulate baseline
-        CitySimulation simulation(pCity_, boost::shared_ptr<CityData>(new CityData(pCity_)));
+        CitySimulation simulation(pCity_, CityDataPtr(new CityData(pCity_)));
 
         if (doBaseLine)
         {
@@ -89,7 +89,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             os << "\nDoing building: " << gGlobals.getBuildingInfo(buildingType).getType() << " simulation";
 #endif
-            boost::shared_ptr<CityData> pCityData = boost::shared_ptr<CityData>(new CityData(pCity_));
+            CityDataPtr pCityData = CityDataPtr(new CityData(pCity_));
             CitySimulation simulation(pCity_, pCityData, ConstructItem(buildingType));
             simulation.simulate(results, turns);
         }
@@ -100,12 +100,12 @@ namespace AltAI
         BuildingSimulationResults results;
 
         // simulate baseline
-        CitySimulation simulation(pCity_, boost::shared_ptr<CityData>(new CityData(pCity_)));
+        CitySimulation simulation(pCity_, CityDataPtr(new CityData(pCity_)));
         results.noBuildingBaseline = simulation.simulateAsIs(nTurns, OUTPUT_PRODUCTION);
 
         for (int i = 0, count = gGlobals.getNumHurryInfos(); i < count; ++i)
         {
-            CitySimulation simulation(pCity_, boost::shared_ptr<CityData>(new CityData(pCity_)), ConstructItem(buildingType));
+            CitySimulation simulation(pCity_, CityDataPtr(new CityData(pCity_)), ConstructItem(buildingType));
             simulation.simulate(results, nTurns, (HurryTypes)i);
         }
 
@@ -244,7 +244,7 @@ namespace AltAI
     // todo - eliminate similar improvements (e.g. only do cottage on plains once - if both plains have same plotinfokey)
     PlotImprovementSimulationResults CitySimulator::evaluateAllImprovements(int nTurns, bool ignoreExisting)
     {
-        boost::shared_ptr<CityData> pCityData(new CityData(pCity_));
+        CityDataPtr pCityData(new CityData(pCity_));
         
         PlotsAndImprovements possibleImprovements = getPossibleImprovements(*pCityData, ignoreExisting);
 
@@ -263,14 +263,14 @@ namespace AltAI
         if (!improvements.empty())
         {
             // simulate baseline
-            CitySimulation simulation(pCity_, boost::shared_ptr<CityData>(new CityData(pCity_)));
+            CitySimulation simulation(pCity_, CityDataPtr(new CityData(pCity_)));
 
             PlotImprovementSimulationResult plotResults;
             SimulationOutput simOutput = simulation.simulateAsIs(nTurns);
             plotResults.push_back(boost::make_tuple(NO_FEATURE, NO_IMPROVEMENT, simOutput));
             outputs.push_back(std::make_pair(cityData.getCityPlotOutput().coords, plotResults));
 
-            outputWeights = simulation.getCityOptimiser()->getMaxOutputWeights();
+            outputWeights = makeOutputW(3, 4, 3, 3, 1, 1); //simulation.getCityOptimiser()->getMaxOutputWeights();
 
 #ifdef ALTAI_DEBUG
             //CityLog::getLog(pCity_)->getStream() << "\n(Baseline)\n";
@@ -292,7 +292,7 @@ namespace AltAI
 
                         updateCityOutputData(cityData, *iter, improvementsIter->second[j].first, iter->routeType, improvementsIter->second[j].second);
 
-                        boost::shared_ptr<CityData> pModifiedCityData(new CityData(cityData));
+                        CityDataPtr pModifiedCityData(new CityData(cityData));
                         CitySimulation simulation(pCity_, pModifiedCityData);
 
 #ifdef ALTAI_DEBUG
@@ -350,7 +350,7 @@ namespace AltAI
         return outputs;
     }
 
-    CitySimulation::CitySimulation(const CvCity* pCity, const boost::shared_ptr<CityData>& pCityData, const ConstructItem& constructItem)
+    CitySimulation::CitySimulation(const CvCity* pCity, const CityDataPtr& pCityData, const ConstructItem& constructItem)
         : pCity_(pCity), pCityData_(pCityData), turn_(0), constructItem_(constructItem), buildingBuilt_(false)
     {
         pCityOptimiser_ = boost::shared_ptr<CityOptimiser>(new CityOptimiser(pCityData_));
@@ -362,7 +362,7 @@ namespace AltAI
         return pCityOptimiser_;
     }
 
-    boost::shared_ptr<CityData> CitySimulation::getCityData() const
+    CityDataPtr CitySimulation::getCityData() const
     {
         return pCityData_;
     }
@@ -438,7 +438,7 @@ namespace AltAI
     }
 
     // TODO add fn to handle adding hurry cost to correct place in cumulative cost
-    void SimulationOutput::addTurn(const boost::shared_ptr<CityData>& cityOutputData)
+    void SimulationOutput::addTurn(const CityDataPtr& cityOutputData)
     {
         TotalOutput output = cityOutputData->getActualOutput();
         int cost = cityOutputData->getMaintenanceHelper()->getMaintenance();
@@ -504,7 +504,7 @@ namespace AltAI
         if (buildingBuilt_)
         {
             // copy current city data for baseline
-            CitySimulation completedBuildingSimulation(pCity_, boost::shared_ptr<CityData>(new CityData(*pCityData_)), constructItem_);
+            CitySimulation completedBuildingSimulation(pCity_, CityDataPtr(new CityData(*pCityData_)), constructItem_);
 
             completedBuildingSimulation.simulateNoHurry_(simulationResults, nTurns - turn_);
 
@@ -522,7 +522,7 @@ namespace AltAI
 
     void CitySimulation::simulateNoHurry_(BuildingSimulationResults::BuildingResult& buildingResult, int nTurns)
     {
-        updateRequestData(pCity_, *pCityData_, gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getAnalysis()->getBuildingInfo(constructItem_.buildingType));
+        updateRequestData(*pCityData_, gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getAnalysis()->getBuildingInfo(constructItem_.buildingType));
         buildingBuilt_ = true;
 
         optimisePlots();
@@ -589,7 +589,7 @@ namespace AltAI
                 currentGoldCost = hurryData.hurryGold;
                 
                 // copy current city data for hurry
-                CitySimulation hurrySimulation(pCity_, boost::shared_ptr<CityData>(new CityData(*pCityData_)), constructItem_);
+                CitySimulation hurrySimulation(pCity_, CityDataPtr(new CityData(*pCityData_)), constructItem_);
                 hurrySimulation.simulateHurry_(simulationResults, hurryData, nTurns - turn_);
             }
 
@@ -604,7 +604,7 @@ namespace AltAI
         if (buildingBuilt_)
         {
             // copy current city data for baseline
-            CitySimulation completedBuilding(pCity_, boost::shared_ptr<CityData>(new CityData(*pCityData_)), constructItem_);
+            CitySimulation completedBuilding(pCity_, CityDataPtr(new CityData(*pCityData_)), constructItem_);
             completedBuilding.simulateNoHurry_(simulationResults, nTurns - turn_);
         }
 
@@ -636,7 +636,7 @@ namespace AltAI
         // something wrong if this isn't the case
         if (buildingBuilt_)
         {
-            updateRequestData(pCity_, *pCityData_, gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getAnalysis()->getBuildingInfo(constructItem_.buildingType));
+            updateRequestData(*pCityData_, gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getAnalysis()->getBuildingInfo(constructItem_.buildingType));
 
             optimisePlots();
 
@@ -694,71 +694,14 @@ namespace AltAI
     void CitySimulation::optimisePlots()
     {
         plotAssignmentSettings_ = makePlotAssignmentSettings(pCityData_, pCity_, constructItem_);
-        //// similar to assignPlots() logic - need to handle processes properly and integrate this code with City::assignPlots()
-        //CityOptimiser::GrowthType growthType = CityOptimiser::Not_Set;
-
-        //bool isWonder = constructItem_.buildingType != NO_BUILDING && isLimitedWonderClass(getBuildingClass(buildingType_));
-        //const int maxResearchRate = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getMaxResearchRate();
-
-        //std::vector<OutputTypes> outputTypes;
-
-        //if (maxResearchRate < 30)
-        //{
-        //    if (outputTypes.empty())
-        //    {
-        //        outputTypes.push_back(OUTPUT_GOLD);
-        //    }
-        //}
-        //else if (isWonder)
-        //{
-        //    outputTypes.push_back(OUTPUT_PRODUCTION);
-        //}
-        //else
-        //{
-        //    // todo - get isNoUnhappiness data from pCityData_
-        //    const int angryPop = pCity_->angryPopulation();
-        //    const int happyCap = pCityData_->happyCap;
-        //    //if (pCity_->isNoUnhappiness() || angryPop <= (CvPlayerAI::getPlayer(pCity_->getOwner()).canPopRush() ? 2 : 0))
-        //    if (pCity_->isNoUnhappiness() || happyCap > (CvPlayerAI::getPlayer(pCity_->getOwner()).canPopRush() ? -2 : 0))
-        //    {
-        //        growthType = CityOptimiser::MajorGrowth;
-        //        outputTypes.push_back(OUTPUT_FOOD);
-        //        outputTypes.push_back(OUTPUT_PRODUCTION);
-        //        outputTypes.push_back(OUTPUT_RESEARCH);
-        //        outputTypes.push_back(OUTPUT_GOLD);
-        //    }
-        //    else
-        //    {
-        //        if (angryPop > 4)
-        //        {
-        //            growthType = CityOptimiser::MinorStarve;
-        //        }
-        //        outputTypes.push_back(OUTPUT_PRODUCTION);
-        //        outputTypes.push_back(OUTPUT_RESEARCH);
-        //        outputTypes.push_back(OUTPUT_GOLD);
-        //    }
-        //}
-
-        //if (growthType == CityOptimiser::Not_Set)
-        //{
-        //    growthType = pCityOptimiser_->getGrowthType();
-        //}
-
-        //pCityOptimiser_->optimise(NO_OUTPUT, growthType, false);
-        //TotalOutputWeights outputWeights(pCityOptimiser_->getMaxOutputWeights());
-        //outputWeights[OUTPUT_CULTURE] = std::max<int>(1, --outputWeights[OUTPUT_CULTURE]);
-        //outputWeights[OUTPUT_ESPIONAGE] = std::max<int>(1, --outputWeights[OUTPUT_ESPIONAGE]);
-
         pCityOptimiser_->optimise(NO_OUTPUT, plotAssignmentSettings_.growthType, false);
         pCityOptimiser_->optimise<MixedWeightedTotalOutputOrderFunctor>(plotAssignmentSettings_.outputPriorities, plotAssignmentSettings_.outputWeights, plotAssignmentSettings_.growthType, false);
-
-        //CityOptimiser::OptState optState = pCityOptimiser_->optimise(getOptType_());
 
 #ifdef ALTAI_DEBUG
         //std::ostream& os = CityLog::getLog(pCity_)->getStream() ;
         //pCityOptimiser_->debug(os, true);
         /*{
-            Range target = pCityOptimiser_->getTargetYield();
+            Range<> target = pCityOptimiser_->getTargetYield();
             CityLog::getLog(pCity_)->getStream() << "\n range = " << target 
                 << " opt = " << optState << ", growthType = " << pCityOptimiser_->getGrowthType()
                 << " actualYield = " << pCityData_->getFood();

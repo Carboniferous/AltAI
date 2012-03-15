@@ -291,7 +291,7 @@ namespace AltAI
     class ProjectedEconomicImpactVisitor : public boost::static_visitor<>
     {
     public:
-        ProjectedEconomicImpactVisitor(const Player& player, const City& city, const boost::shared_ptr<CityData>& pCityData, int selectedEconomicFlags)
+        ProjectedEconomicImpactVisitor(const Player& player, const City& city, const CityDataPtr& pCityData, int selectedEconomicFlags)
             : player_(player), city_(city), pCityData_(pCityData),
               improvementManager_(player.getAnalysis()->getMapAnalysis()->getImprovementManager(city.getCvCity()->getIDInfo())),
               selectedEconomicFlags_(selectedEconomicFlags),
@@ -352,7 +352,7 @@ namespace AltAI
     private:
         const Player& player_;
         const City& city_;
-        boost::shared_ptr<CityData> pCityData_;
+        CityDataPtr pCityData_;
         CityImprovementManager& improvementManager_;
         int selectedEconomicFlags_;
         TotalOutput totalOutputDelta_;
@@ -479,7 +479,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
 #endif
-        boost::shared_ptr<CityData> pCityData = city.getCityData()->clone();
+        CityDataPtr pCityData = city.getCityData()->clone();
         CitySimulation simulation(city.getCvCity(), pCityData, city.getConstructItem());
 
         simulation.optimisePlots();
@@ -490,7 +490,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         os << "\nbaseOutput = " << baseOutput << " city output = " << pCityData->getCityPlotOutput().actualOutput << " maintenance = " << pCityData->getMaintenanceHelper()->getMaintenance();
 #endif
-        updateRequestData(city.getCvCity(), *pCityData, pBuildingInfo);
+        updateRequestData(*pCityData, pBuildingInfo);
         pCityData->getBuildingsHelper()->changeNumRealBuildings(pBuildingInfo->getBuildingType());
         pCityData->recalcOutputs();
 
@@ -505,7 +505,7 @@ namespace AltAI
 #endif
         const int cost = player.getCvPlayer()->getProductionNeeded(pBuildingInfo->getBuildingType());
         // TODO - use correct yield modifiers for trait specific speedups (e.g. libs for creative)
-        const int approxBuildTurns = std::max<int>(1, 100 * cost / city.getMaxOutputs()[OUTPUT_PRODUCTION]);
+        const int approxBuildTurns = std::max<int>(1, 100 * cost / std::max<int>(1, city.getMaxOutputs()[OUTPUT_PRODUCTION]));
 
 #ifdef ALTAI_DEBUG
         os << "\nCost = " << cost << ", approx build T = " << approxBuildTurns;

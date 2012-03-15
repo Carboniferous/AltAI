@@ -340,6 +340,39 @@ namespace AltAI
     private:
     };
 
+    class TechBuildingsVisitor : public boost::static_visitor<std::vector<BuildingTypes> >
+    {
+    public:
+        TechBuildingsVisitor()
+        {
+        }
+
+        template <typename T>
+            result_type operator() (const T&) const
+        {
+            return result_type();
+        }
+
+        result_type operator() (const TechInfo::BaseNode& node) const
+        {
+            result_type result;
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                result_type nodeResult(boost::apply_visitor(*this, node.nodes[i]));
+                if (!nodeResult.empty())
+                {
+                    std::copy(nodeResult.begin(), nodeResult.end(), std::back_inserter(result));
+                }
+            }
+            return result;
+        }
+
+        result_type operator() (const TechInfo::BuildingNode& node) const
+        {
+            return node.buildingType != NO_BUILDING && !node.obsoletes ? result_type(1, node.buildingType) : result_type();
+        }
+    };
+
     // This and its companion PushTechResearchVisitor are based on pushResearch and findPathLength in CvPlayer
     // they allow simulation of research paths without actually pushing the research for real
     // we use CivHelper to track researched techs and pushed techs
@@ -568,5 +601,10 @@ namespace AltAI
     std::vector<TechTypes> getOrTechs(const boost::shared_ptr<TechInfo>& pTechInfo)
     {
         return boost::get<TechInfo::BaseNode>(pTechInfo->getInfo()).orTechs;
+    }
+
+    std::vector<BuildingTypes> getPossibleBuildings(const boost::shared_ptr<TechInfo>& pTechInfo)
+    {
+        return boost::apply_visitor(TechBuildingsVisitor(), pTechInfo->getInfo());
     }
 }

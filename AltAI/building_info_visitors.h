@@ -21,7 +21,7 @@ namespace AltAI
     BuildingInfo::BaseNode getBadNodes(const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
     Commerce getCommerceValue(const CvCity* pCity, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 
-    void updateRequestData(const CvCity* pCity, CityData& data, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
+    void updateRequestData(CityData& data, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 
     bool buildingHasEconomicImpact(const CityData& data, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
     bool buildingHasPotentialEconomicImpact(const boost::shared_ptr<BuildingInfo>& pBuildingInfo);

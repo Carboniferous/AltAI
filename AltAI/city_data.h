@@ -48,7 +48,7 @@ namespace AltAI
         explicit CityData(const CvCity* pCity_, bool includeUnclaimedPlots = false);
         CityData(const CvCity* pCity_, const CityImprovementManager& improvements);
 
-        boost::shared_ptr<CityData> clone() const;
+        CityDataPtr clone() const;
 
         const CvCity* getCity() const
         {
@@ -65,6 +65,9 @@ namespace AltAI
         void recalcOutputs();
 
         void advanceTurn();
+
+        // current food, stored food
+        std::pair<int, int> getAccumulatedFood(int nTurns);
 
         void setBuilding(BuildingTypes buildingType);
         int getNumBuildings(BuildingTypes buildingType) const;
@@ -105,12 +108,16 @@ namespace AltAI
             return foodKeptPercent_;
         }
 
+        void setCurrentFood(int value);
         void setStoredFood(int value);
 
         int getGrowthThreshold() const
         {
             return growthThreshold_;
         }
+
+        // first = turns (MAX_INT if never), second = pop change (+1, -1, 0)
+        std::pair<int, int> getTurnsToPopChange() const;
 
         int happyPopulation() const
         {
@@ -361,7 +368,7 @@ namespace AltAI
         void init_(const CvCity* pCity);
         void initPlot_(const CvPlot* pPlot, PlotYield plotYield, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType);
 
-        int getBuildingProductionModifier_();
+        int getBuildingProductionModifier_() const;
         void completeBuilding_();
         int setBuilding_();
 

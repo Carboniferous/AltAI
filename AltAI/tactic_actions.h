@@ -223,6 +223,7 @@ namespace AltAI
         ImprovementTypes improvementType;
         ProcessTypes processType;
         std::map<BuildTypes, int> possibleBuildTypes;
+        std::vector<ReligionTypes> religionTypes;
         std::vector<BonusTypes> positiveBonuses;
         std::vector<TechTypes> requiredTechs;
         // int pair - first int is value, second is either -1, or the unit class or unit combat type the value is for.

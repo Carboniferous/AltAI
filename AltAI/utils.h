@@ -573,60 +573,70 @@ namespace AltAI
     };
 
     // simple inclusive range type
-    struct Range
+    template <typename T = int>
+        struct Range
     {
         enum BoundType
         {
             LowerBound, UpperBound
         };
 
-        int lower, upper;
+        T lower, upper;
 
-        Range(int lower_, int upper_) : lower(lower_), upper(upper_) {}
+        Range(T lower_, T upper_) : lower(lower_), upper(upper_) {}
 
-        Range() : lower(0), upper(0) {}
+        Range() : lower(), upper() {}
 
-        explicit Range(int value, BoundType boundType = LowerBound)
+        explicit Range(T value, BoundType boundType = LowerBound)
         {
             if (boundType == UpperBound)
             {
-                lower = std::numeric_limits<int>::min();
+                lower = std::numeric_limits<T>::min();
                 upper = value;
             }
             else
             {
                 lower = value;
-                upper = std::numeric_limits<int>::max();
+                upper = std::numeric_limits<T>::max();
             }
         }
 
-        bool contains(int value) const
+        bool contains(T value) const
         {
             return lower <= value && value <= upper;
         }
 
-        bool valueBelow(int value) const
+        bool valueBelow(T value) const
         {
             return value < lower;
         }
 
-        bool valueAbove(int value) const
+        bool valueAbove(T value) const
         {
             return value > upper;
         }
     };
 
-    inline bool operator == (Range first, Range second)
+    template <typename T>
+        inline int bound(int value, Range<T> range)
+    {
+        return std::max<T>(range.lower, std::min<T>(value, range.upper));
+    }
+
+    template <typename T>
+        inline bool operator == (Range<T> first, Range<T> second)
     {
         return first.lower == second.lower && first.upper == second.upper;
     }
-
-    inline bool operator != (Range first, Range second)
+    
+    template <typename T>
+        inline bool operator != (Range<T> first, Range<T> second)
     {
         return !(first == second);
     }
 
-    inline std::ostream& operator << (std::ostream& os, Range range)
+    template <typename T>
+        inline std::ostream& operator << (std::ostream& os, Range<T> range)
     {
         return os << " (" << range.lower << ", " << range.upper << ")";
     }

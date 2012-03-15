@@ -5,6 +5,8 @@ namespace AltAI
 {
     namespace
     {
+        static const int MAX_PROMOTION_LEVEL_SEARCH_DEPTH = 10;
+
         typedef std::map<UnitCombatTypes, std::vector<UnitTypes> > CombatTypesMap;
 
         struct UnitInfoRequestData
@@ -213,6 +215,30 @@ namespace AltAI
             }
         }
 
+        void getReligionNode(UnitInfo::BaseNode& baseNode, const CvUnitInfo& unitInfo, const UnitInfoRequestData& requestData)
+        {
+            UnitInfo::ReligionNode node;
+
+            for (int i = 0, count = gGlobals.getNumReligionInfos(); i < count; ++i)
+            {
+                int baseValue = unitInfo.getReligionSpreads(i);
+                if (baseValue > 0)
+                {
+                    node.religionSpreads.push_back(std::make_pair((ReligionTypes)i, baseValue));
+                }
+            }
+
+            if (unitInfo.getPrereqReligion() != NO_RELIGION)
+            {
+                node.prereqReligion = (ReligionTypes)unitInfo.getPrereqReligion();
+            }
+
+            if (!node.religionSpreads.empty() || node.prereqReligion != NO_RELIGION)
+            {
+                baseNode.nodes.push_back(node);
+            }
+        }
+
         void getMiscNode(UnitInfo::BaseNode& baseNode, const CvUnitInfo& unitInfo, const UnitInfoRequestData& requestData)
         {
             UnitInfo::MiscAbilityNode node;
@@ -243,7 +269,7 @@ namespace AltAI
         {
             UnitCombatTypes unitCombatType = (UnitCombatTypes)unitInfo.getUnitCombatType();
 
-            if (unitCombatType == NO_UNITCOMBAT || level > 10)
+            if (unitCombatType == NO_UNITCOMBAT || level > MAX_PROMOTION_LEVEL_SEARCH_DEPTH)
             {
                 return;
             }
@@ -371,7 +397,6 @@ namespace AltAI
             {
                 node.andBonusTypes.push_back(node.orBonusTypes[0]);
                 node.orBonusTypes.clear();
-
             }
 
             TechTypes techType = (TechTypes)unitInfo.getPrereqAndTech();
@@ -390,6 +415,8 @@ namespace AltAI
                 }
             }
 
+            node.prereqBuildingType = (BuildingTypes)unitInfo.getPrereqBuilding();
+
             getPromotionsNode(node, unitInfo, requestData);
             getCombatNode(node, unitInfo, requestData);
             getCollateralNode(node, unitInfo, requestData);
@@ -399,6 +426,7 @@ namespace AltAI
             getUpgradeNode(node, unitInfo, requestData);
             getCargoNode(node, unitInfo, requestData);
             getBuildNode(node, unitInfo, requestData);
+            getReligionNode(node, unitInfo, requestData);
             getMiscNode(node, unitInfo, requestData);
 
             return node;

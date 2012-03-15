@@ -80,6 +80,7 @@ namespace AltAI
         victoryFlags |= other.victoryFlags;
 
         mergeVectors(positiveBonuses, other.positiveBonuses);
+        mergeVectors(religionTypes, other.religionTypes);
 
         for (std::map<BuildTypes, int>::const_iterator ci(other.possibleBuildTypes.begin()), ciEnd(other.possibleBuildTypes.end()); ci != ciEnd; ++ci)
         {
@@ -170,6 +171,7 @@ namespace AltAI
         pStream->Write(improvementType);
         pStream->Write(processType);
 
+        writeVector(pStream, religionTypes);
         writeVector(pStream, positiveBonuses);
         writeVector(pStream, requiredTechs);
         writeMap(pStream, possibleBuildTypes); 
@@ -199,6 +201,7 @@ namespace AltAI
         pStream->Read((int*)&improvementType);
         pStream->Read((int*)&processType);
 
+        readVector<ReligionTypes, int>(pStream, religionTypes);
         readVector<BonusTypes, int>(pStream, positiveBonuses);
         readVector<TechTypes, int>(pStream, requiredTechs);
         readMap<BuildTypes, int, int, int>(pStream, possibleBuildTypes); 

@@ -224,6 +224,12 @@ namespace AltAI
                 }
             }
         }
+        for (size_t i = 0, count = node.religionTypes.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            else os << " religions: ";
+            os << gGlobals.getReligionInfo(node.religionTypes[i]).getType() << " ";
+        }
         for (size_t i = 0, count = node.positiveBonuses.size(); i < count; ++i)
         {
             if (i > 0) os << ", ";

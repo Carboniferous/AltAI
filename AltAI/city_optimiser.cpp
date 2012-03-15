@@ -239,23 +239,23 @@ namespace AltAI
     {
     }
 
-    template CityOptimiser::OptState CityOptimiser::optimise<MixedWeightedTotalOutputOrderFunctor>(TotalOutputPriority, TotalOutputWeights, Range, bool);
+    template CityOptimiser::OptState CityOptimiser::optimise<MixedWeightedTotalOutputOrderFunctor>(TotalOutputPriority, TotalOutputWeights, Range<>, bool);
     template CityOptimiser::OptState CityOptimiser::optimise<MixedWeightedTotalOutputOrderFunctor>(TotalOutputPriority, TotalOutputWeights, CityOptimiser::GrowthType, bool);
 
-    template CityOptimiser::OptState CityOptimiser::optimise<MixedTotalOutputOrderFunctor>(TotalOutputPriority, TotalOutputWeights, Range, bool);
+    template CityOptimiser::OptState CityOptimiser::optimise<MixedTotalOutputOrderFunctor>(TotalOutputPriority, TotalOutputWeights, Range<>, bool);
     template CityOptimiser::OptState CityOptimiser::optimise<MixedTotalOutputOrderFunctor>(TotalOutputPriority, TotalOutputWeights, CityOptimiser::GrowthType, bool);
 
     template CityOptimiser::OptState CityOptimiser::optimise<ProcessValueAdaptorFunctor<MixedWeightedTotalOutputOrderFunctor>, MixedWeightedTotalOutputOrderFunctor>
         (TotalOutputPriority, TotalOutputWeights, CityOptimiser::GrowthType, CommerceModifier, bool);
 
 
-    CityOptimiser::CityOptimiser(const boost::shared_ptr<CityData>& data, std::pair<TotalOutput, TotalOutputWeights> maxOutputs)
+    CityOptimiser::CityOptimiser(const CityDataPtr& data, std::pair<TotalOutput, TotalOutputWeights> maxOutputs)
         : data_(data), maxOutputs_(maxOutputs), isFoodProduction_(false)
     {
         foodPerPop_ = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
     }
 
-    PlotAssignmentSettings makePlotAssignmentSettings(const boost::shared_ptr<CityData>& pCityData, const CvCity* pCity, const ConstructItem& constructItem)
+    PlotAssignmentSettings makePlotAssignmentSettings(const CityDataPtr& pCityData, const CvCity* pCity, const ConstructItem& constructItem)
     {
         PlotAssignmentSettings plotAssignmentSettings;
         boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
@@ -283,7 +283,7 @@ namespace AltAI
 
         std::vector<OutputTypes> outputTypes;
         TotalOutputWeights outputWeights = makeOutputW(1, 1, 1, 1, 1, 1);
-        Range targetFoodYield;
+        Range<> targetFoodYield;
         CityOptimiser::GrowthType growthType = CityOptimiser::Not_Set;
         bool isWonder = false;
 
@@ -302,7 +302,7 @@ namespace AltAI
 
             if (isWonder)
             {
-                targetFoodYield = Range(pCity->foodConsumption() * 100, maxOutputs[OUTPUT_FOOD]);
+                targetFoodYield = Range<>(pCity->foodConsumption() * 100, maxOutputs[OUTPUT_FOOD]);
                 outputTypes.push_back(OUTPUT_PRODUCTION);
             }
             else if (haveConstructItem && constructItem.economicFlags & EconomicFlags::Output_Culture)
@@ -463,18 +463,18 @@ namespace AltAI
 
     CityOptimiser::OptState CityOptimiser::optimise(OutputTypes outputType, GrowthType growthType, bool debug)
     {
-        calibrate_(debug);
         targetYield_ = calcTargetYieldSurplus(growthType);
 
         if (outputType == NO_OUTPUT)
         {
-            return optimise_(PlotDataAdaptor<TotalOutputValueFunctor>(TotalOutputValueFunctor(maxOutputs_.second)), debug);
+            TotalOutputWeights outputW = makeOutputW(1, 4, 3, 3, 1, 1);
+            return optimise_(PlotDataAdaptor<TotalOutputValueFunctor>(TotalOutputValueFunctor(outputW)), debug);
         }
         else
         {
             TotalOutputWeights outputWeights;
             outputWeights.assign(1);
-            outputWeights[outputType] = maxOutputs_.second[outputType];
+            outputWeights[outputType] = 4;
             return optimise_(PlotDataAdaptor<TotalOutputValueFunctor>(TotalOutputValueFunctor(outputWeights)), debug);
         }
     }
@@ -501,7 +501,7 @@ namespace AltAI
     }
 
     template <typename F>
-        CityOptimiser::OptState CityOptimiser::optimise(TotalOutputPriority outputPriorities, TotalOutputWeights outputWeights, Range targetYield, bool debug)
+        CityOptimiser::OptState CityOptimiser::optimise(TotalOutputPriority outputPriorities, TotalOutputWeights outputWeights, Range<> targetYield, bool debug)
     {
         targetYield_ = targetYield;
 
@@ -590,7 +590,7 @@ namespace AltAI
         isFoodProduction_ = true;
         // angry people don't need feeding for food production builds
         int requiredYield = 100 * (data_->getPopulation() - std::max<int>(0, data_->angryPopulation() - data_->happyPopulation())) * foodPerPop_ + data_->getLostFood();
-        targetYield_ = Range(requiredYield, Range::LowerBound);
+        targetYield_ = Range<>(requiredYield, Range<>::LowerBound);
         TotalOutputWeights outputWeights;
         outputWeights.assign(1);
         outputWeights[OUTPUT_FOOD] = outputWeights[OUTPUT_PRODUCTION] = 10;
@@ -612,103 +612,8 @@ namespace AltAI
 
     CityOptimiser::OptState CityOptimiser::optimise(UnitTypes specType, GrowthType growthType, bool debug)
     {
-        calibrate_();
         targetYield_ = calcTargetYieldSurplus(growthType);
-        return optimise_(SpecialistPlotDataAdaptor<TotalOutputValueFunctor>(TotalOutputValueFunctor(maxOutputs_.second), specType), debug);
-    }
-
-    void CityOptimiser::calibrate_(bool debug)
-    {
-        targetYield_ = Range(100 * (data_->getPopulation() * foodPerPop_));
-
-        TotalOutputWeights weights;
-        maxOutputs_.first = TotalOutput();
-        maxOutputs_.second.assign(0);
-        weights.assign(1);
-
-        for (int i = 0; i < NUM_OUTPUT_TYPES; ++i)
-        {
-            TotalOutputPriority priorities(makeTotalOutputSinglePriority((OutputTypes)i));
-            optimise_<PlotDataAdaptor<MixedTotalOutputOrderFunctor> >(MixedTotalOutputOrderFunctor(priorities, weights), debug);
-            maxOutputs_.first[i] = data_->getOutput()[i];
-
-            // no output even with this type set as priority
-            if (maxOutputs_.first[i] == 0)
-            {
-                maxOutputs_.second[i] = 0;
-#ifdef ALTAI_DEBUG
-                if (debug)
-                {
-                    CityLog::getLog(data_->getCity())->logPlots(*this);
-                    CityLog::getLog(data_->getCity())->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
-                }
-#endif
-                continue;
-            }
-
-            int maxWeightedOutput = 0;
-
-            int repeatCount = 0;
-            while (true)
-            {
-                ++weights[i];
-                optimise_<PlotDataAdaptor<TotalOutputValueFunctor> >(TotalOutputValueFunctor(weights));
-                TotalOutput output = data_->getOutput();
-
-                if (output[i] == maxWeightedOutput)
-                {
-                    ++repeatCount;
-                }
-                else
-                {
-                    repeatCount = 0;
-                }
-
-                if (repeatCount > 3)  // not increasing
-                {
-                    maxOutputs_.second[i] = 1 + weights[i] - repeatCount;
-                    break;
-                }
-
-                if (output[i] >= maxWeightedOutput)
-                {
-                    maxOutputs_.second[i] = weights[i];
-                    maxWeightedOutput = output[i];
-#ifdef ALTAI_DEBUG
-                    if (debug)
-                    {
-                        CityLog::getLog(data_->getCity())->logPlots(*this);
-                        CityLog::getLog(data_->getCity())->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
-                    }
-#endif
-                    if (output[i] > maxOutputs_.first[i])  // don't expect this to happen much, if at all
-                    {
-                        maxOutputs_.first[i] = output[i];
-#ifdef ALTAI_DEBUG
-                        CityLog::getLog(data_->getCity())->logPlots(*this);
-                        CityLog::getLog(data_->getCity())->logOptimisedWeights(maxOutputs_.first, maxOutputs_.second);
-#endif
-                        break;
-                    }
-                }
-                else if (weights[i] > 20)  // do stricter cutoff (just on outputs not increasing?)
-                {
-                    maxOutputs_.second[i] = weights[i];
-                    break;
-                }
-            }
-            weights.assign(1);
-        }
-    }
-
-    TotalOutput CityOptimiser::getMaxOutputs() const
-    {
-        return maxOutputs_.first;
-    }
-
-    TotalOutputWeights CityOptimiser::getMaxOutputWeights() const
-    {
-        return maxOutputs_.second;
+        return optimise_(SpecialistPlotDataAdaptor<TotalOutputValueFunctor>(TotalOutputValueFunctor(makeOutputW(1, 4, 3, 3, 2, 2)), specType), debug);
     }
 
     // get max food without assigning worked plots
@@ -1135,9 +1040,10 @@ namespace AltAI
         return growthType;
     }
 
-    Range CityOptimiser::calcTargetYieldSurplus(GrowthType growthType) const
+    Range<> CityOptimiser::calcTargetYieldSurplus(GrowthType growthType)
     {
         int requiredYield = 100 * data_->getPopulation() * foodPerPop_ + data_->getLostFood();
+        const int maxFood = getMaxFood();
         const int angryPop = data_->getHappyHelper()->angryPopulation();
 
         if (growthType == Not_Set)
@@ -1148,18 +1054,18 @@ namespace AltAI
         // bump up target if we have a lot of food (maxOutputs_ will be zero when calibrating - so this won't be triggered)
         if (growthType == MajorGrowth)
         {
-            if (maxOutputs_.first[OUTPUT_FOOD] > requiredYield + 200 * foodPerPop_)
+            if (maxFood > requiredYield + 200 * foodPerPop_)
             {
                 requiredYield += (300 * foodPerPop_) / 2;
             }
-            else if (maxOutputs_.first[OUTPUT_FOOD] > requiredYield)
+            else if (maxFood > requiredYield)
             {
-                requiredYield = (maxOutputs_.first[OUTPUT_FOOD] + requiredYield) / 2;
+                requiredYield = (maxFood + requiredYield) / 2;
             }
         }
         else if (growthType == MinorGrowth)
         {
-            if (maxOutputs_.first[OUTPUT_FOOD] >= requiredYield + 200 * foodPerPop_)
+            if (maxFood >= requiredYield + 200 * foodPerPop_)
             {
                 requiredYield += 200 * foodPerPop_;
             }
@@ -1169,14 +1075,14 @@ namespace AltAI
         {
         case MajorStarve:
         case MinorStarve:
-            return Range(requiredYield, Range::UpperBound);
+            return Range<>(requiredYield, Range<>::UpperBound);
         case FlatGrowth:
-            return Range(requiredYield, requiredYield);
+            return Range<>(requiredYield, requiredYield);
         case MinorGrowth:
         case MajorGrowth:
-            return Range(requiredYield, Range::LowerBound);
+            return Range<>(requiredYield, Range<>::LowerBound);
         default:
-            return Range(requiredYield, requiredYield);
+            return Range<>(requiredYield, requiredYield);
         }
     }
 

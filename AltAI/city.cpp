@@ -17,6 +17,7 @@
 #include "./civ_log.h"
 #include "./error_log.h"
 #include "./save_utils.h"
+#include "./city_projections.h"
 
 #include "CvDLLEngineIFaceBase.h"
 #include "CvDLLFAStarIFaceBase.h"
@@ -49,7 +50,7 @@ namespace AltAI
 
     void City::init()
     {
-        pCityData_ = boost::shared_ptr<CityData>(new CityData(pCity_));
+        pCityData_ = CityDataPtr(new CityData(pCity_));
 
         boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity_);
 
@@ -76,6 +77,12 @@ namespace AltAI
 
     void City::doTurn()
     {
+        const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
+        currentOutputProjection_ = getProjectedOutput(*player, pCityData_, 50);
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
+        currentOutputProjection_.debug(os);
+#endif
         setFlag(CanReassignSharedPlots);
 
         if (flags_ & NeedsImprovementCalcs)
@@ -130,7 +137,7 @@ namespace AltAI
         boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()));
         std::ostream& os = pCivLog->getStream();
 #endif
-        pCityData_ = boost::shared_ptr<CityData>(new CityData(pCity_));
+        pCityData_ = CityDataPtr(new CityData(pCity_));
         calcMaxOutputs_();
 
         plotAssignmentSettings_.growthType = CityOptimiser::Not_Set;
@@ -141,115 +148,6 @@ namespace AltAI
         if (!isFoodProduction)
         {
             plotAssignmentSettings_ = makePlotAssignmentSettings(pCityData_, pCity_, constructItem_);
-
-            //TotalOutputWeights outputWeights(optWeights_);
-            //outputWeights[OUTPUT_CULTURE] = std::max<int>(1, --outputWeights[OUTPUT_CULTURE]);
-            //outputWeights[OUTPUT_ESPIONAGE] = std::max<int>(1, --outputWeights[OUTPUT_ESPIONAGE]);
-            //std::vector<OutputTypes> outputTypes;
-
-            ////if (CvPlayerAI::getPlayer(pCity_->getOwner()).isHuman())  // allow emphasis buttons to have an effect
-            ////{
-            ////    boost::tie(plotAssignmentSettings_.growthType, outputTypes) = convertEmphasis(outputWeights, pCity_);
-            ////}
-           
-            //BuildingTypes currentBuilding = pCity_->isProductionBuilding() ? pCity_->getProductionBuilding() : NO_BUILDING;
-            //bool isWonder = currentBuilding != NO_BUILDING && isLimitedWonderClass(getBuildingClass(currentBuilding));
-            //bool isProcess = pCity_->isProductionProcess();
-            //
-            //plotAssignmentSettings_.targetFoodYield = Range();
-            //const int maxResearchRate = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getMaxResearchRate();
-
-            //const CityImprovementManager& improvementManager = getImprovementManager(pCity_);
-            //const std::vector<CityImprovementManager::PlotImprovementData>& improvementData = improvementManager.getImprovements();
-            //const int improvementCount = improvementData.size();
-            //const int improvementsNotBuiltCount = improvementManager.getNumImprovementsNotBuilt();
-
-            //{
-            //    os << "\nImp count = " << improvementCount << ", not built = " << improvementsNotBuiltCount << " max output = " << maxOutputs_ << " pop = " << pCity_->getPopulation();
-            //}
-
-            //// Building a unit which can build improvments (likely a workboat, since worker production consumes food and won't hit this check)
-            //if (constructItem_.unitType != NO_UNIT && !constructItem_.possibleBuildTypes.empty())
-            //{
-            //    outputTypes.push_back(OUTPUT_PRODUCTION);
-            //    plotAssignmentSettings_.growthType = CityOptimiser::MinorGrowth;
-            //    {
-            //        os << " ...maxing prod...";
-            //    }
-            //}
-            //else if (isWonder)
-            //{
-            //    if (outputTypes.empty())
-            //    {
-            //        outputTypes.push_back(OUTPUT_PRODUCTION);
-            //    }
-            //    plotAssignmentSettings_.targetFoodYield = Range(pCity_->foodConsumption() * 100, maxOutputs_[OUTPUT_FOOD]);
-            //    plotAssignmentSettings_.growthType = CityOptimiser::Not_Set;
-            //}
-            //else if (isProcess && outputTypes.empty())
-            //{
-            //    const CvProcessInfo& processInfo = gGlobals.getProcessInfo(pCity_->getProductionProcess());
-            //    for (int i = 0; i < NUM_COMMERCE_TYPES; ++i)
-            //    {
-            //        if (processInfo.getProductionToCommerceModifier(i) > 0)
-            //        {
-            //            outputTypes.push_back((OutputTypes)(i + NUM_YIELD_TYPES - 1));
-            //            break;
-            //        }
-            //    }
-            //    outputTypes.push_back(OUTPUT_PRODUCTION);
-            //}
-            //else if (maxResearchRate < 30)
-            //{
-            //    if (outputTypes.empty())
-            //    {
-            //        outputTypes.push_back(OUTPUT_GOLD);
-            //    }
-            //}
-            //else
-            //{
-            //    const int angryPop = pCity_->angryPopulation();
-            //    const int happyCap = pCityData_->happyCap;
-            //    //if (pCity_->isNoUnhappiness() || angryPop <= (CvPlayerAI::getPlayer(pCity_->getOwner()).canPopRush() ? 2 : 0))
-            //    if (pCity_->isNoUnhappiness() || happyCap > (CvPlayerAI::getPlayer(pCity_->getOwner()).canPopRush() ? -2 : 0))
-            //    {
-            //        if (plotAssignmentSettings_.growthType == CityOptimiser::Not_Set)
-            //        {
-            //            plotAssignmentSettings_.growthType = CityOptimiser::MajorGrowth;
-            //        }
-            //        if (outputTypes.empty())
-            //        {
-            //            outputTypes.push_back(OUTPUT_FOOD);
-            //            outputTypes.push_back(OUTPUT_PRODUCTION);
-            //            if (CvPlayerAI::getPlayer(pCity_->getOwner()).getNumCities() > 1)
-            //            {
-            //                outputTypes.push_back(OUTPUT_RESEARCH);
-            //                outputTypes.push_back(OUTPUT_GOLD);
-            //            }
-            //        }
-            //    }
-            //    else if (outputTypes.empty())
-            //    {
-            //        if (plotAssignmentSettings_.growthType == CityOptimiser::Not_Set)
-            //        {
-            //            if (angryPop > 4)
-            //            {
-            //                plotAssignmentSettings_.growthType = CityOptimiser::MinorStarve;
-            //            }
-            //            else
-            //            {
-            //                plotAssignmentSettings_.growthType = CityOptimiser::FlatGrowth;
-            //            }
-            //        }
-            //        outputTypes.push_back(OUTPUT_PRODUCTION);
-            //        outputTypes.push_back(OUTPUT_RESEARCH);
-            //        outputTypes.push_back(OUTPUT_GOLD);
-            //    }
-            //}
-
-            //plotAssignmentSettings_.outputPriorities = makeTotalOutputPriorities(outputTypes);
-            //plotAssignmentSettings_.outputWeights = outputWeights;
-
             if (pCity_->isProductionProcess())
             {
                 const CvProcessInfo& processInfo = gGlobals.getProcessInfo(pCity_->getProductionProcess());
@@ -263,7 +161,7 @@ namespace AltAI
                 opt.optimise<ProcessValueAdaptorFunctor<MixedWeightedTotalOutputOrderFunctor>, MixedWeightedTotalOutputOrderFunctor>
                     (plotAssignmentSettings_.outputPriorities, plotAssignmentSettings_.outputWeights, plotAssignmentSettings_.growthType, modifier, true);
             }
-            else if (plotAssignmentSettings_.targetFoodYield != Range())
+            else if (plotAssignmentSettings_.targetFoodYield != Range<>())
             {
                 opt.optimise<MixedWeightedTotalOutputOrderFunctor>(plotAssignmentSettings_.outputPriorities, plotAssignmentSettings_.outputWeights, plotAssignmentSettings_.targetFoodYield, true);
             }
@@ -275,11 +173,6 @@ namespace AltAI
         }
         else
         {
-            //int productionModifier = pCity_->getProductionUnit() == NO_UNIT ? 0 : CvPlayerAI::getPlayer(pCity_->getOwner()).getProductionModifier(pCity_->getProductionUnit());
-            //if (productionModifier != 0)
-            //{
-            //    pCityData_->changeYieldModifier(makeYield(0, productionModifier, 0));
-            //}
             opt.optimiseFoodProduction(pCity_->getProductionUnit(), true);
 #ifdef ALTAI_DEBUG
             pCityData_->debugBasicData(os);
@@ -300,12 +193,12 @@ namespace AltAI
                     CvPlot* pPlot = gGlobals.getMap().plot(iter->coords.iX, iter->coords.iY);
 
                     // error check
-                    if (pPlot->getWorkingCity() != pCity_)
+                    /*if (pPlot->getWorkingCity() != pCity_)
                     {
                         std::ostream& os = ErrorLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
                         os << "\nPlot: " << iter->coords << " has conflicting working city settings: plot's = " 
                             << narrow(pPlot->getWorkingCity()->getName()) << " and city is: " << narrow(pCity_->getName()) << ")";
-                    }
+                    }*/
 
                     pCity_->setWorkingPlot(pPlot, true);
                 }
@@ -358,8 +251,15 @@ namespace AltAI
     {
         CityOptimiser opt(pCityData_);
         opt.optimise(NO_OUTPUT, CityOptimiser::Not_Set, false);
-        maxOutputs_ = opt.getMaxOutputs();
-        optWeights_ = opt.getMaxOutputWeights();
+        maxOutputs_[OUTPUT_FOOD] = opt.getMaxFood();
+        TotalOutputWeights outputWeights = makeOutputW(1, 4, 3, 3, 1, 1);
+        for (int i = 1; i < NUM_OUTPUT_TYPES; ++i)
+        {
+            TotalOutputPriority priorities(makeTotalOutputSinglePriority((OutputTypes)i));
+            opt.optimise<MixedWeightedTotalOutputOrderFunctor>(priorities, outputWeights, opt.getGrowthType(), false);
+            maxOutputs_[i] = pCityData_->getOutput()[i];
+        }
+        optWeights_ = makeOutputW(3, 4, 3, 3, 1, 1);//opt.getMaxOutputWeights();
     }
 
     void City::calcImprovements_()
@@ -442,6 +342,19 @@ namespace AltAI
 
         if (constructItem_.buildingType != NO_BUILDING)
         {
+            const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
+
+            // update current base line
+            currentOutputProjection_ = getProjectedOutput(*player, pCityData_->clone(), 50);
+            
+            ProjectionLadder buildingLadder = getProjectedOutput(*player, pCityData_->clone(), player->getAnalysis()->getBuildingInfo(constructItem_.buildingType), 50);
+
+#ifdef ALTAI_DEBUG
+            os << "\n" << narrow(pCity_->getName()) << " projection: ";
+            buildingLadder.debug(os);
+            currentOutputProjection_.debug(os);
+            os << ", delta = " << buildingLadder.getOutput() - currentOutputProjection_.getOutput();
+#endif
             return boost::make_tuple(NO_UNIT, constructItem_.buildingType, NO_PROCESS, NO_PROJECT);
         }
         else if (constructItem_.unitType != NO_UNIT)
@@ -1280,7 +1193,7 @@ namespace AltAI
         return optWeights_;
     }
 
-    const boost::shared_ptr<CityData>& City::getCityData() const
+    const CityDataPtr& City::getCityData() const
     {
         return pCityData_;
     }

@@ -230,13 +230,14 @@ namespace AltAI
             {
                 CityIter cityIter(*player.getCvPlayer());
 
-                boost::shared_ptr<CivHelper> pCivHelper(new CivHelper(*player.getCvPlayer()));
+                boost::shared_ptr<CivHelper> pCivHelper(new CivHelper(player));
+                pCivHelper->init();
 
                 while (CvCity* pCity = cityIter())
                 {
                     const City& city = player.getCity(pCity->getID());
 
-                    boost::shared_ptr<CityData> cityData(new CityData(pCity));
+                    CityDataPtr cityData(new CityData(pCity));
                     cityData->getCivHelper() = pCivHelper;
 
                     CitySimulation simulation(pCity, cityData, city.getConstructItem());

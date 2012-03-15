@@ -162,6 +162,21 @@ namespace AltAI
         return os;
     }
 
+    std::ostream& operator << (std::ostream& os, const UnitInfo::ReligionNode& node)
+    {
+        os << "\n\t can spread: ";
+        for (size_t i = 0, count = node.religionSpreads.size(); i < count; ++i)
+        {
+            os << gGlobals.getReligionInfo(node.religionSpreads[i].first).getType() << " prob = " << node.religionSpreads[i].second;
+        }
+
+        if (node.prereqReligion != NO_RELIGION)
+        {
+            os << " requires religion: " << gGlobals.getReligionInfo(node.prereqReligion).getType();
+        }
+        return os;
+    }
+
     std::ostream& operator << (std::ostream& os, const UnitInfo::MiscAbilityNode& node)
     {
         if (node.canFoundCity)

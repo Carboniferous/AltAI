@@ -134,10 +134,11 @@ namespace AltAI
             {
                 selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Unit_Transport;
             }
-
-            const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(constructItem.unitType);
+            
             if (!constructItem.possibleBuildTypes.empty())
-            {                
+            {
+                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(constructItem.unitType);
+
                 boost::shared_ptr<MapAnalysis> pMapAnalysis = player.getAnalysis()->getMapAnalysis();
                 CityIter cityIter(*player.getCvPlayer());
                 CvCity* pCity;
@@ -229,6 +230,57 @@ namespace AltAI
                             os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
     #endif
                             selectedConstructItem.possibleBuildTypes.insert(*ci);
+                        }
+                    }
+                }
+            }
+        
+            // missionaries...
+            if (!constructItem.religionTypes.empty())
+            {
+                if (constructItem.economicFlags & EconomicFlags::Output_Culture || constructItem.economicFlags & EconomicFlags::Output_Happy)
+                {
+                    CityIter iter(*player.getCvPlayer());
+                    while (CvCity* pCity = iter())
+                    {
+                        const City& city = player.getCity(pCity->getID());
+                        if (constructItem.economicFlags & EconomicFlags::Output_Culture)
+                        {
+                            const CityDataPtr& pCityData = city.getCityData(); 
+                            if (pCityData && pCityData->getNumUncontrolledPlots(true) > 0)
+                            {
+                                for (size_t i = 0, count = constructItem.religionTypes.size(); i < count; ++i)
+                                {
+                                    if (!pCity->isHasReligion(constructItem.religionTypes[i]))
+                                    {
+                                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Culture;
+                                        if (std::find(selectedConstructItem.religionTypes.begin(), selectedConstructItem.religionTypes.end(), constructItem.religionTypes[i]) ==
+                                            selectedConstructItem.religionTypes.end())
+                                        {
+                                            selectedConstructItem.religionTypes.push_back(constructItem.religionTypes[i]);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (constructItem.economicFlags & EconomicFlags::Output_Happy)
+                        {
+                            if (pCity->happyLevel() - pCity->unhappyLevel() < 0)
+                            {
+                                for (size_t i = 0, count = constructItem.religionTypes.size(); i < count; ++i)
+                                {
+                                    if (!pCity->isHasReligion(constructItem.religionTypes[i]))
+                                    {
+                                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Happy;
+                                        if (std::find(selectedConstructItem.religionTypes.begin(), selectedConstructItem.religionTypes.end(), constructItem.religionTypes[i]) ==
+                                            selectedConstructItem.religionTypes.end())
+                                        {
+                                            selectedConstructItem.religionTypes.push_back(constructItem.religionTypes[i]);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

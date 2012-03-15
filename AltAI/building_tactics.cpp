@@ -205,7 +205,7 @@ namespace AltAI
             (constructItem.processType != NO_PROCESS))
         //if (pCity->canConstruct(constructItem.buildingType) && pCity->getFirstBuildingOrder(constructItem.buildingType) == -1)
         {
-            const boost::shared_ptr<CityData>& pCityData = city.getCityData();
+            const CityDataPtr& pCityData = city.getCityData();
 
             const int cityCount = pPlayer->getNumCities();
             const int maxResearchRate = player.getMaxResearchRate();
@@ -474,7 +474,7 @@ namespace AltAI
             couldConstructBuilding(player, city, 2, player.getAnalysis()->getBuildingInfo(constructItem.buildingType)) && pCity->getFirstBuildingOrder(constructItem.buildingType) == -1)
         //if (pCity->canConstruct(constructItem.buildingType) && pCity->getFirstBuildingOrder(constructItem.buildingType) == -1)
         {
-            const boost::shared_ptr<CityData>& pCityData = city.getCityData();
+            const CityDataPtr& pCityData = city.getCityData();
 
             const int cityCount = pPlayer->getNumCities();
             const std::pair<int, int> rankAndMaxProduction = player.getCityRank(pCity->getIDInfo(), OUTPUT_PRODUCTION);

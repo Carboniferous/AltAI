@@ -491,6 +491,12 @@
 				RelativePath=".\city_data.h">
 			</File>
 			<File
+				RelativePath=".\city_projections.cpp">
+			</File>
+			<File
+				RelativePath=".\city_projections.h">
+			</File>
+			<File
 				RelativePath=".\city_simulator.cpp">
 			</File>
 			<File
@@ -585,6 +591,12 @@
 			</File>
 			<File
 				RelativePath=".\building_tactics.h">
+			</File>
+			<File
+				RelativePath=".\building_tactics_items.cpp">
+			</File>
+			<File
+				RelativePath=".\building_tactics_items.h">
 			</File>
 			<File
 				RelativePath=".\building_tactics_visitors.cpp">

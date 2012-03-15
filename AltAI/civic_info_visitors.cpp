@@ -563,6 +563,45 @@ namespace AltAI
         PlayerTypes playerType_;
     };
 
+    class UpdateSpecialBuildingNotRequiredCountVisitor : public boost::static_visitor<void>
+    {
+    public:
+        explicit UpdateSpecialBuildingNotRequiredCountVisitor(std::vector<int>& specialBuildingNotRequiredCounts, bool isAdding)
+            : specialBuildingNotRequiredCounts_(specialBuildingNotRequiredCounts), isAdding_(isAdding)
+        {
+        }
+
+        template <typename T>
+            result_type operator() (const T&) const
+        {
+        }
+
+        result_type operator() (const CivicInfo::BaseNode& node) const
+        {
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                boost::apply_visitor(*this, node.nodes[i]);
+            }
+        }
+
+        // hurrying is useful for building units too
+        result_type operator() (const CivicInfo::BuildingNode& node) const
+        {
+            if (isAdding_)
+            {
+                ++specialBuildingNotRequiredCounts_[node.specialBuildingTypeNotReqd];
+            }
+            else
+            {
+                --specialBuildingNotRequiredCounts_[node.specialBuildingTypeNotReqd];
+            }
+        }
+
+    private:
+        std::vector<int>& specialBuildingNotRequiredCounts_;
+        bool isAdding_;
+    };
+
     boost::shared_ptr<CivicInfo> makeCivicInfo(CivicTypes civicType, PlayerTypes playerType)
     {
         return boost::shared_ptr<CivicInfo>(new CivicInfo(civicType, playerType));
@@ -599,5 +638,10 @@ namespace AltAI
     bool civicHasPotentialMilitaryImpact(PlayerTypes playerType, const boost::shared_ptr<CivicInfo>& pCivicInfo)
     {
         return boost::apply_visitor(CivicHasPotentialMilitaryImpactVisitor(playerType), pCivicInfo->getInfo());
+    }
+
+    void updateSpecialBuildingNotRequiredCount(std::vector<int>& specialBuildingNotRequiredCounts, const boost::shared_ptr<CivicInfo>& pCivicInfo, bool isAdding)
+    {
+        boost::apply_visitor(UpdateSpecialBuildingNotRequiredCountVisitor(specialBuildingNotRequiredCounts, isAdding), pCivicInfo->getInfo());
     }
 }

@@ -18,4 +18,6 @@ namespace AltAI
 
     bool civicHasPotentialEconomicImpact(PlayerTypes playerType, const boost::shared_ptr<CivicInfo>& pCivicInfo);
     bool civicHasPotentialMilitaryImpact(PlayerTypes playerType, const boost::shared_ptr<CivicInfo>& pCivicInfo);
+
+    void updateSpecialBuildingNotRequiredCount(std::vector<int>& specialBuildingNotRequiredCounts, const boost::shared_ptr<CivicInfo>& pCivicInfo, bool isAdding);
 }

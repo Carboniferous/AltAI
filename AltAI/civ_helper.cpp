@@ -1,37 +1,32 @@
 #include "./civ_helper.h"
+#include "./player.h"
+#include "./city.h"
+#include "./player_analysis.h"
+#include "./civic_info_visitors.h"
+#include "./iters.h"
 
 namespace AltAI
 {
-    CivHelper::CivHelper(const CvPlayer& player) : player_(player)
-    {
-        init_();
-    }
-
-    CivHelper::CivHelper(PlayerTypes playerType) : player_(CvPlayerAI::getPlayer(playerType))
-    {
-        init_();
-    }
-
-    CivHelper::CivHelper(const CivHelper& other)
-        : player_(other.player_), techs_(other.techs_), techsToResearch_(other.techsToResearch_),
-          availableCivics_(other.availableCivics_), currentCivics_(other.currentCivics_)
+    CivHelper::CivHelper(const Player& player) : player_(player)
     {
     }
 
-    void CivHelper::init_()
+    void CivHelper::init()
     {
         const int numCivicOptions = gGlobals.getNumCivicOptionInfos();
         currentCivics_.resize(numCivicOptions, NO_CIVIC);
+        specialBuildingNotRequiredCounts_.resize(gGlobals.getNumSpecialBuildingInfos(), 0);
 
         for (int i = 0; i < numCivicOptions; ++i)
         {
-            currentCivics_[i] = player_.getCivics((CivicOptionTypes)i);
+            currentCivics_[i] = player_.getCvPlayer()->getCivics((CivicOptionTypes)i);
+            updateSpecialBuildingNotRequiredCount(specialBuildingNotRequiredCounts_, player_.getAnalysis()->getCivicInfo(currentCivics_[i]), true);
         }
     }
 
     bool CivHelper::hasTech(TechTypes techType) const
     {
-        return CvTeamAI::getTeam(player_.getTeam()).isHasTech(techType) || techs_.find(techType) != techs_.end();
+        return CvTeamAI::getTeam(player_.getTeamID()).isHasTech(techType) || techs_.find(techType) != techs_.end();
     }
 
     void CivHelper::addTech(TechTypes techType)
@@ -53,7 +48,7 @@ namespace AltAI
     {
         for (int i = 0, count = gGlobals.getNumTechInfos(); i < count; ++i)
         {
-            if (player_.canEverResearch((TechTypes)i))
+            if (player_.getCvPlayer()->canEverResearch((TechTypes)i))
             {
                 techs_.insert((TechTypes)i);
             }
@@ -92,7 +87,7 @@ namespace AltAI
 
     bool CivHelper::civicIsAvailable(CivicTypes civicType)
     {
-        return player_.canDoCivics(civicType) || availableCivics_.find(civicType) != availableCivics_.end();
+        return player_.getCvPlayer()->canDoCivics(civicType) || availableCivics_.find(civicType) != availableCivics_.end();
     }
 
     void CivHelper::addCivic(CivicTypes civicType)
@@ -102,7 +97,13 @@ namespace AltAI
 
     void CivHelper::adoptCivic(CivicTypes civicType)
     {
-        currentCivics_[gGlobals.getCivicInfo(civicType).getCivicOptionType()] = civicType;
+        CivicOptionTypes civicOptionType = (CivicOptionTypes)gGlobals.getCivicInfo(civicType).getCivicOptionType();
+        if (currentCivics_[civicOptionType] != civicType)
+        {
+            updateSpecialBuildingNotRequiredCount(specialBuildingNotRequiredCounts_, player_.getAnalysis()->getCivicInfo(currentCivics_[civicOptionType]), false);
+            currentCivics_[gGlobals.getCivicInfo(civicType).getCivicOptionType()] = civicType;
+            updateSpecialBuildingNotRequiredCount(specialBuildingNotRequiredCounts_, player_.getAnalysis()->getCivicInfo(civicType), true);
+        }
     }
 
     void CivHelper::makeAllCivicsAvailable()
@@ -111,5 +112,15 @@ namespace AltAI
         {
             availableCivics_.insert((CivicTypes)i);
         }
+    }
+
+    const std::vector<CivicTypes>& CivHelper::getCurrentCivics() const
+    {
+        return currentCivics_;
+    }
+
+    int CivHelper::getSpecialBuildingNotRequiredCount(SpecialBuildingTypes specialBuildingType) const
+    {
+        return specialBuildingNotRequiredCounts_[specialBuildingType];
     }
 }

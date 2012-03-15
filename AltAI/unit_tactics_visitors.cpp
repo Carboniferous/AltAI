@@ -8,6 +8,7 @@
 #include "./unit_analysis.h"
 #include "./helper_fns.h"
 #include "./city.h"
+#include "./civ_helper.h"
 #include "./civ_log.h"
 
 namespace AltAI
@@ -42,6 +43,23 @@ namespace AltAI
             for (size_t i = 0, count = node.buildTypes.size(); i < count; ++i)
             {
                 constructItem_.possibleBuildTypes.insert(std::make_pair(node.buildTypes[i], 0));
+            }
+        }
+
+        void operator() (const UnitInfo::ReligionNode& node)
+        {
+            if (player_.getCvPlayer()->getHasReligionCount(node.prereqReligion) > 0)
+            {
+                if (!node.religionSpreads.empty())
+                {
+                    constructItem_.economicFlags |= EconomicFlags::Output_Culture;
+                    constructItem_.economicFlags |= EconomicFlags::Output_Happy;
+
+                    for (size_t i = 0, count = node.religionSpreads.size(); i < count; ++i)
+                    {
+                        constructItem_.religionTypes.push_back(node.religionSpreads[i].first);
+                    }
+                }
             }
         }
 

@@ -98,6 +98,13 @@ namespace AltAI
             std::vector<BuildTypes> buildTypes;
         };
 
+        struct ReligionNode
+        {
+            ReligionNode() : prereqReligion(NO_RELIGION) {}
+            ReligionTypes prereqReligion;
+            std::vector<std::pair<ReligionTypes, int> > religionSpreads;
+        };
+
         struct MiscAbilityNode
         {   
             MiscAbilityNode() : canFoundCity(false), betterHutResults(false) {}
@@ -106,11 +113,11 @@ namespace AltAI
 
         typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, UpgradeNode, CombatNode, 
             CollateralNode, CityCombatNode, AirCombatNode, CombatBonusNode, CargoNode, PromotionsNode,
-            BuildNode, MiscAbilityNode> UnitInfoNode;
+            BuildNode, ReligionNode, MiscAbilityNode> UnitInfoNode;
 
         struct BaseNode
         {
-            explicit BaseNode(UnitTypes unitType_) : unitType(unitType_), domainType(NO_DOMAIN), cost(0), minAreaSize(-1) {}
+            explicit BaseNode(UnitTypes unitType_) : unitType(unitType_), domainType(NO_DOMAIN), cost(0), minAreaSize(-1), prereqBuildingType(NO_BUILDING) {}
 
             UnitTypes unitType;
             DomainTypes domainType;
@@ -118,6 +125,7 @@ namespace AltAI
             int cost, minAreaSize;
             std::vector<BonusTypes> andBonusTypes, orBonusTypes;
             std::vector<TechTypes> techTypes;
+            BuildingTypes prereqBuildingType;
             std::vector<UnitInfoNode> nodes;
         };
 

@@ -7,6 +7,9 @@ namespace AltAI
 {
     class Player;
     class City;
+    class TechInfo;
+    class ICityBuildingTactics;
+    typedef boost::shared_ptr<ICityBuildingTactics> ICityBuildingTacticsPtr;
 
     struct PlayerTactics
     {
@@ -29,6 +32,8 @@ namespace AltAI
         void selectProjectTactics();
         void selectProjectTactics(const City& city);
 
+        void updateCityBuildingTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
+
         ConstructItem getBuildItem(const City& city);
 
         void selectCityTactics();
@@ -39,6 +44,10 @@ namespace AltAI
         ConstructList possibleUnitTactics_, selectedUnitTactics_;
         ConstructList possibleBuildingTactics_, possibleProjectTactics_;
         std::map<IDInfo, ConstructList> selectedCityBuildingTactics_, selectedCityProjectTactics_;
+
+        typedef std::list<ICityBuildingTacticsPtr> CityBuildingTacticsList;
+        typedef std::map<IDInfo, CityBuildingTacticsList> CityBuildingTacticsMap;
+        CityBuildingTacticsMap cityBuildingTacticsMap_;
 
         Player& player;
 

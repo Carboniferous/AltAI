@@ -104,13 +104,13 @@ namespace AltAI
     struct SimulationOutput
     {
         SimulationOutput() : hurryData(NO_HURRY) {}
-        void addTurn(const boost::shared_ptr<CityData>& cityOutputData);
+        void addTurn(const CityDataPtr& cityOutputData);
 
         std::vector<TotalOutput> cumulativeOutput;
         std::vector<int> cumulativeCost;
         std::vector<GreatPersonOutputMap> cumulativeGPP;
         std::vector<std::pair<int, int> > popHistory;
-        boost::shared_ptr<CityData> pCityData;
+        CityDataPtr pCityData;
         boost::shared_ptr<CityOptimiser> pCityOptimiser;
         HurryData hurryData;
 
@@ -165,7 +165,7 @@ namespace AltAI
         friend class TestBuildingBuilt;
         friend class PopChange;
 
-        CitySimulation(const CvCity* pCity, const boost::shared_ptr<CityData>& pCityData, const ConstructItem& constructItem = ConstructItem(NO_BUILDING));
+        CitySimulation(const CvCity* pCity, const CityDataPtr& pCityData, const ConstructItem& constructItem = ConstructItem(NO_BUILDING));
 
         SimulationOutput simulateAsIs(int nTurns, OutputTypes outputType = NO_OUTPUT);
 
@@ -177,14 +177,14 @@ namespace AltAI
         void setNeedsOpt() { needsOpt_ = true; }
         void logPlots(bool printAllPlots = false) const;
         boost::shared_ptr<CityOptimiser> getCityOptimiser() const;
-        boost::shared_ptr<CityData> getCityData() const;
+        CityDataPtr getCityData() const;
 
     private:
         void simulateNoHurry_(BuildingSimulationResults::BuildingResult& results, int nTurns);
         void simulateHurry_(BuildingSimulationResults::BuildingResult& results, const HurryData& hurryData, int nTurns);
 
         const CvCity* pCity_;
-        boost::shared_ptr<CityData> pCityData_;
+        CityDataPtr pCityData_;
         boost::shared_ptr<CityOptimiser> pCityOptimiser_;
         boost::shared_ptr<CityLog> pLog_;
         int turn_;

@@ -86,7 +86,7 @@ namespace AltAI
 #endif
     }
 
-    void CityLog::logCityData(const boost::shared_ptr<CityData>& pCityData)
+    void CityLog::logCityData(const CityDataPtr& pCityData)
     {
 #ifdef ALTAI_DEBUG
         pCityData->debugBasicData(logFile_);

@@ -88,7 +88,7 @@ namespace AltAI
         growthThreshold_ = 100 * pCity->growthThreshold();
         foodKeptPercent_ = pCity->getMaxFoodKeptPercent();
 
-        commerceYieldModifier_ += modifiersHelper_->getTotalYieldModifier()[YIELD_COMMERCE];
+        commerceYieldModifier_ = modifiersHelper_->getTotalYieldModifier()[YIELD_COMMERCE];
 
         for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)
         {
@@ -325,6 +325,50 @@ namespace AltAI
         recalcOutputs();
     }
 
+    // first = turns (MAX_INT if never), second = pop change (+1, -1, 0)
+    std::pair<int, int> CityData::getTurnsToPopChange() const
+    {
+        const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
+        const int requiredFood = 100 * (cityPopulation_ * foodPerPop) + getLostFood();
+        const int foodOutput = getFood();
+        const int foodDelta = foodOutput - requiredFood;
+
+        if (foodDelta > 0)
+        {
+            const int growthRate = (getGrowthThreshold() - getCurrentFood()) / foodDelta;
+            const int growthDelta = (getGrowthThreshold() - getCurrentFood()) % foodDelta;
+            return std::make_pair(1, growthRate + (growthDelta ? 1 : 0));
+        }
+        else if (foodDelta < 0)
+        {
+            const int starvationRate = -getCurrentFood() / foodDelta;
+            const int starvationDelta = -getCurrentFood() % foodDelta;
+            if (cityPopulation_ > 1)  // can't starve below 1 pop
+            {
+                return std::make_pair(-1, std::max<int>(1, starvationRate + (starvationDelta ? -1 : 0)));
+            }
+        }
+
+        return std::make_pair(0, MAX_INT);
+    }
+
+    // current food, stored food - doesn't handle pop changes
+    std::pair<int, int> CityData::getAccumulatedFood(int nTurns)
+    {
+        const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
+        const int requiredFood = 100 * (cityPopulation_ * foodPerPop) + getLostFood();
+        const int foodOutput = getFood();
+        const int foodDelta = foodOutput - requiredFood;
+
+        int finalCurrentFood = currentFood_ + foodDelta * nTurns;
+        int finalStoredFood = storedFood_ + (foodDelta > 0 ? ((foodDelta * nTurns * foodKeptPercent_) / 100) : storedFood_ - foodDelta * nTurns);
+
+        finalCurrentFood = bound(finalCurrentFood, Range<>(0, getGrowthThreshold()));
+        finalStoredFood = bound(finalStoredFood, Range<>(0, (getGrowthThreshold() * foodKeptPercent_) / 100));
+
+        return std::make_pair(finalCurrentFood, finalStoredFood);
+    }
+
     void CityData::advanceTurn()
     {
         // TODO create event when improvements upgrade
@@ -349,22 +393,9 @@ namespace AltAI
             changePopulation(-1);
         }
 
-        int productionModifier = 100;
-        if (!queuedBuildings_.empty())
-        {
-            productionModifier += modifiersHelper_->getBuildingProductionModifier(queuedBuildings_.top());
-        }
-
-        int thisTurnProduction = ((productionModifier + modifiersHelper_->getTotalYieldModifier()[OUTPUT_PRODUCTION]) * totalOutput[OUTPUT_PRODUCTION]) / 100;
-        currentProduction_ += thisTurnProduction;
+        currentProduction_ += totalOutput[OUTPUT_PRODUCTION];
 
         cultureHelper_->advanceTurn(includeUnclaimedPlots_);
-
-        if (!queuedBuildings_.empty())
-        {
-            // TODO - consider food consumption too
-            totalOutput[OUTPUT_PRODUCTION] = 0;  // don't count production consumed by building as output
-        }
 
         if (currentProduction_ >= requiredProduction_ && !queuedBuildings_.empty())
         {
@@ -458,6 +489,11 @@ namespace AltAI
     void CityData::setStoredFood(int value)
     {
         storedFood_ = value;
+    }
+
+    void CityData::setCurrentFood(int value)
+    {
+        currentFood_ = value;
     }
 
     void CityData::changeFoodKeptPercent(int change)
@@ -584,7 +620,7 @@ namespace AltAI
 #endif
     }
 
-    int CityData::getBuildingProductionModifier_()
+    int CityData::getBuildingProductionModifier_() const
     {
         int productionModifier = 0;
         if (!queuedBuildings_.empty())
@@ -598,13 +634,15 @@ namespace AltAI
 
     TotalOutput CityData::getOutput() const
     {
-        YieldModifier yieldModifier = makeYield(100, 100, commerceYieldModifier_);
-        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+        YieldModifier yieldModifier = modifiersHelper_->getTotalYieldModifier();
+        CommerceModifier commerceModifier = modifiersHelper_->getTotalCommerceModifier();
 
-        TotalOutput totalOutput(cityPlotOutput_.actualOutput);
+        YieldModifier commerceYieldModifier = makeYield(100, 100, commerceYieldModifier_);
+        TotalOutput totalOutput = makeOutput(tradeRouteHelper_->getTradeYield(), commerceYieldModifier, makeCommerce(100, 100, 100, 100), commercePercent_);
 
-        // add trade routes
-        totalOutput += makeOutput(tradeRouteHelper_->getTradeYield(), yieldModifier, commerceModifier, commercePercent_);
+        yieldModifier[OUTPUT_PRODUCTION] += getBuildingProductionModifier_();
+
+        totalOutput += cityPlotOutput_.actualOutput;
 
         for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
@@ -622,7 +660,14 @@ namespace AltAI
             }
         }
 
-        // todo - multiply by final yield and commerce modifiers? (just scaling)
+        // multiply by final yield and commerce modifiers
+        totalOutput[OUTPUT_FOOD] = (totalOutput[OUTPUT_FOOD] * yieldModifier[YIELD_FOOD]) / 100;
+        totalOutput[OUTPUT_PRODUCTION] = (totalOutput[OUTPUT_PRODUCTION] * yieldModifier[YIELD_PRODUCTION]) / 100;
+        totalOutput[OUTPUT_RESEARCH] = (totalOutput[OUTPUT_RESEARCH] * commerceModifier[COMMERCE_RESEARCH]) / 100;
+        totalOutput[OUTPUT_GOLD] = (totalOutput[OUTPUT_GOLD] * commerceModifier[COMMERCE_GOLD]) / 100;
+        totalOutput[OUTPUT_CULTURE] = (totalOutput[OUTPUT_CULTURE] * commerceModifier[COMMERCE_CULTURE]) / 100;
+        totalOutput[OUTPUT_ESPIONAGE] = (totalOutput[OUTPUT_ESPIONAGE] * commerceModifier[COMMERCE_ESPIONAGE]) / 100;
+
         return totalOutput;
     }
 

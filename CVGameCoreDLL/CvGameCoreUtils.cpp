@@ -31,10 +31,12 @@
 #define PATH_DAMAGE_WEIGHT										(500)
 
 // AltAI
-#define PATH_NONOBSOLETE_BONUS_WEIGHT            (5)
-#define PATH_EXISTING_IMPROVEMENT_WEIGHT         (1)
+#define PATH_NONOBSOLETE_BONUS_WEIGHT     (10)
+#define PATH_UPGRADED_IMPROVEMENT_WEIGHT  (3)
+#define PATH_FINAL_UPGRADED_IMPROVEMENT_WEIGHT (5)
+#define PATH_EXISTING_IMPROVEMENT_WEIGHT  (2)
 #define PATH_EXISTING_WORKED_IMPROVEMENT_WEIGHT  (2)
-#define PATH_EXISTING_GOOD_FEATURE_WEIGHT        (1)
+#define PATH_EXISTING_GOOD_FEATURE_WEIGHT (1)
 
 namespace
 {
@@ -2210,7 +2212,9 @@ int irrigationStepCost(FAStarNode* parent, FAStarNode* node, int data, const voi
     PlayerTypes playerType = (PlayerTypes)(gDLL->getFAStarIFace()->GetInfo(finder));
     TeamTypes teamType = CvPlayerAI::getPlayer(playerType).getTeam();
 
-    // #define PATH_NONOBSOLETE_BONUS_WEIGHT     (5)
+    // #define PATH_NONOBSOLETE_BONUS_WEIGHT     (10)
+    // #define PATH_UPGRADED_IMPROVEMENT_WEIGHT  (3)
+    // #define PATH_FINAL_UPGRADED_IMPROVEMENT_WEIGHT (5)
     // #define PATH_EXISTING_IMPROVEMENT_WEIGHT  (2)
     // #define PATH_EXISTING_WORKED_IMPROVEMENT_WEIGHT  (2)
     // #define PATH_EXISTING_GOOD_FEATURE_WEIGHT (1)
@@ -2240,11 +2244,23 @@ int irrigationStepCost(FAStarNode* parent, FAStarNode* node, int data, const voi
         const CvImprovementInfo& improvementInfo = GC.getImprovementInfo(improvementType);
         if (!improvementInfo.isCarriesIrrigation())
         {
+
             iCost += PATH_EXISTING_IMPROVEMENT_WEIGHT;
             if (pToPlot->isBeingWorked())
             {
                 iCost += PATH_EXISTING_WORKED_IMPROVEMENT_WEIGHT;
             }
+
+            if ((ImprovementTypes)improvementInfo.getImprovementPillage() != NO_IMPROVEMENT)
+            {
+                iCost += PATH_UPGRADED_IMPROVEMENT_WEIGHT;
+
+                if ((ImprovementTypes)improvementInfo.getImprovementUpgrade() == NO_IMPROVEMENT)
+                {
+                    iCost += PATH_FINAL_UPGRADED_IMPROVEMENT_WEIGHT;
+                }
+            }
+            
         }
     }
 
