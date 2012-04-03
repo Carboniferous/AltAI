@@ -16,6 +16,7 @@
 #include "./religion_helper.h"
 #include "./specialist_helper.h"
 #include "./trade_route_helper.h"
+#include "./city_improvements.h"
 
 #include <stack>
 #include <queue>
@@ -34,8 +35,6 @@ namespace AltAI
         None, FavourGreatPeople, FavourImprovementUpgrade
     };
 
-    class CityImprovementManager;
-
     typedef std::list<PlotData> PlotDataList;
     typedef PlotDataList::const_iterator PlotDataListConstIter;
     typedef PlotDataList::iterator PlotDataListIter;
@@ -46,7 +45,7 @@ namespace AltAI
         friend class CultureHelper;
     public:
         explicit CityData(const CvCity* pCity_, bool includeUnclaimedPlots = false);
-        CityData(const CvCity* pCity_, const CityImprovementManager& improvements);
+        CityData(const CvCity* pCity_, const std::vector<CityImprovementManager::PlotImprovementData>& improvements, bool includeUnclaimedPlots = false);
 
         CityDataPtr clone() const;
 
@@ -207,7 +206,8 @@ namespace AltAI
             return freeSpecOutputs_;
         }
 
-        PlotData findPlot(XYCoords coords) const;
+        PlotDataListIter findPlot(XYCoords coords);
+        PlotDataListConstIter findPlot(XYCoords coords) const;
 
         int getNumPossibleSpecialists(SpecialistTypes specialistType) const;
         // todo - call this when grow if have unlimited specs
@@ -373,7 +373,7 @@ namespace AltAI
         int setBuilding_();
 
         void calcOutputsFromPlotData_(const CvCity* pCity);
-        void calcOutputsFromPlannedImprovements_(const CityImprovementManager& improvements);
+        void calcOutputsFromPlannedImprovements_(const std::vector<CityImprovementManager::PlotImprovementData>& improvements);
         void calcCityOutput_();
         void calculateSpecialistOutput_();
 

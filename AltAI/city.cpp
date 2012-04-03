@@ -77,12 +77,6 @@ namespace AltAI
 
     void City::doTurn()
     {
-        const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
-        currentOutputProjection_ = getProjectedOutput(*player, pCityData_, 50);
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
-        currentOutputProjection_.debug(os);
-#endif
         setFlag(CanReassignSharedPlots);
 
         if (flags_ & NeedsImprovementCalcs)
@@ -106,6 +100,14 @@ namespace AltAI
             os << " Building " << (count > 0 ? "built: " : "lost: ") << gGlobals.getBuildingInfo(buildingType).getType();
         }
 #endif
+        BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(buildingType).getBuildingClassType();
+        const bool isWorldWonder = isWorldWonderClass(buildingClassType), isNationalWonder = isNationalWonderClass(buildingClassType);
+        if (!isWorldWonder && !isNationalWonder)
+        {
+            gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->getAnalysis()->getPlayerTactics()->
+                updateCityBuildingTactics(pCity_->getIDInfo(), buildingType, count);
+        }
+
         setFlag(NeedsBuildSelection);
         setFlag(NeedsBuildingCalcs);
     }
@@ -233,6 +235,10 @@ namespace AltAI
             flags_ &= ~CanReassignSharedPlots;
         }
 
+        // update projection
+        const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
+        currentOutputProjection_ = getProjectedOutput(*player, pCityData_->clone(), 50);
+
 #ifdef ALTAI_DEBUG
         {
             boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()));
@@ -308,6 +314,9 @@ namespace AltAI
 
     boost::tuple<UnitTypes, BuildingTypes, ProcessTypes, ProjectTypes> City::getBuild()
     {
+        const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
+        player->getAnalysis()->getPlayerTactics()->updateCityBuildingTactics(pCity_->getIDInfo());
+
         if (constructItem_.projectType != NO_PROJECT)
         {
             if (pCity_->getProjectProduction(constructItem_.projectType) > 0 && pCity_->getProductionNeeded(constructItem_.projectType) > 0)
@@ -333,7 +342,6 @@ namespace AltAI
 #endif
         if (flags_ & NeedsBuildSelection)
         {
-            const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
             constructItem_ = player->getAnalysis()->getPlayerTactics()->getBuildItem(*this);
 #ifdef ALTAI_DEBUG
             os << "\n" << narrow(pCity_->getName()) << " calculated build: " << constructItem_;
@@ -342,17 +350,11 @@ namespace AltAI
 
         if (constructItem_.buildingType != NO_BUILDING)
         {
-            const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
-
-            // update current base line
-            currentOutputProjection_ = getProjectedOutput(*player, pCityData_->clone(), 50);
-            
             ProjectionLadder buildingLadder = getProjectedOutput(*player, pCityData_->clone(), player->getAnalysis()->getBuildingInfo(constructItem_.buildingType), 50);
 
 #ifdef ALTAI_DEBUG
             os << "\n" << narrow(pCity_->getName()) << " projection: ";
             buildingLadder.debug(os);
-            currentOutputProjection_.debug(os);
             os << ", delta = " << buildingLadder.getOutput() - currentOutputProjection_.getOutput();
 #endif
             return boost::make_tuple(NO_UNIT, constructItem_.buildingType, NO_PROCESS, NO_PROJECT);
@@ -1196,6 +1198,11 @@ namespace AltAI
     const CityDataPtr& City::getCityData() const
     {
         return pCityData_;
+    }
+
+    const ProjectionLadder& City::getCurrentOutputProjection() const
+    {
+        return currentOutputProjection_;
     }
 
     void City::write(FDataStreamBase* pStream) const

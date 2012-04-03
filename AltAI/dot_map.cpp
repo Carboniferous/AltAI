@@ -10,7 +10,7 @@ namespace AltAI
     {
     }
 
-    DotMapItem::PlotData::PlotData(const CvPlot* pPlot, PlayerTypes playerType, int lookAheadDepth) :
+    DotMapItem::DotMapPlotData::DotMapPlotData(const CvPlot* pPlot, PlayerTypes playerType, int lookAheadDepth) :
         workedImprovement(-1), neighbourCityCount(0), workedByNeighbour(false), isPinned(false), isSelected(true), improvementMakesBonusValid(false)
     {
         TeamTypes teamType = PlayerIDToTeamID(playerType);
@@ -37,11 +37,11 @@ namespace AltAI
         }
     }
 
-    DotMapItem::PlotData DotMapItem::getPlotData(XYCoords coords) const
+    DotMapItem::DotMapPlotData DotMapItem::getPlotData(XYCoords coords) const
     {
-        PlotData key(coords);
+        DotMapPlotData key(coords);
         PlotDataSet::const_iterator ci = plotData.find(key);
-        return ci != plotData.end() ? *ci : PlotData();
+        return ci != plotData.end() ? *ci : DotMapPlotData();
     }
 
     PlotYield DotMapItem::getWeightedOutput(PlayerTypes playerType) const
@@ -52,10 +52,10 @@ namespace AltAI
 
         MixedOutputOrderFunctor<PlotYield> mixedF(yieldPriority, OutputUtils<PlotYield>::getDefaultWeights());
 
-        typedef std::multiset<PlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
+        typedef std::multiset<DotMapPlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
         SortedPlots sortedPlots(mixedF);
 
-        for (std::set<PlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
+        for (std::set<DotMapPlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
         {
             sortedPlots.insert(*pi);
         }
@@ -114,10 +114,10 @@ namespace AltAI
 
         MixedOutputOrderFunctor<PlotYield> mixedF(yieldPriority, OutputUtils<PlotYield>::getDefaultWeights());
 
-        typedef std::multiset<PlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
+        typedef std::multiset<DotMapPlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
         SortedPlots sortedPlots(mixedF);
 
-        for (std::set<PlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
+        for (std::set<DotMapPlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
         {
             sortedPlots.insert(*pi);
         }
@@ -158,10 +158,10 @@ namespace AltAI
 
         MixedOutputOrderFunctor<PlotYield> mixedF(yieldPriority, yieldWeights);
 
-        typedef std::multiset<PlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
+        typedef std::multiset<DotMapPlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
         SortedPlots sortedPlots(mixedF);
 
-        for (std::set<PlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
+        for (std::set<DotMapPlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
         {
             sortedPlots.insert(*pi);
         }
@@ -190,10 +190,10 @@ namespace AltAI
     {
         MixedOutputOrderFunctor<PlotYield> mixedF(makeYieldP(YIELD_FOOD), OutputUtils<PlotYield>::getDefaultWeights());
 
-        typedef std::multiset<PlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
+        typedef std::multiset<DotMapPlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
         SortedPlots sortedPlots(mixedF);
 
-        for (std::set<PlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
+        for (std::set<DotMapPlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
         {
             sortedPlots.insert(*pi);
         }
@@ -224,7 +224,7 @@ namespace AltAI
 
     PlotYield DotMapItem::getOutput(XYCoords coords, int improvementIndex) const
     {
-        PlotData tmp(coords);
+        DotMapPlotData tmp(coords);
         PlotDataConstIter ci = plotData.find(tmp);
         if (ci != plotData.end())
         {
@@ -245,10 +245,10 @@ namespace AltAI
 
         MixedOutputOrderFunctor<PlotYield> mixedF(yieldPriority, OutputUtils<PlotYield>::getDefaultWeights());
 
-        typedef std::multiset<PlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
+        typedef std::multiset<DotMapPlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
         SortedPlots sortedPlots(mixedF);
 
-        for (std::set<PlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
+        for (std::set<DotMapPlotData>::const_iterator pi(plotData.begin()), piEnd(plotData.end()); pi != piEnd; ++pi)
         {
             sortedPlots.insert(*pi);
         }

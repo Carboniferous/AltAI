@@ -104,7 +104,7 @@ namespace AltAI
         ImprovementTypes getSubstituteImprovement(XYCoords coords);
 
         void logImprovements() const;
-        void logImprovement(std::ostream& os, const PlotImprovementData& improvement) const;
+        static void logImprovement(std::ostream& os, const PlotImprovementData& improvement);
 
         IDInfo getCity() const { return city_; }
 

@@ -15,7 +15,7 @@ namespace AltAI
 
         for (size_t i = 0, count = entries.size(); i < count; ++i)
         {
-            os << "\n\tTurn = " << entries[i].turns << ", pop = " << entries[i].pop << ", " << entries[i].output << ", " << entries[i].cost;
+            os << "\n\tTurns = " << entries[i].turns << ", pop = " << entries[i].pop << ", " << entries[i].output << ", " << entries[i].cost;
         }
 
         for (size_t i = 0, count = entries.size(); i < count; ++i)
@@ -74,9 +74,9 @@ namespace AltAI
 
     ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns)
     {
-#ifdef ALTAI_DEBUG
+/*#ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
-#endif        
+#endif*/        
         CityOptimiser cityOptimiser(pCityData);
 
         std::vector<OutputTypes> outputTypes = boost::assign::list_of(OUTPUT_PRODUCTION)(OUTPUT_RESEARCH);
@@ -95,16 +95,16 @@ namespace AltAI
             cityOptimiser.optimise<MixedWeightedTotalOutputOrderFunctor>(outputPriorities, outputWeights, cityOptimiser.getGrowthType());
             TotalOutput thisOutput = pCityData->getOutput();
 
-#ifdef ALTAI_DEBUG
-            os << "\n final output = " << thisOutput << " ";
-            pCityData->debugBasicData(os);
-            cityOptimiser.debug(os, true);
-#endif
+//#ifdef ALTAI_DEBUG
+//            os << "\n final output = " << thisOutput << " ";
+//            pCityData->debugBasicData(os);
+//            cityOptimiser.debug(os, true);
+//#endif
             int turnsToPopChange = MAX_INT, popChange = 0;
             boost::tie(popChange, turnsToPopChange) = pCityData->getTurnsToPopChange();
                
             ladder.entries.push_back(
-                ProjectionLadder::Entry(pCityData->getPopulation(), turnsToPopChange == MAX_INT ? nTurns : turnsToPopChange, thisOutput,
+                ProjectionLadder::Entry(pCityData->getPopulation(), turnsToPopChange > nTurns ? nTurns : turnsToPopChange, thisOutput,
                     pCityData->getMaintenanceHelper()->getMaintenance()));
             lastOutput = thisOutput;
 
@@ -156,26 +156,35 @@ namespace AltAI
             cityOptimiser.optimise<MixedWeightedTotalOutputOrderFunctor>(outputPriorities, outputWeights, cityOptimiser.getGrowthType(), false);
             TotalOutput thisOutput = pCityData->getOutput();            
 
-#ifdef ALTAI_DEBUG
-            os << "\n final output = " << thisOutput << " ";
-            pCityData->debugBasicData(os);
-            cityOptimiser.debug(os, true);
-#endif
+//#ifdef ALTAI_DEBUG
+//            os << "\n final output = " << thisOutput << " ";
+//            pCityData->debugBasicData(os);
+//            cityOptimiser.debug(os, true);
+//#endif
             int turnsToPopChange = MAX_INT, popChange = 0;
             boost::tie(popChange, turnsToPopChange) = pCityData->getTurnsToPopChange();
 
             if (requiredProduction > 0)
             {
-                const int productionRate = requiredProduction / thisOutput[OUTPUT_PRODUCTION];
-                const int productionDelta = requiredProduction % thisOutput[OUTPUT_PRODUCTION];            
-                int turnsToComplete = productionRate + (productionDelta ? 1 : 0);
+                int turnsToComplete = MAX_INT;
 
-                if (turnsToComplete < turnsToPopChange)
+                if (thisOutput[OUTPUT_PRODUCTION] > 0)
+                {
+                    const int productionRate = requiredProduction / thisOutput[OUTPUT_PRODUCTION];
+                    const int productionDelta = requiredProduction % thisOutput[OUTPUT_PRODUCTION];
+                
+                    turnsToComplete = productionRate + (productionDelta ? 1 : 0);
+                }
+
+                if (turnsToComplete <= turnsToPopChange)
                 {
                     ladder.entries.push_back(
                         ProjectionLadder::Entry(
-                            pCityData->getPopulation(), turnsToComplete, thisOutput, pCityData->getMaintenanceHelper()->getMaintenance()));
-                    ladder.buildings.push_back(std::make_pair(totalTurns - nTurns + turnsToComplete, pBuildingInfo->getBuildingType()));
+                            pCityData->getPopulation(), turnsToComplete > nTurns ? nTurns : turnsToComplete, thisOutput, pCityData->getMaintenanceHelper()->getMaintenance()));
+                    if (turnsToComplete <= nTurns)
+                    {
+                        ladder.buildings.push_back(std::make_pair(totalTurns - nTurns + turnsToComplete, pBuildingInfo->getBuildingType()));
+                    }
                     lastOutput = thisOutput;
 
                     int currentFood = 0, storedFood = 0;
@@ -199,7 +208,7 @@ namespace AltAI
                 
             ladder.entries.push_back(
                 ProjectionLadder::Entry(
-                    pCityData->getPopulation(), turnsToPopChange == MAX_INT ? nTurns : turnsToPopChange, thisOutput, pCityData->getMaintenanceHelper()->getMaintenance()));
+                    pCityData->getPopulation(), turnsToPopChange > nTurns ? nTurns : turnsToPopChange, thisOutput, pCityData->getMaintenanceHelper()->getMaintenance()));
             lastOutput = thisOutput;
 
             if (turnsToPopChange < MAX_INT)

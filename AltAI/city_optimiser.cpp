@@ -1407,7 +1407,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                             /*os << "\nErasing improvement at: " << iter->coords << " with yield: " << iter->plotYield;
 
-                            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::PlotData(iter->coords)));
+                            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(iter->coords)));
                             ImprovementTypes improvementType = plotIter->possibleImprovements[iter->improvementIndex].second;
                             if (improvementType != NO_IMPROVEMENT)
                             {
@@ -1436,7 +1436,7 @@ namespace AltAI
         //    {
         //        for (std::list<DotMapItem::SelectedImprovement>::const_iterator ci(bestImprovementSelections[i].begin()), ciEnd(bestImprovementSelections[i].end()); ci != ciEnd; ++ci)
         //        {
-        //            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::PlotData(ci->coords)));
+        //            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(ci->coords)));
         //            os << "\n" << ci->coords << " " << ci->plotYield << " ";
         //            ImprovementTypes improvementType = plotIter->getWorkedImprovement();
         //            if (improvementType != NO_IMPROVEMENT)
@@ -1472,7 +1472,7 @@ namespace AltAI
                 // loop over ordered plot iterators for this set of improvement selections to find first plot not yet done
                 while (iters[i].first != iters[i].second)
                 {
-                    plotIter = dotMapItem_.plotData.find(DotMapItem::PlotData(iters[i].first->coords));
+                    plotIter = dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(iters[i].first->coords));
                     if (donePlots.find(iters[i].first->coords) == donePlots.end())
                     {
                         break;  // this plot not done yet
@@ -1508,7 +1508,7 @@ namespace AltAI
         //    {
         //        for (std::list<DotMapItem::SelectedImprovement>::const_iterator ci(bestImprovementSelections[i].begin()), ciEnd(bestImprovementSelections[i].end()); ci != ciEnd; ++ci)
         //        {
-        //            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::PlotData(ci->coords)));
+        //            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(ci->coords)));
         //            os << "\n" << ci->coords << " " << ci->plotYield << " ";
         //            if (ci->improvementIndex != -1 && plotIter->possibleImprovements[ci->improvementIndex].second != NO_IMPROVEMENT)
         //            {
@@ -1540,7 +1540,7 @@ namespace AltAI
         // select while less than target, still got improvements to switch...
         while (plotYield[YIELD_FOOD] < targetYield && iters[foodIndex].first != iters[foodIndex].second)
         {
-            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::PlotData(iters[foodIndex].first->coords)));
+            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(iters[foodIndex].first->coords)));
             if (!plotIter->isPinned && (plotIter->workedImprovement != iters[foodIndex].first->improvementIndex || !plotIter->isSelected))
             {
                 //  ...and improvement can at least break even (don't switch workshops to cottages on plains for example)

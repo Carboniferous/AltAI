@@ -32,6 +32,7 @@
 #include "game.h"
 #include "player.h"
 #include "city.h"
+#include "iters.h"
 
 // Public Functions...
 
@@ -10085,7 +10086,19 @@ void CvCity::setNumRealBuildingTimed(BuildingTypes eIndex, int iNewValue, bool b
 								}
 							}
 						}
-					}
+
+                        //AltAI
+                        {
+                            AltAI::PlayerIter playerIter;
+                            while (const CvPlayerAI* player = playerIter())
+                            {
+                                if (player->isUsingAltAI())
+                                {
+                                    GC.getGame().getAltAI()->getPlayer(player->getID())->eraseGlobalBuildingTactics(eIndex);
+                                }
+					        }
+                        }
+                    }
 				}
 
 				if (GC.getBuildingInfo(eIndex).isAllowsNukes())

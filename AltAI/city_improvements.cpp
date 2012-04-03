@@ -117,7 +117,7 @@ namespace AltAI
                     }
                 }
 
-                DotMapItem::PlotData plotData(pLoopPlot, playerType, lookAheadDepth);
+                DotMapItem::DotMapPlotData plotData(pLoopPlot, playerType, lookAheadDepth);
 
                 if (!plotData.possibleImprovements.empty())
                 {
@@ -679,7 +679,7 @@ namespace AltAI
 #endif
 
         CityDataPtr pCityData(new CityData(pCity, includeUnclaimedPlots_));
-        PlotImprovementSimulationResults simulatorResults(simulator.evaluateImprovements(plotsAndImprovements, *pCityData, 20, false));
+        PlotImprovementSimulationResults simulatorResults(simulator.evaluateImprovements(plotsAndImprovements, pCityData, 20, false));
 
         std::vector<boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, TotalOutput> > bestSimulatedImprovements = simulator.getBestImprovements(outputWeights, simulatorResults);
 
@@ -928,7 +928,7 @@ namespace AltAI
 #endif
         const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
 
-        DotMapItem::PlotData plotData(pPlot, city_.eOwner, 0);
+        DotMapItem::DotMapPlotData plotData(pPlot, city_.eOwner, 0);
 
         std::vector<PlotImprovementData>::iterator iter = std::find_if(improvements_.begin(), improvements_.end(), PlotDataFinder(coords));
         if (iter != improvements_.end())
@@ -1136,7 +1136,8 @@ namespace AltAI
 #endif
     }
 
-    void CityImprovementManager::logImprovement(std::ostream& os, const PlotImprovementData& improvement) const
+    // static
+    void CityImprovementManager::logImprovement(std::ostream& os, const PlotImprovementData& improvement)
     {
 #ifdef ALTAI_DEBUG
         os << "\n" << boost::get<0>(improvement);
@@ -1227,7 +1228,7 @@ namespace AltAI
             os << " worker needs transport, ";
         }
 
-        os << " rank = " << getRank(boost::get<0>(improvement), gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner)->getCity(city_.iID).getPlotAssignmentSettings().outputWeights);
+        //os << " rank = " << getRank(boost::get<0>(improvement), gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner)->getCity(city_.iID).getPlotAssignmentSettings().outputWeights);
 #endif
     }
 

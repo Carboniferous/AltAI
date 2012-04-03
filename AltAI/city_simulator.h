@@ -104,7 +104,7 @@ namespace AltAI
     struct SimulationOutput
     {
         SimulationOutput() : hurryData(NO_HURRY) {}
-        void addTurn(const CityDataPtr& cityOutputData);
+        void addTurn(const CityDataPtr& pCityData);
 
         std::vector<TotalOutput> cumulativeOutput;
         std::vector<int> cumulativeCost;
@@ -147,7 +147,7 @@ namespace AltAI
         void evaluateBuilding(BuildingTypes buildingType, int turns, BuildingSimulationResults& results, bool doBaseLine);
 
         PlotImprovementSimulationResults evaluateAllImprovements(int nTurns, bool ignoreExisting);
-        PlotImprovementSimulationResults evaluateImprovements(const PlotsAndImprovements& improvements, CityData& cityData, int nTurns, bool ignoreExisting);
+        PlotImprovementSimulationResults evaluateImprovements(const PlotsAndImprovements& improvements, const CityDataPtr& pCityData, int nTurns, bool ignoreExisting);
 
         std::pair<BuildingTypes, TotalOutput> getBestBuilding(TotalOutputWeights outputWeights, const BuildingSimulationResults& simulationResults) const;
         std::map<BuildingTypes, int> getBuildingValues(TotalOutputWeights outputWeights, const BuildingSimulationResults& simulationResults) const;

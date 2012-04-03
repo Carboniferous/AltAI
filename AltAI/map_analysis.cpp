@@ -1626,6 +1626,10 @@ namespace AltAI
         NeighbourPlotIter plotIter(pPlot, 2, 2);
         while (IterPlot pLoopPlot = plotIter())
         {
+            if (!pLoopPlot.valid())
+            {
+                continue;
+            }
 #ifdef ALTAI_DEBUG
             os << "\nChecking plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY()) << " for removal from plotValues map";
 #endif

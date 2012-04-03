@@ -1,5 +1,6 @@
 #include "./building_tactics_visitors.h"
 #include "./building_info_visitors.h"
+#include "./building_tactics_items.h"
 #include "./buildings_info.h"
 #include "./building_helper.h"
 #include "./tech_info_visitors.h"
@@ -10,6 +11,7 @@
 #include "./map_analysis.h"
 #include "./city.h"
 #include "./city_simulator.h"
+#include "./iters.h"
 #include "./helper_fns.h"
 #include "./civ_log.h"
 
@@ -458,6 +460,156 @@ namespace AltAI
         ConstructItem constructItem_;
     };
 
+    class MakeBuildingTacticsDependenciesVisitor : public boost::static_visitor<>
+    {
+    public:
+        MakeBuildingTacticsDependenciesVisitor(const Player& player, const City& city)
+            : player_(player), city_(city)
+        {
+        }
+
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const BuildingInfo::RequiredBuildings& node)
+        {
+            for (size_t i = 0, count = node.cityBuildings.size(); i < count; ++i)
+            {
+                if (city_.getCvCity()->getNumBuilding(node.cityBuildings[i]) == 0)
+                {
+                    dependentTactics_.push_back(IDependentTacticPtr(new CityBuildingDependency(node.cityBuildings[i])));
+                }
+            }
+
+            for (size_t i = 0, count = node.buildingCounts.size(); i < count; ++i)
+            {
+                int buildingCount = 0;
+                CityIter iter(*player_.getCvPlayer());
+                while (CvCity* pCity = iter())
+                {
+                    buildingCount += pCity->getNumBuilding(node.buildingCounts[i].first);
+
+                    if (buildingCount >= node.buildingCounts[i].second)
+                    {
+                        break;
+                    }
+                }
+
+                if (buildingCount < node.buildingCounts[i].second)
+                {
+                    dependentTactics_.push_back(IDependentTacticPtr(
+                        new CivBuildingDependency(node.buildingCounts[i].first, node.buildingCounts[i].second - buildingCount)));
+                }
+            }
+        }
+
+        const std::vector<IDependentTacticPtr>& getDependentTactics() const
+        {
+            return dependentTactics_;
+        }
+
+    private:
+        const Player& player_;
+        const City& city_;
+        std::vector<IDependentTacticPtr> dependentTactics_;
+    };
+
+    class MakeBuildingTacticsVisitor : public boost::static_visitor<>
+    {
+    public:
+        MakeBuildingTacticsVisitor(const Player& player, const City& city, BuildingTypes buildingType)
+            : player_(player), city_(city), buildingType_(buildingType)
+        {
+        }
+
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const BuildingInfo::BaseNode& node)
+        {
+            pTactic_ = ICityBuildingTacticsPtr(new CityBuildingTactic(buildingType_));
+
+            MakeBuildingTacticsDependenciesVisitor dependentTacticsVisitor(player_, city_);
+            for (size_t i = 0, count = node.buildConditions.size(); i < count; ++i)
+            {
+                boost::apply_visitor(dependentTacticsVisitor, node.buildConditions[i]);
+            }
+
+            const std::vector<IDependentTacticPtr>& dependentTactics = dependentTacticsVisitor.getDependentTactics();
+            for (size_t i = 0, count = dependentTactics.size(); i < count; ++i)
+            {
+                pTactic_->addDependency(dependentTactics[i]);
+            }
+
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                boost::apply_visitor(*this, node.nodes[i]);
+            }
+
+            if (node.happy > 0)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new HappyBuildingTactic()));
+            }
+
+            if (node.health > 0)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new HealthBuildingTactic()));
+            }
+
+            for (size_t i = 0, count = node.techs.size(); i < count; ++i)
+            {
+                if (player_.getTechResearchDepth(node.techs[i]) > 0)
+                {
+                    pTactic_->addDependency(IDependentTacticPtr(new ResearchTechDependency(node.techs[i])));
+                }
+            }
+        }
+
+        void operator() (const BuildingInfo::CommerceNode& node)
+        {
+            if (node.modifier[COMMERCE_RESEARCH] > 0)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new ScienceBuildingTactic()));
+            }
+            if (node.modifier[COMMERCE_GOLD] > 0)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new GoldBuildingTactic()));
+            }
+            if (node.modifier[COMMERCE_RESEARCH] > 0)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new ScienceBuildingTactic()));
+            }
+            if (node.modifier[COMMERCE_CULTURE] > 0)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new CultureBuildingTactic()));
+            }
+        }
+
+        void operator() (const BuildingInfo::SpecialistSlotNode& node)
+        {
+            if (!node.specialistTypes.empty())
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new SpecialistBuildingTactic()));
+            }
+        }
+
+        const ICityBuildingTacticsPtr& getTactic() const
+        {
+            return pTactic_;
+        }
+
+    private:
+        BuildingTypes buildingType_;
+        const Player& player_;
+        const City& city_;
+        ICityBuildingTacticsPtr pTactic_;
+
+    };
+
     ConstructItem getEconomicBuildingTactics(const Player& player, BuildingTypes buildingType, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
     {
         MakeEconomicBuildingConditionsVisitor visitor(player, buildingType);
@@ -525,5 +677,40 @@ namespace AltAI
         os << " scaled = " << projectedOutput;
 #endif
         return projectedOutput;
+    }
+
+    ICityBuildingTacticsPtr makeCityBuildingTactics(const Player& player, const City& city, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    {
+        MakeBuildingTacticsVisitor visitor(player, city, pBuildingInfo->getBuildingType());
+        boost::apply_visitor(visitor, pBuildingInfo->getInfo());
+        return visitor.getTactic();
+    }
+
+    ILimitedBuildingTacticsPtr makeGlobalBuildingTactics(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    {
+        ILimitedBuildingTacticsPtr pTactic(new GlobalBuildingTactic(pBuildingInfo->getBuildingType()));
+
+        CityIter iter(*player.getCvPlayer());
+
+        while (CvCity* pCity = iter())
+        {
+            pTactic->addCityTactic(makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+        }
+
+        return pTactic;
+    }
+
+    ILimitedBuildingTacticsPtr makeNationalBuildingTactics(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    {
+        ILimitedBuildingTacticsPtr pTactic(new NationalBuildingTactic(pBuildingInfo->getBuildingType()));
+
+        CityIter iter(*player.getCvPlayer());
+
+        while (CvCity* pCity = iter())
+        {
+            pTactic->addCityTactic(makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+        }
+
+        return pTactic;
     }
 }

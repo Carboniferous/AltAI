@@ -43,11 +43,11 @@ namespace AltAI
         calculateSpecialistOutput_();
     }
 
-    CityData::CityData(const CvCity* pCity, const CityImprovementManager& improvements)
+    CityData::CityData(const CvCity* pCity, const std::vector<CityImprovementManager::PlotImprovementData>& improvements, bool includeUnclaimedPlots)
         : cityPopulation_(0), workingPopulation_(0), happyCap_(0), currentFood_(0), storedFood_(0),
           currentProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
           commerceYieldModifier_(100), specialConditions_(None), pCity_(pCity), owner_(pCity_->getOwner()),
-          coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(improvements.getIncludeUnclaimedPlots())
+          coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots)
     {
         initHelpers_(pCity);
         init_(pCity);
@@ -150,11 +150,8 @@ namespace AltAI
         }
     }
 
-    void CityData::calcOutputsFromPlannedImprovements_(const CityImprovementManager& improvements)
+    void CityData::calcOutputsFromPlannedImprovements_(const std::vector<CityImprovementManager::PlotImprovementData>& plotImprovements)
     {
-        // typedef boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, PlotYield, TotalOutput, ImprovementState, int /*ImprovementFlags*/> PlotImprovementData;
-        const std::vector<CityImprovementManager::PlotImprovementData>& plotImprovements = improvements.getImprovements();
-
         CityPlotIter iter(pCity_);  // ok to use city here, as called from main ctor
         bool first = true;
 
@@ -963,16 +960,32 @@ namespace AltAI
         }
     }
 
-    PlotData CityData::findPlot(XYCoords coords) const
+    PlotDataListIter CityData::findPlot(XYCoords coords)
     {
-        for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
+        PlotDataListIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end());
+
+        for (; iter != endIter; ++iter)
         {
             if (iter->coords == coords)
             {
-                return *iter;
+                return iter;
             }
         }
-        return PlotData();
+        return endIter;
+    }
+
+    PlotDataListConstIter CityData::findPlot(XYCoords coords) const
+    {
+        PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end());
+
+        for (; iter != endIter; ++iter)
+        {
+            if (iter->coords == coords)
+            {
+                return iter;
+            }
+        }
+        return endIter;
     }
 
     bool CityData::canWork_(const CvPlot* pPlot) const

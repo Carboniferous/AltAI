@@ -1020,6 +1020,11 @@ namespace AltAI
         getAnalysis()->getMapAnalysis()->updatePlotCulture(pPlot, remove);
     }
 
+    void Player::eraseGlobalBuildingTactics(BuildingTypes buildingType)
+    {
+        getAnalysis()->getPlayerTactics()->eraseGlobalBuildingTactics(buildingType);
+    }
+
     void Player::notifyReligionFounded(ReligionTypes religionType, bool isOurs)
     {
 #ifdef ALTAI_DEBUG

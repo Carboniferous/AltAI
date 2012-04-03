@@ -222,7 +222,7 @@ namespace AltAI
             ImprovementTypes bestImprovement;
             boost::tie(maxYield, bestImprovement) = getMaxYield(pMapAnalysis_->getPlotInfoNode(theMap.plot(ci->coords.iX, ci->coords.iY)), playerType_, 3);
 
-            const DotMapItem::PlotData cityPlotData = ci->getPlotData(ci->coords);
+            const DotMapItem::DotMapPlotData cityPlotData = ci->getPlotData(ci->coords);
             bool onFoodSpecial = cityPlotData.bonusType != NO_BONUS && maxYield[YIELD_FOOD] > 4 && bestImprovement != NO_IMPROVEMENT;
             bool onGoodSpecial = cityPlotData.bonusType != NO_BONUS && maxYield[YIELD_FOOD] >= foodPerPop && (maxYield[YIELD_PRODUCTION] > 3 || maxYield[YIELD_COMMERCE] > 6);
 
@@ -301,7 +301,7 @@ namespace AltAI
                 //    os << "\nFound duplicate plot: " << *si;
                 //}
 
-                DotMapItem::PlotData plotData;
+                DotMapItem::DotMapPlotData plotData;
                 plotData.coords = *si;
                 boost::tie(plotData.neighbourCityCount, plotData.workedByNeighbour) = getNeighbourCityData_(pLoopPlot);
 

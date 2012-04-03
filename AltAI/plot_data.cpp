@@ -10,7 +10,7 @@ namespace AltAI
     }
 
     PlotData::PlotData(PlotYield plotYield_, Commerce commerce_, TotalOutput output_, const GreatPersonOutput& greatPersonOutput_,
-                                       XYCoords coords_, ImprovementTypes improvementType_, FeatureTypes featureType_, RouteTypes routeType_, CultureData cultureData_)
+                       XYCoords coords_, ImprovementTypes improvementType_, FeatureTypes featureType_, RouteTypes routeType_, CultureData cultureData_)
         : plotYield(plotYield_), commerce(commerce_), output(output_), actualOutput(output_), greatPersonOutput(greatPersonOutput_),
           coords(coords_), improvementType(improvementType_), featureType(featureType_), routeType(routeType_),
           cultureData(cultureData_), ableToWork(true), controlled(true), isWorked(false)

@@ -63,6 +63,7 @@ namespace AltAI
         PlotAssignmentSettings getPlotAssignmentSettings() const;
 
         const CityDataPtr& getCityData() const;
+        const ProjectionLadder& getCurrentOutputProjection() const;
 
         // save/load functions
         void write(FDataStreamBase* pStream) const;

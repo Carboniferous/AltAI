@@ -19,6 +19,7 @@
 #include "./iters.h"
 #include "./civ_helper.h"
 #include "./civ_log.h"
+#include "./error_log.h"
 #include "./tictacs.h"
 #include "./helper_fns.h"
 #include "./save_utils.h"
@@ -434,6 +435,9 @@ namespace AltAI
         {
             return unitsIter->second;
         }
+
+        std::ostream& os = ErrorLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nFailed to find unit information for unit: " << gGlobals.getUnitInfo(unitType).getType();
         
         return boost::shared_ptr<UnitInfo>();
     }
@@ -447,6 +451,9 @@ namespace AltAI
             return buildingsIter->second;
         }
         
+        std::ostream& os = ErrorLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nFailed to find building information for building: " << gGlobals.getBuildingInfo(buildingType).getType();
+
         return boost::shared_ptr<BuildingInfo>();
     }
 
@@ -459,6 +466,9 @@ namespace AltAI
             return projectsIter->second;
         }
         
+        std::ostream& os = ErrorLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nFailed to find project information for project: " << gGlobals.getProjectInfo(projectType).getType();
+
         return boost::shared_ptr<ProjectInfo>();
     }
 
@@ -471,6 +481,9 @@ namespace AltAI
             return techsIter->second;
         }
         
+        std::ostream& os = ErrorLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nFailed to find tech information for tech: " << gGlobals.getTechInfo(techType).getType();
+
         return boost::shared_ptr<TechInfo>();
     }
 
@@ -483,6 +496,9 @@ namespace AltAI
             return civicsIter->second;
         }
         
+        std::ostream& os = ErrorLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nFailed to find civic information for civic: " << gGlobals.getCivicInfo(civicType).getType();
+
         return boost::shared_ptr<CivicInfo>();
     }
 
@@ -495,6 +511,9 @@ namespace AltAI
             return resourcesIter->second;
         }
         
+        std::ostream& os = ErrorLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nFailed to find resource information for resource: " << gGlobals.getBonusInfo(bonusType).getType();
+
         return boost::shared_ptr<ResourceInfo>();
     }
 

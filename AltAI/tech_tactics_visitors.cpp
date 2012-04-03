@@ -6,6 +6,8 @@
 #include "./resource_info_visitors.h"
 #include "./tactic_actions.h"
 #include "./tactic_streams.h"
+#include "./building_tactics_items.h"
+#include "./tech_tactics_items.h"
 #include "./player.h"
 #include "./player_analysis.h"
 #include "./helper_fns.h"
@@ -452,6 +454,74 @@ namespace AltAI
         const Player& player_;
     };
 
+    class MakeCityBuildTacticsVisitor : public boost::static_visitor<>
+    {
+    public:
+        MakeCityBuildTacticsVisitor(const Player& player, const City& city, const std::vector<CityImprovementManager::PlotImprovementData>& plotData)
+            : player_(player), city_(city), plotData_(plotData), currentIndex_(0)
+        {
+        }
+
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const TechInfo::BaseNode& node)
+        {
+            for (size_t i = 0, plotCount = plotData_.size(); i < plotCount; ++i)
+            {
+                currentIndex_ = i;
+                for (size_t j = 0, nodeCount = node.nodes.size(); j < nodeCount; ++j)
+                {
+                    boost::apply_visitor(*this, node.nodes[j]);
+                }
+            }
+        }
+
+        void operator() (const TechInfo::ImprovementNode& node)
+        {
+            if (node.allowsImprovement && node.improvementType == boost::get<2>(plotData_[currentIndex_]))
+            {
+                pTactic_ = makeTactic_();
+                pTactic_->addTactic(IWorkerBuildTacticPtr(new EconomicImprovementTactic()));
+
+                if (boost::get<6>(plotData_[currentIndex_]) & CityImprovementManager::ImprovementMakesBonusValid)
+                {
+                    pTactic_->addTactic(IWorkerBuildTacticPtr(new ProvidesResourceTactic()));
+                }
+            }
+
+            if (node.removeFeatureType != NO_FEATURE && boost::get<1>(plotData_[currentIndex_]))
+            {
+                pTactic_ = makeTactic_();
+                pTactic_->addTactic(IWorkerBuildTacticPtr(new RemoveFeatureTactic()));
+            }
+        }
+
+        const ICityImprovementTacticsPtr& getTactic() const
+        {
+            return pTactic_;
+        }
+
+    private:
+        ICityImprovementTacticsPtr makeTactic_()
+        {
+            if (!pTactic_)
+            {
+                pTactic_ = ICityImprovementTacticsPtr(new CityImprovementTactics(plotData_));
+            }
+            return pTactic_;
+        }
+
+        std::vector<CityImprovementManager::PlotImprovementData> plotData_;
+        size_t currentIndex_;
+        const Player& player_;
+        const City& city_;
+        ICityImprovementTacticsPtr pTactic_;
+
+    };
+
     ResearchTech getReligionTechTactics(const Player& player, const boost::shared_ptr<TechInfo>& pTechInfo)
     {
         MakeReligionTechConditionsVisitor visitor(player, pTechInfo->getTechType());
@@ -484,4 +554,63 @@ namespace AltAI
         return visitor.getResearchTech();
     }
 
+    std::list<ICityImprovementTacticsPtr> makeCityBuildTactics(const Player& player, const City& city, const boost::shared_ptr<TechInfo>& pTechInfo)
+    {
+#ifdef ALTAI_DEBUG
+#endif
+        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+        os << "\nmakeCityBuildTactics: checking tech: " << gGlobals.getTechInfo(pTechInfo->getTechType()).getType();
+
+        std::list<ICityImprovementTacticsPtr> cityBuildTactics;
+
+        CityImprovementManager improvementManager(city.getCvCity()->getIDInfo(), true);
+        TotalOutputWeights outputWeights = city.getPlotAssignmentSettings().outputWeights;
+
+        improvementManager.simulateImprovements(outputWeights, __FUNCTION__);
+        std::vector<CityImprovementManager::PlotImprovementData> baseImprovements = improvementManager.getImprovements();
+
+        CityDataPtr plotData(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
+        ProjectionLadder base = getProjectedOutput(player, plotData, 50);
+
+        std::list<TechTypes> prereqTechs = pushTechAndPrereqs(pTechInfo->getTechType(), player);
+        for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nmakeCityBuildTactics: adding prereq tech: " << gGlobals.getTechInfo(*ci).getType();
+            player.getCivHelper()->addTech(*ci);
+        }
+        player.getCivHelper()->addTech(pTechInfo->getTechType());
+
+        TotalOutput baseCityOutput = improvementManager.simulateImprovements(outputWeights, __FUNCTION__);
+
+        std::vector<CityImprovementManager::PlotImprovementData> newImprovements = improvementManager.getImprovements();
+        MakeCityBuildTacticsVisitor visitor(player, city, newImprovements);
+        boost::apply_visitor(visitor, pTechInfo->getInfo());
+
+        const ICityImprovementTacticsPtr& pTactic = visitor.getTactic();
+        if (pTactic)
+        {
+            for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
+            {
+                if (*ci != pTechInfo->getTechType())
+                {
+                    pTactic->addDependency(IDependentTacticPtr(new ResearchTechDependency(*ci)));
+                }
+            }
+            cityBuildTactics.push_back(pTactic);
+        }
+
+        plotData = CityDataPtr(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
+        ProjectionLadder ladder = getProjectedOutput(player, plotData, 50);
+        base.debug(os);
+        ladder.debug(os);
+        os << "\nImprovement delta = " << ladder.getOutput() - base.getOutput();
+
+        for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
+        {
+            player.getCivHelper()->removeTech(*ci);
+        }
+        player.getCivHelper()->removeTech(pTechInfo->getTechType());
+
+        return cityBuildTactics;
+    }
 }

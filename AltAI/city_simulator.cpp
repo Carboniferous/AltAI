@@ -252,10 +252,10 @@ namespace AltAI
         CityLog::getLog(pCity_)->getStream() << "\nFound: " << possibleImprovements.size() << " possible improvements";
 #endif
 
-        return evaluateImprovements(possibleImprovements, *pCityData, nTurns, ignoreExisting);
+        return evaluateImprovements(possibleImprovements, pCityData, nTurns, ignoreExisting);
     }
 
-    PlotImprovementSimulationResults CitySimulator::evaluateImprovements(const PlotsAndImprovements& improvements, CityData& cityData, int nTurns, bool ignoreExisting)
+    PlotImprovementSimulationResults CitySimulator::evaluateImprovements(const PlotsAndImprovements& improvements, const CityDataPtr& pCityData, int nTurns, bool ignoreExisting)
     {
         TotalOutputWeights outputWeights;
         PlotImprovementSimulationResults outputs;
@@ -263,12 +263,12 @@ namespace AltAI
         if (!improvements.empty())
         {
             // simulate baseline
-            CitySimulation simulation(pCity_, CityDataPtr(new CityData(pCity_)));
+            CitySimulation simulation(pCity_, pCityData->clone());
 
             PlotImprovementSimulationResult plotResults;
             SimulationOutput simOutput = simulation.simulateAsIs(nTurns);
             plotResults.push_back(boost::make_tuple(NO_FEATURE, NO_IMPROVEMENT, simOutput));
-            outputs.push_back(std::make_pair(cityData.getCityPlotOutput().coords, plotResults));
+            outputs.push_back(std::make_pair(pCityData->getCityPlotOutput().coords, plotResults));
 
             outputWeights = makeOutputW(3, 4, 3, 3, 1, 1); //simulation.getCityOptimiser()->getMaxOutputWeights();
 
@@ -278,47 +278,42 @@ namespace AltAI
 #endif
         }
 
-        for (PlotDataListIter iter(cityData.getPlotOutputs().begin()), endIter(cityData.getPlotOutputs().end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter plotIter(pCityData->getPlotOutputs().begin()), endIter(pCityData->getPlotOutputs().end()); plotIter != endIter; ++plotIter)
         {
-            if (iter->controlled && (!ignoreExisting || iter->improvementType == NO_IMPROVEMENT))
+            if (plotIter->controlled && (!ignoreExisting || plotIter->improvementType == NO_IMPROVEMENT))
             {
-                PlotsAndImprovements::const_iterator improvementsIter = std::find_if(improvements.begin(), improvements.end(), PlotFinder(iter->coords));
+                PlotsAndImprovements::const_iterator improvementsIter = std::find_if(improvements.begin(), improvements.end(), PlotFinder(plotIter->coords));
                 if (improvementsIter != improvements.end())
                 {
                     PlotImprovementSimulationResult plotResults;
                     for (size_t j = 0, count = improvementsIter->second.size(); j < count; ++j)
                     {
-                        PlotData savedPlotData = *iter;
+                        CityDataPtr pModifiedCityData = pCityData->clone();
+                        PlotDataListIter simulatedPlotIter = pModifiedCityData->findPlot(plotIter->coords);
+                        if (simulatedPlotIter == pModifiedCityData->getPlotOutputs().end())
+                        {
+                            break;
+                        }
 
-                        updateCityOutputData(cityData, *iter, improvementsIter->second[j].first, iter->routeType, improvementsIter->second[j].second);
+                        updateCityOutputData(*pModifiedCityData, *simulatedPlotIter, improvementsIter->second[j].first, plotIter->routeType, improvementsIter->second[j].second);
 
-                        CityDataPtr pModifiedCityData(new CityData(cityData));
                         CitySimulation simulation(pCity_, pModifiedCityData);
 
 #ifdef ALTAI_DEBUG
                         // debug
                         {
-                            CityLog::getLog(pCity_)->getStream() << " after = " << pModifiedCityData->findPlot(iter->coords).actualOutput;
+                            CityLog::getLog(pCity_)->getStream() << " after = " << pModifiedCityData->findPlot(plotIter->coords)->actualOutput;
                         }
 #endif
                         SimulationOutput simOutput = simulation.simulateAsIs(nTurns);
                         plotResults.push_back(boost::make_tuple(improvementsIter->second[j].first, improvementsIter->second[j].second, simOutput));
 
 #ifdef ALTAI_DEBUG
-                        CityLog::getLog(pCity_)->getStream() << "\nPlot: " << iter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
+                        CityLog::getLog(pCity_)->getStream() << "\nPlot: " << plotIter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
                         simOutput.debugResults(CityLog::getLog(pCity_)->getStream());
 #endif
-
-                        // restore plot - todo - restore city data
-                        *iter = savedPlotData;
                     }
-                    outputs.push_back(std::make_pair(iter->coords, plotResults));
-                }
-                else
-                {
-#ifdef ALTAI_DEBUG
-                    //CityLog::getLog(pCity_)->getStream() << "\nFailed to find plot: " << iter->coords << " in improvements list.";
-#endif
+                    outputs.push_back(std::make_pair(plotIter->coords, plotResults));
                 }
             }
         }
@@ -504,7 +499,7 @@ namespace AltAI
         if (buildingBuilt_)
         {
             // copy current city data for baseline
-            CitySimulation completedBuildingSimulation(pCity_, CityDataPtr(new CityData(*pCityData_)), constructItem_);
+            CitySimulation completedBuildingSimulation(pCity_, pCityData_->clone(), constructItem_);
 
             completedBuildingSimulation.simulateNoHurry_(simulationResults, nTurns - turn_);
 
@@ -589,7 +584,7 @@ namespace AltAI
                 currentGoldCost = hurryData.hurryGold;
                 
                 // copy current city data for hurry
-                CitySimulation hurrySimulation(pCity_, CityDataPtr(new CityData(*pCityData_)), constructItem_);
+                CitySimulation hurrySimulation(pCity_, pCityData_->clone(), constructItem_);
                 hurrySimulation.simulateHurry_(simulationResults, hurryData, nTurns - turn_);
             }
 
@@ -604,7 +599,7 @@ namespace AltAI
         if (buildingBuilt_)
         {
             // copy current city data for baseline
-            CitySimulation completedBuilding(pCity_, CityDataPtr(new CityData(*pCityData_)), constructItem_);
+            CitySimulation completedBuilding(pCity_, pCityData_->clone(), constructItem_);
             completedBuilding.simulateNoHurry_(simulationResults, nTurns - turn_);
         }
 

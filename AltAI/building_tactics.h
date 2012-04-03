@@ -5,6 +5,8 @@ namespace AltAI
 {
     class Player;
     class City;
+    class ICityBuildingTactics;
+    typedef boost::shared_ptr<ICityBuildingTactics> ICityBuildingTacticsPtr;
 
     ConstructList makeBuildingTactics(Player& player);
 

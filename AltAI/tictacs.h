@@ -2,14 +2,13 @@
 
 #include "./utils.h"
 #include "./tactic_actions.h"
+#include "./tactics_interfaces.h"
 
 namespace AltAI
 {
     class Player;
     class City;
     class TechInfo;
-    class ICityBuildingTactics;
-    typedef boost::shared_ptr<ICityBuildingTactics> ICityBuildingTacticsPtr;
 
     struct PlayerTactics
     {
@@ -33,6 +32,12 @@ namespace AltAI
         void selectProjectTactics(const City& city);
 
         void updateCityBuildingTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
+        void updateCityBuildingTactics(IDInfo city, BuildingTypes buildingType, int newCount);
+        void updateCityBuildingTactics(IDInfo city);
+        void updateCityGlobalBuildingTactics(IDInfo city, BuildingTypes buildingType, int newCount);
+        void eraseGlobalBuildingTactics(BuildingTypes buildingType);
+
+        void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
 
         ConstructItem getBuildItem(const City& city);
 
@@ -45,9 +50,19 @@ namespace AltAI
         ConstructList possibleBuildingTactics_, possibleProjectTactics_;
         std::map<IDInfo, ConstructList> selectedCityBuildingTactics_, selectedCityProjectTactics_;
 
+        // ordinary buildings tactics, keyed by city IDInfo
         typedef std::list<ICityBuildingTacticsPtr> CityBuildingTacticsList;
         typedef std::map<IDInfo, CityBuildingTacticsList> CityBuildingTacticsMap;
         CityBuildingTacticsMap cityBuildingTacticsMap_;
+
+        // world wonders
+        typedef std::map<BuildingTypes, ILimitedBuildingTacticsPtr> LimitedBuildingsTacticsMap;
+        LimitedBuildingsTacticsMap nationalBuildingsTacticsMap_, globalBuildingsTacticsMap_;
+
+        // improvement build tactics, keyed by city IDInfo
+        typedef std::list<ICityImprovementTacticsPtr> CityImprovementTacticsList;
+        typedef std::map<IDInfo, CityImprovementTacticsList> CityImprovementTacticsMap;
+        CityImprovementTacticsMap cityImprovementTacticsMap_;
 
         Player& player;
 
