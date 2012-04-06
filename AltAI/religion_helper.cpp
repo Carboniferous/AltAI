@@ -1,10 +1,8 @@
 #include "./religion_helper.h"
-#include "./building_helper.h"
-#include "./city_data.h"
 
 namespace AltAI
 {
-    ReligionHelper::ReligionHelper(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
+    ReligionHelper::ReligionHelper(const CvCity* pCity) : pCity_(pCity)
     {
         const CvPlayer& player = CvPlayerAI::getPlayer(pCity_->getOwner());
         religionType_ = player.getStateReligion();
@@ -18,6 +16,12 @@ namespace AltAI
             religionCounts_[religionType] = gGlobals.getGame().countReligionLevels((ReligionTypes)religionType);
             cityReligions_[religionType] = pCity->isHasReligion((ReligionTypes)religionType);
         }
+    }
+
+    ReligionHelperPtr ReligionHelper::clone() const
+    {
+        ReligionHelperPtr copy = ReligionHelperPtr(new ReligionHelper(*this));
+        return copy;
     }
 
     ReligionTypes ReligionHelper::getStateReligion() const

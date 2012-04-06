@@ -3,8 +3,8 @@
 
 namespace AltAI
 {
-    HappyHelper::HappyHelper(const CvCity* pCity, CityData& data)
-        : pCity_(pCity), data_(data)
+    HappyHelper::HappyHelper(const CvCity* pCity)
+        : pCity_(pCity)
     {
         population_ = pCity_->getPopulation();
         PERCENT_ANGER_DIVISOR_ = gGlobals.getPERCENT_ANGER_DIVISOR();
@@ -62,6 +62,12 @@ namespace AltAI
         TEMP_HAPPY_ = gGlobals.getDefineINT("TEMP_HAPPY");
     }
 
+    HappyHelperPtr HappyHelper::clone() const
+    {
+        HappyHelperPtr copy = HappyHelperPtr(new HappyHelper(*this));
+        return copy;
+    }
+
     int HappyHelper::happyPopulation() const
     {
         int iHappiness = 0;
@@ -89,7 +95,7 @@ namespace AltAI
 	    return std::max<int>(0, iHappiness);
     }
 
-    int HappyHelper::angryPopulation() const
+    int HappyHelper::angryPopulation(const CityData& data) const
     {
 	    int iUnhappiness = 0;
 
@@ -101,7 +107,7 @@ namespace AltAI
 		    iAngerPercent += noMilitaryPercentAnger_;
 		    iAngerPercent += culturePercentAnger_;
 		    iAngerPercent += religionPercentAnger_;
-		    iAngerPercent += data_.getHurryHelper()->getHurryPercentAnger();
+		    iAngerPercent += data.getHurryHelper()->getHurryPercentAnger();
 		    iAngerPercent += conscriptPercentAnger_;
 		    iAngerPercent += defyResolutionPercentAnger_;
 		    iAngerPercent += warWearinessPercentAnger_;
@@ -133,20 +139,20 @@ namespace AltAI
 	    return std::max<int>(0, iUnhappiness);
     }
 
-    void HappyHelper::advanceTurn()
+    void HappyHelper::advanceTurn(CityData& data)
     {
-        data_.getHurryHelper()->advanceTurn();
+        data.getHurryHelper()->advanceTurn();
         if (--tempHappyTimer_ < 0)
         {
             tempHappyTimer_ = 0;
         }
     }
 
-    void HappyHelper::setPopulation(int population)
+    void HappyHelper::setPopulation(CityData& data, int population)
     {
         population_ = population;
         setOvercrowdingPercentAnger_();
-        data_.getHurryHelper()->setPopulation(population);
+        data.getHurryHelper()->setPopulation(population);
     }
 
     void HappyHelper::setOvercrowdingPercentAnger_()

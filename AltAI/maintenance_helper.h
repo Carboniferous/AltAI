@@ -6,6 +6,9 @@ namespace AltAI
 {
     class CityData;
 
+    class MaintenanceHelper;
+    typedef boost::shared_ptr<MaintenanceHelper> MaintenanceHelperPtr;
+
     // same logic as code in CvCity, but this class is designed for simulating population, modifier, etc.. changing
     class MaintenanceHelper
     {
@@ -13,6 +16,7 @@ namespace AltAI
         explicit MaintenanceHelper(const CvCity* pCity);
         MaintenanceHelper(const XYCoords coords, PlayerTypes playerType);
         MaintenanceHelper(const MaintenanceHelper& other);
+        MaintenanceHelperPtr clone() const;
 
         int getMaintenance() const;
         int getMaintenanceWithCity(const XYCoords coords);
@@ -55,6 +59,4 @@ namespace AltAI
         int MAX_DISTANCE_CITY_MAINTENANCE_, distanceMaintenancePercent_, distanceHandicapMaintenancePercent_, distanceMaintenanceModifier_, maxPlotDistance_;
         int numCitiesMaintenancePercent_, numCitiesHandicapMaintenancePercent_, maxNumCitiesMaintenance_, numCitiesMaintenanceModifier_;
     };
-
-    typedef boost::shared_ptr<MaintenanceHelper> MaintenanceHelperPtr;
 }

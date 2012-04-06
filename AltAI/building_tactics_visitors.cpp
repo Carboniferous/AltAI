@@ -3,6 +3,7 @@
 #include "./building_tactics_items.h"
 #include "./buildings_info.h"
 #include "./building_helper.h"
+#include "./maintenance_helper.h"
 #include "./tech_info_visitors.h"
 #include "./tactic_actions.h"
 #include "./tactic_streams.h"

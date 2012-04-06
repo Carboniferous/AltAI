@@ -17,6 +17,7 @@
 #include "./religion_helper.h"
 #include "./culture_helper.h"
 #include "./building_helper.h"
+#include "./modifiers_helper.h"
 #include "./trade_route_helper.h"
 #include "./corporation_helper.h"
 #include "./bonus_helper.h"
@@ -24,6 +25,7 @@
 #include "./helper_fns.h"
 #include "./gamedata_analysis.h"
 #include "./city_improvements.h"
+#include "./error_log.h"
 
 // todo - specialist helper pCity->totalFreeSpecialists(), pCity->getMaxSpecialistCount
 // bonushelper - pCity->hasBonus()
@@ -31,6 +33,53 @@
 
 namespace AltAI
 {
+    CityData::CityData(const CityData& other)
+    {
+        cityPopulation_ = other.cityPopulation_, workingPopulation_ = other.workingPopulation_, happyCap_ = other.happyCap_;
+
+        currentFood_ = other.currentFood_, storedFood_ = other.storedFood_, currentProduction_ = other.currentProduction_;
+        growthThreshold_ = other.growthThreshold_, requiredProduction_ = other.requiredProduction_;
+        foodKeptPercent_ = other.foodKeptPercent_;
+        commerceYieldModifier_ = other.commerceYieldModifier_;
+
+        specialConditions_ = other.specialConditions_;
+
+        queuedBuildings_ = other.queuedBuildings_;
+
+        pCity_ = other.pCity_;
+        owner_ = other.owner_;
+        coords_ = other.coords_;
+
+        yieldModifier_ = other.yieldModifier_;
+        commerceModifier_ = other.commerceModifier_, commercePercent_ = other.commercePercent_;
+
+        plotOutputs_ = other.plotOutputs_, unworkablePlots_ = other.unworkablePlots_;
+        freeSpecOutputs_ = other.freeSpecOutputs_;
+        cityPlotOutput_ = other.cityPlotOutput_;
+        cityGreatPersonOutput_ = other.cityGreatPersonOutput_;
+        includeUnclaimedPlots_ = other.includeUnclaimedPlots_;
+
+        events_ = std::queue<CitySimulationEventPtr>();  // clear events queue
+
+        // area and civ helpers are shared (for now)
+        areaHelper_ = other.areaHelper_;
+        civHelper_ = other.civHelper_;
+
+        // copy state of unshared helpers
+        bonusHelper_ = other.bonusHelper_->clone();
+        buildingsHelper_ = other.buildingsHelper_->clone();
+        corporationHelper_ = other.corporationHelper_->clone();
+        cultureHelper_ = other.cultureHelper_->clone();
+        happyHelper_ = other.happyHelper_->clone();
+        healthHelper_ = other.healthHelper_->clone();
+        hurryHelper_ = other.hurryHelper_->clone();
+        maintenanceHelper_ = other.maintenanceHelper_->clone();
+        modifiersHelper_ = other.modifiersHelper_->clone();
+        religionHelper_ = other.religionHelper_->clone();
+        specialistHelper_ = other.specialistHelper_->clone();
+        tradeRouteHelper_ = other.tradeRouteHelper_->clone();
+    }
+
     CityData::CityData(const CvCity* pCity, bool includeUnclaimedPlots)
         : cityPopulation_(0), workingPopulation_(0), happyCap_(0), currentFood_(0), storedFood_(0),
           currentProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
@@ -62,17 +111,17 @@ namespace AltAI
 
         maintenanceHelper_ = MaintenanceHelperPtr(new MaintenanceHelper(pCity));
 
-        bonusHelper_ = BonusHelperPtr(new BonusHelper(pCity, *this));
-        buildingsHelper_ = BuildingsHelperPtr(new BuildingsHelper(pCity, *this));
-        corporationHelper_ = CorporationHelperPtr(new CorporationHelper(pCity, *this));
-        cultureHelper_ = CultureHelperPtr(new CultureHelper(pCity, *this));
-        happyHelper_ = HappyHelperPtr(new HappyHelper(pCity, *this));
-        healthHelper_ = HealthHelperPtr(new HealthHelper(pCity, *this));
-        hurryHelper_ = HurryHelperPtr(new HurryHelper(pCity, *this));
-        modifiersHelper_ = ModifiersHelperPtr(new ModifiersHelper(pCity, *this));
-        religionHelper_ = ReligionHelperPtr(new ReligionHelper(pCity, *this));
-        specialistHelper_ = SpecialistHelperPtr(new SpecialistHelper(pCity, *this));
-        tradeRouteHelper_ = TradeRouteHelperPtr(new TradeRouteHelper(pCity, *this));    
+        bonusHelper_ = BonusHelperPtr(new BonusHelper(pCity));
+        buildingsHelper_ = BuildingsHelperPtr(new BuildingsHelper(pCity));
+        corporationHelper_ = CorporationHelperPtr(new CorporationHelper(pCity));
+        cultureHelper_ = CultureHelperPtr(new CultureHelper(pCity));
+        happyHelper_ = HappyHelperPtr(new HappyHelper(pCity));
+        healthHelper_ = HealthHelperPtr(new HealthHelper(pCity));
+        hurryHelper_ = HurryHelperPtr(new HurryHelper(pCity));
+        modifiersHelper_ = ModifiersHelperPtr(new ModifiersHelper(pCity));
+        religionHelper_ = ReligionHelperPtr(new ReligionHelper(pCity));
+        specialistHelper_ = SpecialistHelperPtr(new SpecialistHelper(pCity));
+        tradeRouteHelper_ = TradeRouteHelperPtr(new TradeRouteHelper(pCity));    
     }
 
     void CityData::init_(const CvCity* pCity)
@@ -83,12 +132,12 @@ namespace AltAI
         storedFood_ = 100 * pCity->getFoodKept();
         cityPopulation_ = pCity->getPopulation();
         workingPopulation_ = cityPopulation_ - getNonWorkingPopulation();
-        happyCap_ = happyHelper_->happyPopulation() - happyHelper_->angryPopulation();
+        happyCap_ = happyHelper_->happyPopulation() - happyHelper_->angryPopulation(*this);
 
         growthThreshold_ = 100 * pCity->growthThreshold();
         foodKeptPercent_ = pCity->getMaxFoodKeptPercent();
 
-        commerceYieldModifier_ = modifiersHelper_->getTotalYieldModifier()[YIELD_COMMERCE];
+        commerceYieldModifier_ = modifiersHelper_->getTotalYieldModifier(*this)[YIELD_COMMERCE];
 
         for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)
         {
@@ -98,26 +147,8 @@ namespace AltAI
 
     CityDataPtr CityData::clone() const
     {
-        CityDataPtr clone = CityDataPtr(new CityData(*this));
-        clone->events_ = std::queue<CitySimulationEventPtr>();  // clear events queue
-
-        // area and civ helpers are shared (for now)
-
-        // copy state of unshared helpers
-        clone->bonusHelper_ = BonusHelperPtr(new BonusHelper(*bonusHelper_));
-        clone->buildingsHelper_ = BuildingsHelperPtr(new BuildingsHelper(*buildingsHelper_));
-        clone->corporationHelper_ = CorporationHelperPtr(new CorporationHelper(*corporationHelper_));
-        clone->cultureHelper_ = CultureHelperPtr(new CultureHelper(*cultureHelper_));
-        clone->happyHelper_ = HappyHelperPtr(new HappyHelper(*happyHelper_));
-        clone->healthHelper_ = HealthHelperPtr(new HealthHelper(*healthHelper_));
-        clone->hurryHelper_ = HurryHelperPtr(new HurryHelper(*hurryHelper_));
-        clone->maintenanceHelper_ = MaintenanceHelperPtr(new MaintenanceHelper(*maintenanceHelper_));
-        clone->modifiersHelper_ = ModifiersHelperPtr(new ModifiersHelper(*modifiersHelper_));
-        clone->religionHelper_ = ReligionHelperPtr(new ReligionHelper(*religionHelper_));
-        clone->specialistHelper_ = SpecialistHelperPtr(new SpecialistHelper(*specialistHelper_));
-        clone->tradeRouteHelper_ = TradeRouteHelperPtr(new TradeRouteHelper(*tradeRouteHelper_));
-
-        return clone;
+        CityDataPtr copy = CityDataPtr(new CityData(*this));
+        return copy;
     }
 
     void CityData::calcOutputsFromPlotData_(const CvCity* pCity)
@@ -392,7 +423,7 @@ namespace AltAI
 
         currentProduction_ += totalOutput[OUTPUT_PRODUCTION];
 
-        cultureHelper_->advanceTurn(includeUnclaimedPlots_);
+        cultureHelper_->advanceTurn(*this, includeUnclaimedPlots_);
 
         if (currentProduction_ >= requiredProduction_ && !queuedBuildings_.empty())
         {
@@ -406,7 +437,7 @@ namespace AltAI
             requiredProduction_ = -1;
         }
 
-        happyHelper_->advanceTurn();
+        happyHelper_->advanceTurn(*this);
         healthHelper_->advanceTurn();
         
         changeWorkingPopulation();
@@ -437,9 +468,19 @@ namespace AltAI
         currentProduction_ = requiredProduction_ + hurryData.extraProduction;
     }
 
+    int CityData::happyPopulation() const
+    {
+        return getHappyHelper()->happyPopulation();
+    }
+
+    int CityData::angryPopulation() const
+    {
+        return getHappyHelper()->angryPopulation(*this);
+    }
+
     std::pair<bool, HurryData> CityData::canHurry(HurryTypes hurryType) const
     {
-        return hurryHelper_->canHurry(hurryType);
+        return hurryHelper_->canHurry(*this, hurryType);
     }
 
     void CityData::completeBuilding_()
@@ -449,7 +490,7 @@ namespace AltAI
 
     int CityData::getNonWorkingPopulation() const
     {
-        return range(happyHelper_->angryPopulation() - happyHelper_->happyPopulation(), 0, cityPopulation_);
+        return range(happyHelper_->angryPopulation(*this) - happyHelper_->happyPopulation(), 0, cityPopulation_);
     }
 
     void CityData::changePopulation(int change)
@@ -458,7 +499,7 @@ namespace AltAI
         cityPopulation_ = std::max<int>(1, cityPopulation_);
 
         maintenanceHelper_->setPopulation(cityPopulation_);
-        happyHelper_->setPopulation(cityPopulation_);
+        happyHelper_->setPopulation(*this, cityPopulation_);
         healthHelper_->setPopulation(cityPopulation_);
         tradeRouteHelper_->setPopulation(cityPopulation_);
 
@@ -500,7 +541,7 @@ namespace AltAI
 
     void CityData::checkHappyCap()
     {
-        int newHappyCap = happyHelper_->happyPopulation() - happyHelper_->angryPopulation();
+        int newHappyCap = happyHelper_->happyPopulation() - happyHelper_->angryPopulation(*this);
         if (newHappyCap != happyCap_)
         {
             events_.push(CitySimulationEventPtr(new HappyCapChange(newHappyCap - happyCap_)));
@@ -561,7 +602,7 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-        os << "Pop: " << cityPopulation_ << ", angry = " << happyHelper_->angryPopulation() << ", happy = " << happyHelper_->happyPopulation()
+        os << "Pop: " << cityPopulation_ << ", angry = " << happyHelper_->angryPopulation(*this) << ", happy = " << happyHelper_->happyPopulation()
            << ", working = " << workingPopulation_ << ", happyCap_ = " << happyCap_ << ", unhealthy = " << healthHelper_->badHealth() << ", healthy = " << healthHelper_->goodHealth()
            << ", currentFood_ = " << currentFood_ << ", surplus = " << (getFood() - getLostFood() - 100 * (cityPopulation_ * foodPerPop)) << ", production = " << getOutput() << " ";
 #endif
@@ -623,7 +664,7 @@ namespace AltAI
         if (!queuedBuildings_.empty())
         {
             BuildingTypes buildingType = queuedBuildings_.top();
-            productionModifier = buildingsHelper_->getProductionModifier(buildingType);
+            productionModifier = buildingsHelper_->getProductionModifier(*this, buildingType);
         }
 
         return productionModifier;
@@ -631,7 +672,7 @@ namespace AltAI
 
     TotalOutput CityData::getOutput() const
     {
-        YieldModifier yieldModifier = modifiersHelper_->getTotalYieldModifier();
+        YieldModifier yieldModifier = modifiersHelper_->getTotalYieldModifier(*this);
         CommerceModifier commerceModifier = modifiersHelper_->getTotalCommerceModifier();
 
         YieldModifier commerceYieldModifier = makeYield(100, 100, commerceYieldModifier_);
@@ -790,7 +831,7 @@ namespace AltAI
                 const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo((BuildingTypes)buildingType);
 
                 cityYield += buildingCount * (PlotYield(buildingInfo.getYieldChangeArray()) + buildingsHelper_->getBuildingYieldChange((BuildingClassTypes)buildingInfo.getBuildingClassType()));
-                cityCommerce += buildingsHelper_->getBuildingCommerce(buildingType);
+                cityCommerce += buildingsHelper_->getBuildingCommerce(*this, buildingType);
 
                 // add building great people points
                 int gppRate = buildingInfo.getGreatPeopleRateChange();

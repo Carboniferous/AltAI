@@ -3,7 +3,7 @@
 
 namespace AltAI
 {
-    BonusHelper::BonusHelper(const CvCity* pCity, CityData& data) : data_(data)
+    BonusHelper::BonusHelper(const CvCity* pCity)
     {
         const int bonusCount = gGlobals.getNumBonusInfos();
         bonuses_.resize(bonusCount, 0);
@@ -23,6 +23,12 @@ namespace AltAI
             }
             
         }
+    }
+
+    BonusHelperPtr BonusHelper::clone() const
+    {
+        BonusHelperPtr copy = BonusHelperPtr(new BonusHelper(*this));
+        return copy;
     }
 
     int BonusHelper::getNumBonuses(BonusTypes bonusType) const

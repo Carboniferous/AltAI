@@ -7,6 +7,7 @@
 #include "./game.h"
 #include "./player.h"
 #include "./player_analysis.h"
+#include "./maintenance_helper.h"
 #include "./city.h"
 
 #include "boost/lexical_cast.hpp"
@@ -255,7 +256,7 @@ namespace AltAI
         return evaluateImprovements(possibleImprovements, pCityData, nTurns, ignoreExisting);
     }
 
-    PlotImprovementSimulationResults CitySimulator::evaluateImprovements(const PlotsAndImprovements& improvements, const CityDataPtr& pCityData, int nTurns, bool ignoreExisting)
+    PlotImprovementSimulationResults CitySimulator::evaluateImprovements(const PlotsAndImprovements& improvements, const ConstCityDataPtr& pCityData, int nTurns, bool ignoreExisting)
     {
         TotalOutputWeights outputWeights;
         PlotImprovementSimulationResults outputs;
@@ -263,6 +264,9 @@ namespace AltAI
         if (!improvements.empty())
         {
             // simulate baseline
+            {
+                CityDataPtr testPtr = pCityData->clone();
+            }
             CitySimulation simulation(pCity_, pCityData->clone());
 
             PlotImprovementSimulationResult plotResults;
@@ -278,8 +282,20 @@ namespace AltAI
 #endif
         }
 
-        for (PlotDataListConstIter plotIter(pCityData->getPlotOutputs().begin()), endIter(pCityData->getPlotOutputs().end()); plotIter != endIter; ++plotIter)
+        /*std::vector<XYCoords> plotCoords;
+        for (PlotDataListConstIter plotIter2(pCityData->getPlotOutputs().begin()); plotIter2 != pCityData->getPlotOutputs().end(); ++plotIter2)
         {
+            plotCoords.push_back(plotIter2->coords);
+        }
+        std::set<XYCoords> donePlots;*/
+
+        for (PlotDataListConstIter plotIter(pCityData->getPlotOutputs().begin()); plotIter != pCityData->getPlotOutputs().end(); ++plotIter)
+        {
+            /*if (plotIter->isActualPlot() && donePlots.find(plotIter->coords) != donePlots.end())
+            {
+                break;
+            }*/
+
             if (plotIter->controlled && (!ignoreExisting || plotIter->improvementType == NO_IMPROVEMENT))
             {
                 PlotsAndImprovements::const_iterator improvementsIter = std::find_if(improvements.begin(), improvements.end(), PlotFinder(plotIter->coords));
@@ -299,23 +315,38 @@ namespace AltAI
 
                         CitySimulation simulation(pCity_, pModifiedCityData);
 
-#ifdef ALTAI_DEBUG
-                        // debug
-                        {
-                            CityLog::getLog(pCity_)->getStream() << " after = " << pModifiedCityData->findPlot(plotIter->coords)->actualOutput;
-                        }
-#endif
+//#ifdef ALTAI_DEBUG
+//                        // debug
+//                        {
+//                            CityLog::getLog(pCity_)->getStream() << " after = " << pModifiedCityData->findPlot(plotIter->coords)->actualOutput;
+//                        }
+//#endif
                         SimulationOutput simOutput = simulation.simulateAsIs(nTurns);
                         plotResults.push_back(boost::make_tuple(improvementsIter->second[j].first, improvementsIter->second[j].second, simOutput));
 
-#ifdef ALTAI_DEBUG
-                        CityLog::getLog(pCity_)->getStream() << "\nPlot: " << plotIter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
-                        simOutput.debugResults(CityLog::getLog(pCity_)->getStream());
-#endif
+//#ifdef ALTAI_DEBUG
+//                        CityLog::getLog(pCity_)->getStream() << "\nPlot: " << plotIter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
+//                        simOutput.debugResults(CityLog::getLog(pCity_)->getStream());
+//#endif
                     }
                     outputs.push_back(std::make_pair(plotIter->coords, plotResults));
                 }
             }
+
+            /*if (plotIter->isActualPlot())
+            {
+                donePlots.insert(plotIter->coords);
+            }*/
+
+            /*PlotDataListConstIter compPlotIter(pCityData->getPlotOutputs().begin());
+            for (size_t plotIndex = 0, plotCount = plotCoords.size(); plotIndex < plotCount; ++plotIndex)
+            {
+                if (compPlotIter->coords != plotCoords[plotIndex])
+                {
+                    CityLog::getLog(pCity_)->getStream() << "\nCoords differ: " << compPlotIter->coords << ", " << plotCoords[plotIndex];
+                }
+                ++compPlotIter;
+            }*/
         }
 
 #ifdef ALTAI_DEBUG

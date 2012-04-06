@@ -3,7 +3,13 @@
 
 namespace AltAI
 {
-    CorporationHelper::CorporationHelper(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
+    CorporationHelper::CorporationHelper(const CvCity* pCity) : pCity_(pCity)
     {
+    }
+
+    CorporationHelperPtr CorporationHelper::clone() const
+    {
+        CorporationHelperPtr copy = CorporationHelperPtr(new CorporationHelper(*this));
+        return copy;
     }
 }

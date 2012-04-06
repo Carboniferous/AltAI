@@ -8,6 +8,9 @@ namespace AltAI
 {
     class CityData;
 
+    class HurryHelper;
+    typedef boost::shared_ptr<HurryHelper> HurryHelperPtr;
+
     struct HurryData
     {
         explicit HurryData(HurryTypes hurryType_) : hurryType(hurryType_), hurryPopulation(0), hurryGold(0), extraProduction(0) {}
@@ -22,7 +25,8 @@ namespace AltAI
     class HurryHelper
     {
     public:
-        HurryHelper(const CvCity* pCity, CityData& data);
+        explicit HurryHelper(const CvCity* pCity);
+        HurryHelperPtr clone() const;
 
         void changeModifier(int change)
         {
@@ -45,16 +49,14 @@ namespace AltAI
         int getHurryUnhappiness() const;
         int getHurryPercentAnger() const;
 
-        std::pair<bool, HurryData> canHurry(HurryTypes hurryType) const;
+        std::pair<bool, HurryData> canHurry(const CityData& data, HurryTypes hurryType) const;
 
         void advanceTurn();
 
     private:
-        CityData& data_;
-
         void updateFlatHurryAngerLength_();
         int calcHurryPercentAnger_() const;
-        HurryData getHurryCosts_(HurryTypes hurryType) const;
+        HurryData getHurryCosts_(const CityData& data, HurryTypes hurryType) const;
         int getHurryCostModifier_(int baseHurryCostModifier, bool isNew) const;
 
         int globalHurryCostModifier_;
@@ -70,6 +72,4 @@ namespace AltAI
         int HURRY_ANGER_DIVISOR_, HURRY_POP_ANGER_, PERCENT_ANGER_DIVISOR_, NEW_HURRY_MODIFIER_;
         int hurryConscriptAngerPercent_;
     };
-
-    typedef boost::shared_ptr<HurryHelper> HurryHelperPtr;
 }

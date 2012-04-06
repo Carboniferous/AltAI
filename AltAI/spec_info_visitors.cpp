@@ -4,6 +4,7 @@
 #include "./player.h"
 #include "./city.h"
 #include "./civ_helper.h"
+#include "./modifiers_helper.h"
 #include "./iters.h"
 #include "./gamedata_analysis.h"
 
@@ -174,7 +175,7 @@ namespace AltAI
         TotalOutput bestOutput;
         SpecialistTypes bestSpecialist = NO_SPECIALIST;
 
-        YieldModifier yieldModifier = makeYield(100, 100, 100) + city.getCityData()->getModifiersHelper()->getTotalYieldModifier();
+        YieldModifier yieldModifier = makeYield(100, 100, 100) + city.getCityData()->getModifiersHelper()->getTotalYieldModifier(*city.getCityData());
         CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100), // city.getCityData()->getCommerceModifier(),
             commercePercent = city.getCityData()->getCommercePercent();
 

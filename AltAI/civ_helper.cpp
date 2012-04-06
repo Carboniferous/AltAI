@@ -11,6 +11,12 @@ namespace AltAI
     {
     }
 
+    CivHelperPtr CivHelper::clone() const
+    {
+        CivHelperPtr copy = CivHelperPtr(new CivHelper(*this));
+        return copy;
+    }
+
     void CivHelper::init()
     {
         const int numCivicOptions = gGlobals.getNumCivicOptionInfos();

@@ -3,6 +3,7 @@
 #include "./civ_log.h"
 #include "./map_analysis.h"
 #include "./specialist_helper.h"
+#include "./happy_helper.h"
 #include "./game.h"
 #include "./player.h"
 #include "./city.h"
@@ -1044,7 +1045,7 @@ namespace AltAI
     {
         int requiredYield = 100 * data_->getPopulation() * foodPerPop_ + data_->getLostFood();
         const int maxFood = getMaxFood();
-        const int angryPop = data_->getHappyHelper()->angryPopulation();
+        const int angryPop = data_->getHappyHelper()->angryPopulation(*data_);
 
         if (growthType == Not_Set)
         {

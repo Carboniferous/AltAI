@@ -147,7 +147,7 @@ namespace AltAI
         void evaluateBuilding(BuildingTypes buildingType, int turns, BuildingSimulationResults& results, bool doBaseLine);
 
         PlotImprovementSimulationResults evaluateAllImprovements(int nTurns, bool ignoreExisting);
-        PlotImprovementSimulationResults evaluateImprovements(const PlotsAndImprovements& improvements, const CityDataPtr& pCityData, int nTurns, bool ignoreExisting);
+        PlotImprovementSimulationResults evaluateImprovements(const PlotsAndImprovements& improvements, const ConstCityDataPtr& pCityData, int nTurns, bool ignoreExisting);
 
         std::pair<BuildingTypes, TotalOutput> getBestBuilding(TotalOutputWeights outputWeights, const BuildingSimulationResults& simulationResults) const;
         std::map<BuildingTypes, int> getBuildingValues(TotalOutputWeights outputWeights, const BuildingSimulationResults& simulationResults) const;

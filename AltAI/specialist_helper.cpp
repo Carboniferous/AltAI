@@ -1,9 +1,8 @@
 #include "./specialist_helper.h"
-#include "./city_data.h"
 
 namespace AltAI
 {
-    SpecialistHelper::SpecialistHelper(const CvCity* pCity, CityData& data) : data_(data)
+    SpecialistHelper::SpecialistHelper(const CvCity* pCity)
     {
         const int specialistCount = gGlobals.getNumSpecialistInfos();
         maxSpecialistCounts_.resize(specialistCount);
@@ -29,6 +28,12 @@ namespace AltAI
 				improvementFreeSpecSlotCount_ += improvementFreeSpecialists_[improvementType] * pCity->countNumImprovedPlots((ImprovementTypes)improvementType);
 			}
 		}
+    }
+
+    SpecialistHelperPtr SpecialistHelper::clone() const
+    {
+        SpecialistHelperPtr copy = SpecialistHelperPtr(new SpecialistHelper(*this));
+        return copy;
     }
 
     int SpecialistHelper::getMaxSpecialistCount(SpecialistTypes specialistType) const

@@ -2,21 +2,10 @@
 
 #include "./utils.h"
 #include "./plot_data.h"
-#include "./area_helper.h"
-#include "./bonus_helper.h"
-#include "./building_helper.h"
-#include "./civ_helper.h"
-#include "./corporation_helper.h"
-#include "./culture_helper.h"
-#include "./happy_helper.h"
-#include "./health_helper.h"
 #include "./hurry_helper.h"
-#include "./maintenance_helper.h"
-#include "./modifiers_helper.h"
-#include "./religion_helper.h"
-#include "./specialist_helper.h"
-#include "./trade_route_helper.h"
 #include "./city_improvements.h"
+
+#include "boost/enable_shared_from_this.hpp"
 
 #include <stack>
 #include <queue>
@@ -25,6 +14,36 @@ namespace AltAI
 {
     class CityOptimiser;
     class CitySimulation;
+
+    class AreaHelper;
+    class BonusHelper;
+    class BuildingsHelper;
+    class CivHelper;
+    class CorporationHelper;
+    class CultureHelper;
+    class ModifiersHelper;
+    class HappyHelper;
+    class HealthHelper;
+    class HurryHelper;      
+    class MaintenanceHelper;
+    class ReligionHelper;
+    class SpecialistHelper;
+    class TradeRouteHelper;
+
+    typedef boost::shared_ptr<AreaHelper> AreaHelperPtr;
+    typedef boost::shared_ptr<BonusHelper> BonusHelperPtr;
+    typedef boost::shared_ptr<BuildingsHelper> BuildingsHelperPtr;
+    typedef boost::shared_ptr<CivHelper> CivHelperPtr;
+    typedef boost::shared_ptr<CorporationHelper> CorporationHelperPtr;
+    typedef boost::shared_ptr<CultureHelper> CultureHelperPtr;
+    typedef boost::shared_ptr<ModifiersHelper> ModifiersHelperPtr;
+    typedef boost::shared_ptr<HappyHelper> HappyHelperPtr;
+    typedef boost::shared_ptr<HealthHelper> HealthHelperPtr;
+    typedef boost::shared_ptr<HurryHelper> HurryHelperPtr;
+    typedef boost::shared_ptr<MaintenanceHelper> MaintenanceHelperPtr;
+    typedef boost::shared_ptr<ReligionHelper> ReligionHelperPtr;
+    typedef boost::shared_ptr<SpecialistHelper> SpecialistHelperPtr;
+    typedef boost::shared_ptr<TradeRouteHelper> TradeRouteHelperPtr;
 
     template <class T> class IEvent;
 
@@ -39,10 +58,12 @@ namespace AltAI
     typedef PlotDataList::const_iterator PlotDataListConstIter;
     typedef PlotDataList::iterator PlotDataListIter;
     typedef boost::shared_ptr<CityData> CityDataPtr;
+    typedef boost::shared_ptr<const CityData> ConstCityDataPtr;
 
-    class CityData
+    class CityData// : public boost::enable_shared_from_this<CityData>
     {
         friend class CultureHelper;
+
     public:
         explicit CityData(const CvCity* pCity_, bool includeUnclaimedPlots = false);
         CityData(const CvCity* pCity_, const std::vector<CityImprovementManager::PlotImprovementData>& improvements, bool includeUnclaimedPlots = false);
@@ -118,15 +139,8 @@ namespace AltAI
         // first = turns (MAX_INT if never), second = pop change (+1, -1, 0)
         std::pair<int, int> getTurnsToPopChange() const;
 
-        int happyPopulation() const
-        {
-            return getHappyHelper()->happyPopulation();
-        }
-
-        int angryPopulation() const
-        {
-            return getHappyHelper()->angryPopulation();
-        }
+        int happyPopulation() const;
+        int angryPopulation() const;
 
         int getHappyCap() const
         {
@@ -364,6 +378,8 @@ namespace AltAI
         }
 
     private:
+        CityData(const CityData& other);
+
         void initHelpers_(const CvCity* pCity);
         void init_(const CvCity* pCity);
         void initPlot_(const CvPlot* pPlot, PlotYield plotYield, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType);

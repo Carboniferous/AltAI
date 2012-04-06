@@ -5,11 +5,15 @@
 namespace AltAI
 {
     class CityData;
+    class AreaHelper;
+
+    typedef boost::shared_ptr<AreaHelper> AreaHelperPtr;
 
     class AreaHelper
     {
     public:
         AreaHelper(const CvPlayer& player, const CvArea* pArea);
+        AreaHelperPtr clone() const;
 
         int getCleanPowerCount() const;
         void changeCleanPowerCount(bool isAdding);
@@ -20,6 +24,4 @@ namespace AltAI
 
         int cleanPowerCount_;
     };
-
-    typedef boost::shared_ptr<AreaHelper> AreaHelperPtr;
 }

@@ -6,8 +6,9 @@
 
 namespace AltAI
 {
-    BuildingsHelper::BuildingsHelper(const CvCity* pCity, CityData& data) : 
-        pCity_(pCity), data_(data), dirtyPowerCount_(pCity->getDirtyPowerCount()), isPower_(pCity->isPower()), isAreaCleanPower_(pCity->isAreaCleanPower())
+    BuildingsHelper::BuildingsHelper(const CvCity* pCity) : 
+        pCity_(pCity), powerCount_(pCity->getPowerCount()), 
+        dirtyPowerCount_(pCity->getDirtyPowerCount()), isPower_(pCity->isPower()), isAreaCleanPower_(pCity->isAreaCleanPower())
     {
         owner_ = pCity->getOwner();
 
@@ -40,6 +41,12 @@ namespace AltAI
             }
             buildingCommerceMap_[(BuildingClassTypes)i] = commerce;
         }
+    }
+
+    BuildingsHelperPtr BuildingsHelper::clone() const
+    {
+        BuildingsHelperPtr copy = BuildingsHelperPtr(new BuildingsHelper(*this));
+        return copy;
     }
 
     int BuildingsHelper::getNumBuildings(BuildingTypes buildingType) const
@@ -113,7 +120,7 @@ namespace AltAI
         buildingCommerceMap_[buildingClassType] += commerce;
     }
 
-    int BuildingsHelper::getProductionModifier(BuildingTypes buildingType) const
+    int BuildingsHelper::getProductionModifier(const CityData& data, BuildingTypes buildingType) const
     {
         const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
         const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
@@ -122,14 +129,14 @@ namespace AltAI
 
 	    for (int bonusType = 0, count = gGlobals.getNumBonusInfos(); bonusType < count; ++bonusType)
 	    {
-		    if (data_.getBonusHelper()->getNumBonuses((BonusTypes)bonusType) > 0)
+		    if (data.getBonusHelper()->getNumBonuses((BonusTypes)bonusType) > 0)
 		    {
 			    multiplier += buildingInfo.getBonusProductionModifier(bonusType);
 		    }
         }
 
-        ReligionTypes stateReligion = data_.getReligionHelper()->getStateReligion();
-	    if (stateReligion != NO_RELIGION && data_.getReligionHelper()->isHasReligion(stateReligion))
+        ReligionTypes stateReligion = data.getReligionHelper()->getStateReligion();
+	    if (stateReligion != NO_RELIGION && data.getReligionHelper()->isHasReligion(stateReligion))
     	{
 			multiplier += player.getStateReligionBuildingProductionModifier(); // todo - use civic helper
 		}
@@ -137,7 +144,7 @@ namespace AltAI
 	    return std::max<int>(0, multiplier);
     }
 
-    Commerce BuildingsHelper::getBuildingCommerce(BuildingTypes buildingType) const
+    Commerce BuildingsHelper::getBuildingCommerce(const CityData& data, BuildingTypes buildingType) const
     {
         //std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(owner_))->getStream();
 
@@ -147,7 +154,7 @@ namespace AltAI
         const int originalBuildTime = pCity_->getBuildingOriginalTime(buildingType);  // todo
         const int gameTurnYear = gGlobals.getGame().getGameTurnYear(); // todo
 
-        ReligionTypes stateReligion = data_.getReligionHelper()->getStateReligion();
+        ReligionTypes stateReligion = data.getReligionHelper()->getStateReligion();
 
 	    if (buildingCount > 0)
 	    {
@@ -163,7 +170,7 @@ namespace AltAI
             if (buildingInfo.getGlobalReligionCommerce() != NO_RELIGION)  // shrine
     	    {
                 ReligionTypes religionType = (ReligionTypes)buildingInfo.getGlobalReligionCommerce();
-			    totalCommerce += Commerce(gGlobals.getReligionInfo(religionType).getGlobalReligionCommerceArray()) * data_.getReligionHelper()->getReligionCount(religionType) * activeBuildingCount;
+			    totalCommerce += Commerce(gGlobals.getReligionInfo(religionType).getGlobalReligionCommerceArray()) * data.getReligionHelper()->getReligionCount(religionType) * activeBuildingCount;
 		    }
 
             for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)

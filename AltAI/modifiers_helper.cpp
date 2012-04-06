@@ -10,7 +10,7 @@
 
 namespace AltAI
 {
-    ModifiersHelper::ModifiersHelper(const CvCity* pCity, CityData& data) : data_(data)
+    ModifiersHelper::ModifiersHelper(const CvCity* pCity)
     {
         const CvPlayerAI& player = CvPlayerAI::getPlayer(pCity->getOwner());
         pPlayerAnalysis_ = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getAnalysis();
@@ -52,10 +52,16 @@ namespace AltAI
         nationalWonderProductionModifier_ = player.getMaxPlayerBuildingProductionModifier();
     }
 
-    YieldModifier ModifiersHelper::getTotalYieldModifier() const
+    ModifiersHelperPtr ModifiersHelper::clone() const
+    {
+        ModifiersHelperPtr copy = ModifiersHelperPtr(new ModifiersHelper(*this));
+        return copy;
+    }
+
+    YieldModifier ModifiersHelper::getTotalYieldModifier(const CityData& data) const
     {
         YieldModifier modifier = yieldModifier_ + bonusYieldModifier_ + areaYieldModifier_ + playerYieldModifier_ + capitalYieldModifier_;
-        if (data_.getBuildingsHelper()->isPower())
+        if (data.getBuildingsHelper()->isPower())
         {
             modifier += powerYieldModifier_;
         }
@@ -73,7 +79,7 @@ namespace AltAI
         return (gGlobals.getUnitInfo(unitType).isMilitaryProduction() ? militaryProductionModifier_ : 0) + pPlayerAnalysis_->getPlayerUnitProductionModifier(unitType);
     }
 
-    int ModifiersHelper::getBuildingProductionModifier(BuildingTypes buildingType) const
+    int ModifiersHelper::getBuildingProductionModifier(const CityData& data, BuildingTypes buildingType) const
     {
         const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
         BuildingClassTypes buildingClassType = (BuildingClassTypes)buildingInfo.getBuildingClassType();
@@ -97,14 +103,14 @@ namespace AltAI
 
         for (int i = 0, count = gGlobals.getNumBonusInfos(); i < count; ++i)
         {
-            if (data_.getBonusHelper()->getNumBonuses((BonusTypes)i) > 0)
+            if (data.getBonusHelper()->getNumBonuses((BonusTypes)i) > 0)
             {
                 modifier += buildingInfo.getBonusProductionModifier(i);
             }
         }
 
-        ReligionTypes religionType = data_.getReligionHelper()->getStateReligion();
-        if (religionType != NO_RELIGION && data_.getReligionHelper()->isHasReligion(religionType))
+        ReligionTypes religionType = data.getReligionHelper()->getStateReligion();
+        if (religionType != NO_RELIGION && data.getReligionHelper()->isHasReligion(religionType))
         {
             modifier += stateReligionBuildingProductionModifier_;
         }
@@ -112,7 +118,7 @@ namespace AltAI
         return modifier;
     }
 
-    int ModifiersHelper::getProjectProductionModifier(ProjectTypes projectType) const
+    int ModifiersHelper::getProjectProductionModifier(const CityData& data, ProjectTypes projectType) const
     {
         int modifier = 0;
         const CvProjectInfo& projectInfo = gGlobals.getProjectInfo(projectType);
@@ -125,7 +131,7 @@ namespace AltAI
 
         for (int i = 0, count = gGlobals.getNumBonusInfos(); i < count; ++i)
         {
-            if (data_.getBonusHelper()->getNumBonuses((BonusTypes)i) > 0)
+            if (data.getBonusHelper()->getNumBonuses((BonusTypes)i) > 0)
             {
                 modifier += projectInfo.getBonusProductionModifier(i);
             }

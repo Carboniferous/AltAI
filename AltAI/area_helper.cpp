@@ -8,6 +8,12 @@ namespace AltAI
         cleanPowerCount_ = pArea->getCleanPowerCount(player.getTeam());
     }
 
+    AreaHelperPtr AreaHelper::clone() const
+    {
+        AreaHelperPtr copy = AreaHelperPtr(new AreaHelper(*this));
+        return copy;
+    }
+
     int AreaHelper::getCleanPowerCount() const
     {
         return cleanPowerCount_;

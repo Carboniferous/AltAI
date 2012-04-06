@@ -7,16 +7,18 @@ namespace AltAI
     class CityData;
     struct PlotData;
 
+    class CultureHelper;
+    typedef boost::shared_ptr<CultureHelper> CultureHelperPtr;
+
     class CultureHelper
     {
     public:
-        CultureHelper(const CvCity* pCity, CityData& data);
+        explicit CultureHelper(const CvCity* pCity);
+        CultureHelperPtr clone() const;
 
-        void advanceTurn(bool includeUnclaimedPlots);
+        void advanceTurn(CityData& data, bool includeUnclaimedPlots);
 
     private:
-        CityData& data_;
-
         bool checkCulturalLevel_();
         bool updatePlot_(PlotData& plotData, bool culturalLevelChange, const CvCity* pCity, int cultureOutput);
 
@@ -25,6 +27,4 @@ namespace AltAI
         CultureLevelTypes cultureLevel_;
         int CITY_FREE_CULTURE_GROWTH_FACTOR_;
     };
-
-    typedef boost::shared_ptr<CultureHelper> CultureHelperPtr;
 }

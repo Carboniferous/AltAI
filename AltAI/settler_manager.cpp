@@ -7,6 +7,7 @@
 #include "./resource_info_visitors.h"
 #include "./game.h"
 #include "./player.h"
+#include "./maintenance_helper.h"
 #include "./city.h"
 #include "./iters.h"
 #include "./civ_log.h"

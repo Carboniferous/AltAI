@@ -12,6 +12,7 @@
 #include "./player_analysis.h"
 #include "./helper_fns.h"
 #include "./city.h"
+#include "./civ_helper.h"
 #include "./civ_log.h"
 
 namespace AltAI

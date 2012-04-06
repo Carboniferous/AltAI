@@ -1,6 +1,7 @@
 #include "./project_tactics.h"
 #include "./player.h"
 #include "./city.h"
+#include "./civ_helper.h"
 #include "./project_info.h"
 #include "./project_info_visitors.h"
 #include "./project_tactics_visitors.h"

@@ -9,6 +9,8 @@
 #include "./area_helper.h"
 #include "./building_helper.h"
 #include "./trade_route_helper.h"
+#include "./modifiers_helper.h"
+#include "./maintenance_helper.h"
 #include "./religion_helper.h"
 #include "./bonus_helper.h"
 #include "./specialist_helper.h"

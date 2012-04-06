@@ -34,6 +34,12 @@ namespace AltAI
     {
     }
 
+    MaintenanceHelperPtr MaintenanceHelper::clone() const
+    {
+        MaintenanceHelperPtr copy = MaintenanceHelperPtr(new MaintenanceHelper(*this));
+        return copy;
+    }
+
     void MaintenanceHelper::init_()
     {
         numVassalCitiesModifier_ = getNumVassalCities(player_);

@@ -6,10 +6,14 @@ namespace AltAI
 {
     class CityData;
 
+    class BuildingsHelper;
+    typedef boost::shared_ptr<BuildingsHelper> BuildingsHelperPtr;
+
     class BuildingsHelper
     {
     public:
-        BuildingsHelper(const CvCity* pCity, CityData& data);
+        explicit BuildingsHelper(const CvCity* pCity);
+        BuildingsHelperPtr clone() const;
 
         int getNumBuildings(BuildingTypes buildingType) const;
         int getNumRealBuildings(BuildingTypes buildingType) const;
@@ -29,9 +33,9 @@ namespace AltAI
         void setBuildingCommerceChange(BuildingClassTypes buildingClassType, Commerce commerce);
         void changeBuildingCommerceChange(BuildingClassTypes buildingClassType, Commerce commerce);
 
-        Commerce getBuildingCommerce(BuildingTypes buildingType) const;
+        Commerce getBuildingCommerce(const CityData& data, BuildingTypes buildingType) const;
 
-        int getProductionModifier(BuildingTypes buildingType) const;
+        int getProductionModifier(const CityData& data, BuildingTypes buildingType) const;
 
         void updatePower(bool isDirty, bool isAdding);
         void updateAreaCleanPower(bool isAdding);
@@ -43,7 +47,6 @@ namespace AltAI
         int getDirtyPowerCount() const;
 
     private:
-        CityData& data_;
         const CvCity* pCity_;
         PlayerTypes owner_;
 
@@ -58,6 +61,4 @@ namespace AltAI
         int powerCount_, dirtyPowerCount_;
         bool isPower_, isAreaCleanPower_;
     };
-
-    typedef boost::shared_ptr<BuildingsHelper> BuildingsHelperPtr;
 }

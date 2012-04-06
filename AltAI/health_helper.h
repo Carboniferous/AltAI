@@ -6,10 +6,14 @@ namespace AltAI
 {
     class CityData;
 
+    class HealthHelper;
+    typedef boost::shared_ptr<HealthHelper> HealthHelperPtr;
+
     class HealthHelper
     {
     public:
-        HealthHelper(const CvCity* pCity, CityData& data);
+        explicit HealthHelper(const CvCity* pCity);
+        HealthHelperPtr clone() const;
 
         int goodHealth() const;
         int badHealth() const;
@@ -35,7 +39,6 @@ namespace AltAI
         void setNoUnhealthinessFromPopulation();
 
     private:
-        CityData& data_;
         const CvCity* pCity_;
         int population_;
 
@@ -58,6 +61,4 @@ namespace AltAI
 
         int POWER_HEALTH_CHANGE_, DIRTY_POWER_HEALTH_CHANGE_;
     };
-
-    typedef boost::shared_ptr<HealthHelper> HealthHelperPtr;
 }

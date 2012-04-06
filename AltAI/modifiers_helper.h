@@ -7,17 +7,21 @@ namespace AltAI
     class CityData;
     class PlayerAnalysis;
 
+    class ModifiersHelper;
+    typedef boost::shared_ptr<ModifiersHelper> ModifiersHelperPtr;
+
     class ModifiersHelper
     {
     public:
-        ModifiersHelper(const CvCity* pCity, CityData& data);
+        explicit ModifiersHelper(const CvCity* pCity);
+        ModifiersHelperPtr clone() const;
 
-        YieldModifier getTotalYieldModifier() const;
+        YieldModifier getTotalYieldModifier(const CityData& data) const;
         CommerceModifier getTotalCommerceModifier() const;
 
         int getUnitProductionModifier(UnitTypes unitType) const;
-        int getBuildingProductionModifier(BuildingTypes buildingType) const;
-        int getProjectProductionModifier(ProjectTypes projectType) const;
+        int getBuildingProductionModifier(const CityData& data, BuildingTypes buildingType) const;
+        int getProjectProductionModifier(const CityData& data, ProjectTypes projectType) const;
 
         void changeYieldModifier(YieldModifier modifier);
         void changePowerYieldModifier(YieldModifier modifier);
@@ -36,7 +40,6 @@ namespace AltAI
         void changePlayerSpaceProductionModifier(int change);
 
     private:
-        CityData& data_;
         boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis_;
 
         YieldModifier yieldModifier_;
@@ -50,6 +53,4 @@ namespace AltAI
         CommerceModifier commerceModifier_;
         CommerceModifier playerCommerceModifier_, capitalCommerceModifier_;
     };
-
-    typedef boost::shared_ptr<ModifiersHelper> ModifiersHelperPtr;
 }

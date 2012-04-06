@@ -4,7 +4,7 @@
 
 namespace AltAI
 {
-    HealthHelper::HealthHelper(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
+    HealthHelper::HealthHelper(const CvCity* pCity) : pCity_(pCity)
     {
         POWER_HEALTH_CHANGE_ = gGlobals.getDefineINT("POWER_HEALTH_CHANGE");
         DIRTY_POWER_HEALTH_CHANGE_  = gGlobals.getDefineINT("DIRTY_POWER_HEALTH_CHANGE");
@@ -45,6 +45,12 @@ namespace AltAI
 
         noUnhealthinessFromPopulation_ = pCity_->isNoUnhealthyPopulation();
         noUnhealthinessFromBuildings_ = pCity_->isBuildingOnlyHealthy();
+    }
+
+    HealthHelperPtr HealthHelper::clone() const
+    {
+        HealthHelperPtr copy = HealthHelperPtr(new HealthHelper(*this));
+        return copy;
     }
 
     int HealthHelper::goodHealth() const

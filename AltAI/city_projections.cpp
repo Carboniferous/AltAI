@@ -2,6 +2,8 @@
 #include "./building_info_visitors.h"
 #include "./player.h"
 #include "./city.h"
+#include "./maintenance_helper.h"
+#include "./building_helper.h"
 #include "./buildings_info.h"
 #include "./civ_log.h"
 

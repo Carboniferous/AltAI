@@ -8,18 +8,22 @@ namespace AltAI
 {
     class CityData;
 
+    class HappyHelper;
+    typedef boost::shared_ptr<HappyHelper> HappyHelperPtr;
+    
     // simulates happy/unhappy logic in CvCity; allows simulation of changing (un)happiness
     class HappyHelper
     {
     public:
-        HappyHelper(const CvCity* pCity, CityData& data);
+        explicit HappyHelper(const CvCity* pCity);
+        HappyHelperPtr clone() const;
 
         int happyPopulation() const;
-        int angryPopulation() const;
+        int angryPopulation(const CityData& data) const;
 
-        void advanceTurn();
+        void advanceTurn(CityData& data);
 
-        void setPopulation(int population);
+        void setPopulation(CityData& data, int population);
 
         void changeBuildingGoodHappiness(int change);
         void changeBuildingBadHappiness(int change);
@@ -44,7 +48,6 @@ namespace AltAI
     private:
         void setOvercrowdingPercentAnger_();
 
-        CityData& data_;
         const CvCity* pCity_;
 
         int population_;
@@ -68,6 +71,4 @@ namespace AltAI
         int targetNumCities_;
         int PERCENT_ANGER_DIVISOR_, TEMP_HAPPY_;
     };
-
-    typedef boost::shared_ptr<HappyHelper> HappyHelperPtr;
 }

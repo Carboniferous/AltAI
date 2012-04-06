@@ -2,6 +2,7 @@
 #include "./city_data.h"
 #include "./player.h"
 #include "./city.h"
+#include "./civ_helper.h"
 #include "./player_analysis.h"
 #include "./iters.h"
 

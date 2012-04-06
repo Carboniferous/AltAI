@@ -7,10 +7,14 @@ namespace AltAI
     class CityData;
     class Player;
 
+    class CivHelper;
+    typedef boost::shared_ptr<CivHelper> CivHelperPtr;
+
     class CivHelper
     {
     public:
         explicit CivHelper(const Player& player);
+        CivHelperPtr clone() const;
         void init();
 
         bool hasTech(TechTypes techType) const;
@@ -43,6 +47,4 @@ namespace AltAI
 
         std::vector<int> specialBuildingNotRequiredCounts_;
     };
-
-    typedef boost::shared_ptr<CivHelper> CivHelperPtr;
 }
