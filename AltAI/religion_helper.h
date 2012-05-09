@@ -18,6 +18,8 @@ namespace AltAI
         explicit ReligionHelper(const CvCity* pCity);
         ReligionHelperPtr clone() const;
 
+        void changeReligionCount(ReligionTypes religionType, int change = 1);
+
         bool isHasReligion(ReligionTypes religionType) const;
         int getReligionCount(ReligionTypes religionType) const;
         ReligionTypes getStateReligion() const;

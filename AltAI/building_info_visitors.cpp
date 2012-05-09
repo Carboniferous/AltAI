@@ -269,11 +269,47 @@ namespace AltAI
                 data_.getHealthHelper()->updatePowerHealth(data_);  // double use of CityData reinforces above comment!
             }
 
+            void operator() (const BuildingInfo::AreaEffectNode& node) const
+            {
+                if (node.areaHealth > 0)
+                {
+                    data_.getHealthHelper()->changeAreaBuildingGoodHealthiness(node.areaHealth);
+                }
+                else if (node.areaHealth < 0)
+                {
+                    data_.getHealthHelper()->changeAreaBuildingBadHealthiness(node.areaHealth);
+                }
+                
+                if (node.globalHealth > 0)
+                {
+                    data_.getHealthHelper()->changePlayerBuildingGoodHealthiness(node.areaHealth);
+                }
+                else if (node.globalHealth < 0)
+                {
+                    data_.getHealthHelper()->changePlayerBuildingBadHealthiness(node.areaHealth);
+                }
+                
+                if (node.areaHappy != 0)
+                {
+                    data_.getHappyHelper()->changeAreaBuildingHappiness(node.areaHappy);
+                }
+                
+                if (node.globalHappy != 0)
+                {
+                    data_.getHappyHelper()->changePlayerBuildingHappiness(node.globalHappy);
+                }
+            }
+
             void operator() (const BuildingInfo::MiscEffectNode& node) const
             {
                 if (node.cityMaintenanceModifierChange != 0)
                 {
                     data_.getMaintenanceHelper()->changeModifier(node.cityMaintenanceModifierChange);
+                }
+
+                if (node.isGovernmentCenter)
+                {
+                    data_.getMaintenanceHelper()->addGovernmentCentre(data_.getCity()->getIDInfo());
                 }
 
                 if (node.foodKeptPercent != 0)
@@ -284,6 +320,11 @@ namespace AltAI
                 if (node.hurryAngerModifier != 0)
                 {
                     data_.getHurryHelper()->changeModifier(node.hurryAngerModifier);
+                }
+
+                if (node.globalPopChange != 0)
+                {
+                    data_.changePopulation(node.globalPopChange);
                 }
 
                 if (node.noUnhealthinessFromBuildings)
@@ -301,12 +342,200 @@ namespace AltAI
             boost::shared_ptr<Player> pPlayer_;
             CityData& data_;
         };
+
+        // update CityData with changes resulting from construction of supplied BuildingInfo nodes from building constructed in another city
+        class CityGlobalOutputUpdater : public boost::static_visitor<>
+        {
+        public:
+            explicit CityGlobalOutputUpdater(const CityDataPtr& pCityData, const CvCity* pBuiltCity) : pCityData_(pCityData), pBuiltCity_(pBuiltCity)
+            {
+                pPlayer_ = gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()); 
+            }
+
+            template <typename T>
+                result_type operator() (const T&) const
+            {
+            }
+
+            void operator() (const BuildingInfo::BaseNode& node) const
+            {
+                for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+                {
+                    boost::apply_visitor(*this, node.nodes[i]);
+                }
+            }
+
+            void operator() (const BuildingInfo::SpecialistNode& node) const
+            {
+                // find 'plots' which represent specialists and update their outputs
+                for (size_t i = 0, count = node.specialistTypesAndYields.size(); i < count; ++i)
+                {
+                    for (PlotDataListIter iter(pCityData_->getPlotOutputs().begin()), endIter(pCityData_->getPlotOutputs().end()); iter != endIter; ++iter)
+                    {
+                        // TODO - double check everything is in correct units here
+                        if (!iter->isActualPlot() && (SpecialistTypes)iter->coords.iY == node.specialistTypesAndYields[i].first)
+                        {
+                            iter->plotYield += node.specialistTypesAndYields[i].second;
+                            iter->commerce += node.extraCommerce;
+
+                            TotalOutput specialistOutput(makeOutput(iter->plotYield, iter->commerce, 
+                                makeYield(100, 100, pCityData_->getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), pCityData_->getCommercePercent()));
+                            iter->actualOutput = iter->output = specialistOutput;
+                        }
+                    }
+                }
+            }
+
+            void operator() (const BuildingInfo::YieldNode& node) const
+            {
+                if (node.global)
+                {
+                    if (!isEmpty(node.modifier))
+                    {
+                        if (node.modifier[YIELD_COMMERCE] != 0)
+                        {
+                            pCityData_->changeCommerceYieldModifier(node.modifier[YIELD_COMMERCE]);
+                        }
+                        pCityData_->getModifiersHelper()->changeYieldModifier(node.modifier);
+                    }
+
+                    if (!isEmpty(node.powerModifier))
+                    {
+                        if (node.powerModifier[YIELD_COMMERCE] != 0)
+                        {
+                            pCityData_->changeCommerceYieldModifier(node.modifier[YIELD_COMMERCE]);
+                        }
+                        pCityData_->getModifiersHelper()->changePowerYieldModifier(node.powerModifier);
+                    }
+
+                    if (node.plotCond)
+                    {
+                        int xCoord = pCityData_->getCityPlotOutput().coords.iX, yCoord = pCityData_->getCityPlotOutput().coords.iY;
+                        CvPlot* pPlot = gGlobals.getMap().plot(xCoord, yCoord);
+
+                        if ((pPlot->*(node.plotCond))())
+                        {
+                            pCityData_->getCityPlotOutput().plotYield += node.yield;
+                        }
+
+                        // update plot yields
+                        for (PlotDataListIter iter(pCityData_->getPlotOutputs().begin()), endIter(pCityData_->getPlotOutputs().end()); iter != endIter; ++iter)
+                        {
+                            if (iter->isActualPlot())
+                            {
+                                xCoord = iter->coords.iX, yCoord = iter->coords.iY;
+                                pPlot = gGlobals.getMap().plot(xCoord, yCoord);
+                                if ((pPlot->*(node.plotCond))())
+                                {
+                                    iter->plotYield += node.yield;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            void operator() (const BuildingInfo::CommerceNode& node) const
+            {
+                if (node.global)
+                {
+                    if (!isEmpty(node.modifier))
+                    {
+                        pCityData_->getModifiersHelper()->changeCommerceModifier(node.modifier);
+                    }
+                }
+            }
+
+            void operator() (const BuildingInfo::TradeNode& node) const
+            {
+                if (node.extraCoastalTradeRoutes != 0 && pCityData_->getCity()->isCoastal(gGlobals.getMIN_WATER_SIZE_FOR_OCEAN()))
+                {
+                    pCityData_->getTradeRouteHelper()->changeNumRoutes(node.extraCoastalTradeRoutes);
+                }
+
+                if (node.extraGlobalTradeRoutes != 0)
+                {
+                    pCityData_->getTradeRouteHelper()->changeNumRoutes(node.extraGlobalTradeRoutes);
+                }
+            }
+
+            void operator() (const BuildingInfo::FreeBonusNode& node) const
+            {
+                pCityData_->getBonusHelper()->changeNumBonuses(node.freeBonuses.first, node.freeBonuses.second);
+                updateCityData(*pCityData_, pPlayer_->getAnalysis()->getResourceInfo(node.freeBonuses.first), true); // process new bonus
+            }
+
+            void operator() (const BuildingInfo::PowerNode& node) const
+            {
+                if (node.areaCleanPower && pCityData_->getCity()->getArea() == pBuiltCity_->getArea())
+                {
+                    pCityData_->getAreaHelper()->changeCleanPowerCount(true);
+                    pCityData_->getBuildingsHelper()->updateAreaCleanPower(pCityData_->getAreaHelper()->getCleanPowerCount() > 0);
+                    pCityData_->getHealthHelper()->updatePowerHealth(*pCityData_);
+                }                
+            }
+
+            void operator() (const BuildingInfo::AreaEffectNode& node) const
+            {
+                if (node.areaHealth > 0)
+                {
+                    pCityData_->getHealthHelper()->changeAreaBuildingGoodHealthiness(node.areaHealth);
+                }
+                else if (node.areaHealth < 0)
+                {
+                    pCityData_->getHealthHelper()->changeAreaBuildingBadHealthiness(node.areaHealth);
+                }
+                
+                if (node.globalHealth > 0)
+                {
+                    pCityData_->getHealthHelper()->changePlayerBuildingGoodHealthiness(node.areaHealth);
+                }
+                else if (node.globalHealth < 0)
+                {
+                    pCityData_->getHealthHelper()->changePlayerBuildingBadHealthiness(node.areaHealth);
+                }
+                
+                if (node.areaHappy != 0)
+                {
+                    pCityData_->getHappyHelper()->changeAreaBuildingHappiness(node.areaHappy);
+                }
+                
+                if (node.globalHappy != 0)
+                {
+                    pCityData_->getHappyHelper()->changePlayerBuildingHappiness(node.globalHappy);
+                }
+            }
+
+            void operator() (const BuildingInfo::MiscEffectNode& node) const
+            {
+                if (node.globalPopChange != 0)
+                {
+                    pCityData_->changePopulation(node.globalPopChange);
+                }
+
+                if (node.isGovernmentCenter)
+                {
+                    pCityData_->getMaintenanceHelper()->addGovernmentCentre(pBuiltCity_->getIDInfo());
+                }
+            }
+
+        private:
+            boost::shared_ptr<Player> pPlayer_;
+            CityDataPtr pCityData_;
+            const CvCity* pBuiltCity_;
+        };
     }
 
     void updateRequestData(CityData& data, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
     {
         boost::apply_visitor(CityOutputUpdater(data), pBuildingInfo->getInfo());
         data.recalcOutputs();
+    }
+
+    void updateGlobalRequestData(const CityDataPtr& pCityData, const CvCity* pBuiltCity, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    {
+        boost::apply_visitor(CityGlobalOutputUpdater(pCityData, pBuiltCity), pBuildingInfo->getInfo());
+        pCityData->recalcOutputs();
     }
 
     boost::shared_ptr<BuildingInfo> makeBuildingInfo(BuildingTypes buildingType, PlayerTypes playerType)
@@ -355,6 +584,12 @@ namespace AltAI
         {
             return node.happy < 0 || node.health < 0 || node.prodModifier  < 0 ||
                 YieldAndCommerceFunctor<LessThanZero>()(node.yieldModifier)
+                ? node : BuildingInfo::BuildingInfoNode(BuildingInfo::NullNode());
+        }
+
+        result_type operator() (const BuildingInfo::AreaEffectNode& node) const
+        {
+            return node.areaHealth < 0 || node.globalHealth < 0 || node.areaHappy < 0 || node.globalHappy < 0
                 ? node : BuildingInfo::BuildingInfoNode(BuildingInfo::NullNode());
         }
 
@@ -598,10 +833,17 @@ namespace AltAI
             return true;
         }
 
+        result_type operator() (const BuildingInfo::AreaEffectNode& node) const
+        {
+            return true;
+        }
+
         result_type operator() (const BuildingInfo::MiscEffectNode& node) const
         {
-            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 || 
-                node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation)
+            // currently, this test is effectively the same as just returning true, as we don't create the node unless at least one filed is set to a non-default value
+            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.globalPopChange != 0 || 
+                node.hurryAngerModifier != 0 || node.isGovernmentCenter || node.makesCityCapital ||
+                node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation || node.startsGoldenAge)
             {
                 return true;
             }
@@ -691,11 +933,15 @@ namespace AltAI
 
         result_type operator() (const BuildingInfo::MiscEffectNode& node) const
         {
-            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 || 
-                node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation)
+            // currently, this test is effectively the same as just returning true, as we don't create the node unless at least one filed is set to a non-default value
+            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.globalPopChange != 0 || 
+                node.hurryAngerModifier != 0 || node.isGovernmentCenter || node.makesCityCapital ||
+                node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation || node.startsGoldenAge)
             {
                 return true;
             }
+
+            return false;
 
             return false;
         }
@@ -1113,6 +1359,11 @@ namespace AltAI
             return true;
         }
 
+        bool operator() (const BuildingInfo::MiscEffectNode& node) const
+        {
+            return !(node.isGovernmentCenter && city_.getCvCity()->isGovernmentCenter());
+        }
+
     private:
         const Player& player_;
         const City& city_;
@@ -1124,5 +1375,26 @@ namespace AltAI
     bool couldConstructBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
     {
         return boost::apply_visitor(CouldConstructBuildingVisitor(player, city, lookaheadDepth), pBuildingInfo->getInfo());
+    }
+
+    bool couldConstructSpecialBuilding(const Player& player, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    {
+        const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(pBuildingInfo->getBuildingType());
+        SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)buildingInfo.getSpecialBuildingType();
+
+        if (specialBuildingType != NO_SPECIALBUILDING)
+	    {
+            TechTypes prereqTech = (TechTypes)gGlobals.getSpecialBuildingInfo(specialBuildingType).getTechPrereq();
+            if (prereqTech != NO_TECH)
+            {
+                if (!player.getCivHelper()->hasTech(prereqTech) &&
+                    (lookaheadDepth == 0 ? true : player.getAnalysis()->getTechResearchDepth(prereqTech) > lookaheadDepth))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 }

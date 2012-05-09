@@ -23,7 +23,7 @@ namespace AltAI
         init_();
     }
 
-    MaintenanceHelper::MaintenanceHelper(const MaintenanceHelper& other)
+   /* MaintenanceHelper::MaintenanceHelper(const MaintenanceHelper& other)
         : coords_(other.coords_), player_(other.player_), cityModifier_(other.cityModifier_), population_(other.population_),
           numCities_(other.numCities_), numVassalCitiesModifier_(other.numVassalCitiesModifier_),
           MAX_DISTANCE_CITY_MAINTENANCE_(other.MAX_DISTANCE_CITY_MAINTENANCE_), distanceMaintenancePercent_(other.distanceMaintenancePercent_),
@@ -32,7 +32,7 @@ namespace AltAI
           numCitiesHandicapMaintenancePercent_(other.numCitiesHandicapMaintenancePercent_), maxNumCitiesMaintenance_(other.maxNumCitiesMaintenance_),
           numCitiesMaintenanceModifier_(other.numCitiesMaintenanceModifier_)
     {
-    }
+    }*/
 
     MaintenanceHelperPtr MaintenanceHelper::clone() const
     {
@@ -58,6 +58,15 @@ namespace AltAI
         numCitiesHandicapMaintenancePercent_ = gGlobals.getHandicapInfo(player_.getHandicapType()).getNumCitiesMaintenancePercent();
         maxNumCitiesMaintenance_ = 100 * gGlobals.getHandicapInfo(player_.getHandicapType()).getMaxNumCitiesMaintenance();
         numCitiesMaintenanceModifier_ = std::max<int>(0, 100 + player_.getNumCitiesMaintenanceModifier());  // potentially affected by civic changes
+
+        CityIter iter(player_);
+        while (CvCity* pCity = iter())
+        {
+            if (pCity->isGovernmentCenter())
+            {
+                governmentCentres_.insert(pCity->getIDInfo());
+            }
+        }
     }
 
     int MaintenanceHelper::getMaintenance() const
@@ -77,6 +86,16 @@ namespace AltAI
         return newMaintenance;
     }
 
+    void MaintenanceHelper::addGovernmentCentre(IDInfo city)
+    {
+        governmentCentres_.insert(city);
+    }
+
+    void MaintenanceHelper::removeGovernmentCentre(IDInfo city)
+    {
+        governmentCentres_.erase(city);
+    }
+
     int MaintenanceHelper::calcDistanceMaintenance_() const
     {
         int iWorstCityMaintenance = 0, iBestCapitalMaintenance = std::numeric_limits<int>::max();
@@ -89,7 +108,7 @@ namespace AltAI
 
 		    iWorstCityMaintenance = std::max<int>(iWorstCityMaintenance, iTempMaintenance);
 
-            if (pLoopCity->isGovernmentCenter())
+            if (governmentCentres_.find(pLoopCity->getIDInfo()) != governmentCentres_.end())
             {
             	iBestCapitalMaintenance = std::min<int>(iBestCapitalMaintenance, iTempMaintenance);
 		    }

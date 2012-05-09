@@ -43,10 +43,13 @@ namespace AltAI
     TotalOutput ProjectionLadder::getOutput() const
     {
         TotalOutput cumulativeOutput;
+        int cumulativeCost = 0;
         for (size_t i = 0, count = entries.size(); i < count; ++i)
         {            
             cumulativeOutput += entries[i].output * entries[i].turns;
+            cumulativeCost += entries[i].cost * entries[i].turns;
         }
+        cumulativeOutput[OUTPUT_GOLD] -= cumulativeCost;
         return cumulativeOutput;
     }
 
@@ -76,9 +79,9 @@ namespace AltAI
 
     ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns)
     {
-/*#ifdef ALTAI_DEBUG
+#ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
-#endif*/        
+#endif
         CityOptimiser cityOptimiser(pCityData);
 
         std::vector<OutputTypes> outputTypes = boost::assign::list_of(OUTPUT_PRODUCTION)(OUTPUT_RESEARCH);
@@ -117,6 +120,10 @@ namespace AltAI
                 pCityData->setCurrentFood(currentFood);
                 pCityData->setStoredFood(storedFood);
                 pCityData->changePopulation(popChange);
+//#ifdef ALTAI_DEBUG
+//                os << "\nSetting current food = " << currentFood << ", stored food = " << storedFood << ", pop = " << popChange
+//                   << ", growth threshold = " << pCityData->getGrowthThreshold() << " turn = " << nTurns << " food = " << pCityData->getCurrentFood();
+//#endif
 
                 nTurns -= turnsToPopChange;
             }
@@ -193,6 +200,10 @@ namespace AltAI
                     boost::tie(currentFood, storedFood) = pCityData->getAccumulatedFood(turnsToComplete);
                     pCityData->setCurrentFood(currentFood);
                     pCityData->setStoredFood(storedFood);
+//#ifdef ALTAI_DEBUG
+//                    os << "\nSetting current food = " << currentFood << ", stored food = " << storedFood
+//                       << ", growth threshold = " << pCityData->getGrowthThreshold() << " turn = " << nTurns << " food = " << pCityData->getCurrentFood();
+//#endif
 
                     requiredProduction = 0;
                     pCityData->getBuildingsHelper()->changeNumRealBuildings(pBuildingInfo->getBuildingType());
@@ -220,6 +231,11 @@ namespace AltAI
                 pCityData->setCurrentFood(currentFood);
                 pCityData->setStoredFood(storedFood);
                 pCityData->changePopulation(popChange);
+//#ifdef ALTAI_DEBUG
+//                os << "\nSetting current food = " << currentFood << ", stored food = " << storedFood << ", pop = " << popChange
+//                   << ", growth threshold = " << pCityData->getGrowthThreshold() << " turn = " << nTurns << " food = " << pCityData->getCurrentFood();
+//#endif
+                
 
                 nTurns -= turnsToPopChange;
             }

@@ -31,10 +31,21 @@ namespace AltAI
         void selectProjectTactics();
         void selectProjectTactics(const City& city);
 
-        void updateCityBuildingTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
+        void deleteCity(const CvCity* pCity);
+
+        void updateCityBuildingTactics(TechTypes techType);
         void updateCityBuildingTactics(IDInfo city, BuildingTypes buildingType, int newCount);
         void updateCityBuildingTactics(IDInfo city);
+        void updateCityReligionBuildingTactics(ReligionTypes religionType);
+
+        void addNewCityBuildingTactics(IDInfo city);
+
+        void updateCityBuildingTacticsDependencies();
+
+        void updateLimitedBuildingTacticsDependencies();
+
         void updateCityGlobalBuildingTactics(IDInfo city, BuildingTypes buildingType, int newCount);
+        void updateGlobalBuildingTacticsDependencies();
         void eraseGlobalBuildingTactics(BuildingTypes buildingType);
 
         void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
@@ -51,7 +62,7 @@ namespace AltAI
         std::map<IDInfo, ConstructList> selectedCityBuildingTactics_, selectedCityProjectTactics_;
 
         // ordinary buildings tactics, keyed by city IDInfo
-        typedef std::list<ICityBuildingTacticsPtr> CityBuildingTacticsList;
+        typedef std::map<BuildingTypes, ICityBuildingTacticsPtr> CityBuildingTacticsList;
         typedef std::map<IDInfo, CityBuildingTacticsList> CityBuildingTacticsMap;
         CityBuildingTacticsMap cityBuildingTacticsMap_;
 

@@ -553,12 +553,14 @@ namespace AltAI
 
             void calculateSmallCultureBuilding()
             {
+#ifdef ALTAI_DEBUG
+                // debug
+                boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
+                std::ostream& os = pCivLog->getStream();
+#endif
                 if (economicFlagsUnion & EconomicFlags::Output_Culture)
                 {
 #ifdef ALTAI_DEBUG
-                    // debug
-                    boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
-                    std::ostream& os = pCivLog->getStream();
                     os << "\n(getConstructItem): Turn = " << gGlobals.getGame().getGameTurn();
 #endif
                     bestSmallCultureBuilding = NO_BUILDING;
@@ -592,16 +594,27 @@ namespace AltAI
                         }
                     }
                 }
+
+                TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                for (std::set<CultureBuildingValue>::const_iterator ci(tacticSelectionData.smallCultureBuildings.begin()), ciEnd(tacticSelectionData.smallCultureBuildings.end()); ci != ciEnd; ++ci)
+                {
+#ifdef ALTAI_DEBUG
+                    os << "\n(Small Culture Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType()
+                       << " turns = " << ci->nTurns << ", delta = " << ci->output - base;
+#endif
+                }
             }
 
             void calculateBestEconomicBuilding()
             {
+#ifdef ALTAI_DEBUG
+                boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
+                std::ostream& os = pCivLog->getStream();
+#endif
+
                 if (economicFlagsUnion)
                 {
 #ifdef ALTAI_DEBUG
-                    // debug
-                    boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
-                    std::ostream& os = pCivLog->getStream();
                     os << "\n(calculateBestEconomicBuilding): Turn = " << gGlobals.getGame().getGameTurn();
 #endif
                     BuildingTypes bestBuilding = NO_BUILDING;
@@ -621,6 +634,15 @@ namespace AltAI
                             }
                         }
                     }
+                }
+
+                TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                for (std::set<EconomicBuildingValue>::const_iterator ci(tacticSelectionData.economicBuildings.begin()), ciEnd(tacticSelectionData.economicBuildings.end()); ci != ciEnd; ++ci)
+                {
+#ifdef ALTAI_DEBUG
+                    os << "\n(Economic Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType()
+                       << " turns = " << ci->nTurns << ", delta = " << ci->output - base;
+#endif
                 }
             }
 
@@ -1703,13 +1725,38 @@ namespace AltAI
             std::map<UnitCombatTypes, UnitTypes> bestUnitCombatTypes;
             ProcessTypes bestEconomicProcess, bestResearchProcess, bestCultureProcess;
 
+            TacticSelectionData tacticSelectionData;
+
             ConstructItem selection;
         };
+    }
+
+    bool CultureBuildingValue::operator < (const CultureBuildingValue& other) const
+    {
+        return nTurns > other.nTurns;
+    }
+
+    bool EconomicBuildingValue::operator < (const EconomicBuildingValue& other) const
+    {
+        TotalOutputWeights weights = makeOutputW(2, 6, 4, 4, 2, 1);
+        TotalOutputValueFunctor valueF(weights);
+
+        return valueF(output) / (nTurns == 0 ? 1 : nTurns) > valueF(other.output) / (other.nTurns == 0 ? 1 : other.nTurns);
     }
 
     ConstructItem getConstructItem(const PlayerTactics& playerTactics, const City& city)
     {
         CityBuildSelectionData selectionData(playerTactics, city);
+
+        PlayerTactics::CityBuildingTacticsMap::const_iterator ci = playerTactics.cityBuildingTacticsMap_.find(city.getCvCity()->getIDInfo());
+        if (ci != playerTactics.cityBuildingTacticsMap_.end())
+        {
+            for (PlayerTactics::CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
+            {
+                li->second->update(playerTactics.player, city.getCityData());
+                li->second->apply(selectionData.tacticSelectionData);
+            }
+        }
 
         selectionData.calculateImprovementStats();
 

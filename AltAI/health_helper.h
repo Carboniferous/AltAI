@@ -33,6 +33,12 @@ namespace AltAI
         void changeBonusGoodHealthiness(int change);
         void changeBonusBadHealthiness(int change);
 
+        void changeAreaBuildingGoodHealthiness(int change);
+        void changeAreaBuildingBadHealthiness(int change);
+
+        void changePlayerBuildingGoodHealthiness(int change);
+        void changePlayerBuildingBadHealthiness(int change);
+
         void updatePowerHealth(const CityData& cityData);
 
         void setNoUnhealthinessFromBuildings();

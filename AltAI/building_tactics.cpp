@@ -34,6 +34,7 @@ namespace AltAI
     {
         ConstructList buildingTactics;
         const CvPlayer* pPlayer = player.getCvPlayer();
+        const int lookAheadDepth = 2;
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*pPlayer)->getStream();
@@ -74,7 +75,7 @@ namespace AltAI
                 for (size_t j = 0, count = requiredTechs.size(); j < count; ++j)
                 {
                     const int depth = player.getTechResearchDepth(requiredTechs[j]);
-                    if (depth > 2)
+                    if (depth > lookAheadDepth)
                     {
                         haveTechPrereqs = false;
                         break;
@@ -86,37 +87,18 @@ namespace AltAI
                     continue;
                 }
 
-                const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
-                SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)buildingInfo.getSpecialBuildingType();
-
-                if (specialBuildingType != NO_SPECIALBUILDING)
-	            {
-		            if (!player.getCivHelper()->hasTech((TechTypes)(gGlobals.getSpecialBuildingInfo(specialBuildingType).getTechPrereq())))
-    		        {
-	    		        continue;
-		            }
-	            }
-
-                ReligionTypes religionType = (ReligionTypes)buildingInfo.getPrereqReligion();
-                bool needReligion = religionType != NO_RELIGION;
-                bool haveReligion = false;
-                if (needReligion)
-                {
-                    CityIter cityIter(*pPlayer);
-                    CvCity* pCity;
-                    while (pCity = cityIter())
-                    {
-                        if (pCity->isHasReligion(religionType))
-                        {
-                            haveReligion = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (needReligion && !haveReligion)
+                if (!couldConstructSpecialBuilding(player, lookAheadDepth, pBuildingInfo))
                 {
                     continue;
+                }
+
+                ReligionTypes religionType = (ReligionTypes)gGlobals.getBuildingInfo(buildingType).getPrereqReligion();
+                if (religionType != NO_RELIGION)
+                {
+                    if (player.getCvPlayer()->getHasReligionCount(religionType) == 0)
+                    {
+                        continue;
+                    }
                 }
 
                 ConstructItem constructItem = getEconomicBuildingTactics(player, buildingType, pBuildingInfo);

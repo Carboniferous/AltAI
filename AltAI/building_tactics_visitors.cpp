@@ -570,21 +570,29 @@ namespace AltAI
             }
         }
 
+        void operator() (const BuildingInfo::YieldNode& node)
+        {
+            if (node.yield[OUTPUT_FOOD] > 0)  // todo - check plot conds
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new FoodBuildingTactic()));
+            }
+        }
+
         void operator() (const BuildingInfo::CommerceNode& node)
         {
-            if (node.modifier[COMMERCE_RESEARCH] > 0)
+            if (node.modifier[COMMERCE_RESEARCH] > 0 || node.obsoleteSafeCommerce[COMMERCE_RESEARCH] > 0 || node.commerce[COMMERCE_RESEARCH] > 0)
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new ScienceBuildingTactic()));
             }
-            if (node.modifier[COMMERCE_GOLD] > 0)
+            if (node.modifier[COMMERCE_GOLD] > 0 || node.obsoleteSafeCommerce[COMMERCE_GOLD] > 0 || node.commerce[COMMERCE_GOLD] > 0)
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new GoldBuildingTactic()));
             }
-            if (node.modifier[COMMERCE_RESEARCH] > 0)
+            if (node.modifier[COMMERCE_ESPIONAGE] > 0 || node.obsoleteSafeCommerce[COMMERCE_ESPIONAGE] > 0 || node.commerce[COMMERCE_ESPIONAGE] > 0)
             {
-                pTactic_->addTactic(ICityBuildingTacticPtr(new ScienceBuildingTactic()));
+                pTactic_->addTactic(ICityBuildingTacticPtr(new EspionageBuildingTactic()));
             }
-            if (node.modifier[COMMERCE_CULTURE] > 0)
+            if (node.modifier[COMMERCE_CULTURE] > 0 || node.obsoleteSafeCommerce[COMMERCE_CULTURE] > 0 || node.commerce[COMMERCE_CULTURE] > 0)
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new CultureBuildingTactic()));
             }
@@ -595,6 +603,22 @@ namespace AltAI
             if (!node.specialistTypes.empty())
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new SpecialistBuildingTactic()));
+            }
+        }
+
+        void operator() (const BuildingInfo::MiscEffectNode& node)
+        {
+            if (node.foodKeptPercent > 0)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new FoodBuildingTactic()));
+            }
+        }
+
+        void operator() (const BuildingInfo::ReligionNode& node)
+        {
+            if (node.prereqReligion != NO_RELIGION && !city_.getCvCity()->isHasReligion(node.prereqReligion))
+            {
+                pTactic_->addDependency(IDependentTacticPtr(new ReligiousDependency(node.prereqReligion)));
             }
         }
 
@@ -695,7 +719,7 @@ namespace AltAI
 
         while (CvCity* pCity = iter())
         {
-            pTactic->addCityTactic(makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+            pTactic->addCityTactic(pCity->getIDInfo(), makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
         }
 
         return pTactic;
@@ -709,7 +733,10 @@ namespace AltAI
 
         while (CvCity* pCity = iter())
         {
-            pTactic->addCityTactic(makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+            if (!pCity->isNationalWondersMaxed())
+            {
+                pTactic->addCityTactic(pCity->getIDInfo(), makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+            }
         }
 
         return pTactic;

@@ -110,6 +110,9 @@ namespace AltAI
         int getCombatUnitCount(DomainTypes domainType, bool inProduction) const;
         int getScoutUnitCount(DomainTypes domainType, bool inProduction) const;
 
+        void notifyHaveReligion(ReligionTypes religionType);
+        void notifyLostReligion(ReligionTypes religionType);
+
         // save/load functions
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);

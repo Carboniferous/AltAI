@@ -203,6 +203,11 @@ namespace AltAI
         featureBadHappiness_ += change;
     }
 
+    void HappyHelper::changeAreaBuildingHappiness(int change)
+    {
+        areaBuildingHappiness_ += change;
+    }
+
     void HappyHelper::changeLargestCityHappiness(int change)
     {
         // use actual rank - more interested in preserving relative order than actual size
@@ -215,6 +220,11 @@ namespace AltAI
     void HappyHelper::setMilitaryHappiness(int happyPerUnit)
     {
         militaryHappiness_ = pCity_->getMilitaryHappinessUnits() * happyPerUnit;
+    }
+
+    void HappyHelper::changePlayerBuildingHappiness(int change)
+    {
+        playerBuildingHappiness_ += change;
     }
 
     void HappyHelper::changePlayerHappiness(int change)

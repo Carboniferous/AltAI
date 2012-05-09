@@ -314,9 +314,41 @@ namespace AltAI
             node.noUnhealthinessFromBuildings = buildingInfo.isBuildingOnlyHealthy();
             node.noUnhealthinessFromPopulation = buildingInfo.isNoUnhealthyPopulation();
             node.startsGoldenAge = buildingInfo.isGoldenAge();
+            node.globalPopChange = buildingInfo.getGlobalPopulationChange();
+            node.makesCityCapital = buildingInfo.isCapital();
+            node.isGovernmentCenter = buildingInfo.isGovernmentCenter();
 
             if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 ||
-                node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation)
+                node.globalPopChange != 0 || node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation)
+            {
+                baseNode.nodes.push_back(node);
+            }
+        }
+
+        void getReligionNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
+        {
+            BuildingInfo::ReligionNode node;
+
+            node.prereqReligion = (ReligionTypes)buildingInfo.getPrereqReligion();
+            node.religionType = (ReligionTypes)buildingInfo.getReligionType();
+
+            if (node.prereqReligion != NO_RELIGION || node.religionType != NO_RELIGION)
+            {
+                baseNode.nodes.push_back(node);
+            }
+        }
+
+        void getAreaEffectNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
+        {
+            BuildingInfo::AreaEffectNode node;
+
+            node.areaHealth = buildingInfo.getAreaHealth();
+            node.globalHealth = buildingInfo.getGlobalHealth();
+            node.areaHappy = buildingInfo.getAreaHappiness();
+            node.globalHappy = buildingInfo.getGlobalHealth();
+
+            if (node.areaHealth != 0 || node.globalHealth != 0 || node.areaHappy != 0 ||
+                node.globalHappy != 0)
             {
                 baseNode.nodes.push_back(node);
             }
@@ -410,6 +442,8 @@ namespace AltAI
             getMiscEffectNode(node, buildingInfo);
             getCityDefenceNode(node, buildingInfo);
             getUnitExpNode(node, buildingInfo);
+            getReligionNode(node, buildingInfo);
+            getAreaEffectNode(node, buildingInfo);
 
             return node;
         }

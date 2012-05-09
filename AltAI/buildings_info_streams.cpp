@@ -326,6 +326,10 @@ namespace AltAI
         {
             os << " hurry anger modifier change = " << node.hurryAngerModifier;
         }
+        if (node.globalPopChange != 0)
+        {
+            os << " global pop change = " << node.globalPopChange;
+        }
         if (node.noUnhealthinessFromBuildings)
         {
             os << " no unhealthiness from buildings ";
@@ -337,6 +341,51 @@ namespace AltAI
         if (node.startsGoldenAge)
         {
             os << " starts golden age ";
+        }
+        if (node.makesCityCapital)
+        {
+            os << " makes city capital ";
+        }
+        if (node.isGovernmentCenter)
+        {
+            os << " is gov. centre ";
+        }
+        return os;
+    }
+
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::ReligionNode& node)
+    {
+        os << "\n\t";
+
+        if (node.prereqReligion != NO_RELIGION)
+        {
+            os << " prereq religion = " << gGlobals.getReligionInfo(node.prereqReligion).getType();
+        }
+        if (node.religionType  != NO_RELIGION)
+        {
+            os << " religion type = " << gGlobals.getReligionInfo(node.religionType).getType();
+        }
+        return os;
+    }
+
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::AreaEffectNode& node)
+    {
+        os << "\n\t";
+        if (node.areaHealth != 0)
+        {
+            os << " area health change = " << node.areaHealth;
+        }
+        if (node.globalHealth != 0)
+        {
+            os << " global health change = " << node.globalHealth;
+        }
+        if (node.areaHappy != 0)
+        {
+            os << " area happy change = " << node.areaHappy;
+        }
+        if (node.globalHappy != 0)
+        {
+            os << " global happy change = " << node.globalHappy;
         }
         return os;
     }

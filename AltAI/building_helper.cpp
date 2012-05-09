@@ -74,16 +74,30 @@ namespace AltAI
         buildingOriginalOwners_[buildingType] = owner_;
     }
 
-    void BuildingsHelper::changeNumRealBuildings(BuildingTypes buildingType)
+    void BuildingsHelper::changeNumRealBuildings(BuildingTypes buildingType, bool adding)
     {
-        ++buildings_[buildingType];
-        setBuildingOriginalOwner(buildingType);
+        if (adding)
+        {
+            ++buildings_[buildingType];
+            setBuildingOriginalOwner(buildingType);
+        }
+        else
+        {
+            --buildings_[buildingType];
+        }        
     }
 
-    void BuildingsHelper::changeNumFreeBuildings(BuildingTypes buildingType)
+    void BuildingsHelper::changeNumFreeBuildings(BuildingTypes buildingType, bool adding)
     {
-        ++freeBuildings_[buildingType];
-        setBuildingOriginalOwner(buildingType);
+        if (adding)
+        {
+            ++freeBuildings_[buildingType];
+            setBuildingOriginalOwner(buildingType);
+        }
+        else
+        {
+            --freeBuildings_[buildingType];
+        }
     }
 
     PlotYield BuildingsHelper::getBuildingYieldChange(BuildingClassTypes buildingClassType) const

@@ -17,6 +17,7 @@
 #include "./city.h"
 #include "./city_simulator.h"
 #include "./iters.h"
+#include "./helper_fns.h"
 #include "./civ_log.h"
 #include "./save_utils.h"
 
@@ -49,6 +50,21 @@ namespace AltAI
         selectCityTactics();
 
         debugTactics();
+    }
+
+    void PlayerTactics::deleteCity(const CvCity* pCity)
+    {
+        cityBuildingTacticsMap_.erase(pCity->getIDInfo());
+
+        for (LimitedBuildingsTacticsMap::iterator iter(globalBuildingsTacticsMap_.begin()), endIter(globalBuildingsTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            iter->second->removeCityTactics(pCity->getIDInfo());
+        }
+
+        for (LimitedBuildingsTacticsMap::iterator iter(nationalBuildingsTacticsMap_.begin()), endIter(nationalBuildingsTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            iter->second->removeCityTactics(pCity->getIDInfo());
+        }
     }
 
     void PlayerTactics::updateBuildingTactics()
@@ -111,38 +127,85 @@ namespace AltAI
         selectTechTactics();
     }
 
-    void PlayerTactics::updateCityBuildingTactics(const boost::shared_ptr<TechInfo>& pTechInfo)
+    void PlayerTactics::updateCityBuildingTactics(TechTypes techType)
     {
-        std::vector<BuildingTypes> possibleBuildings = getPossibleBuildings(pTechInfo);
+        const int lookAheadDepth = 2;
 
-        for (size_t i = 0, count = possibleBuildings.size(); i < count; ++i)
+        for (size_t i = 0, count = gGlobals.getNumTechInfos(); i < count; ++i)
         {
-            boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(possibleBuildings[i]);
+            const int depth = player.getTechResearchDepth((TechTypes)i);
+            if (techType == (TechTypes)i || depth > 0 && depth <= lookAheadDepth)
+            {
+                boost::shared_ptr<TechInfo> pTechInfo = player.getAnalysis()->getTechInfo((TechTypes)i);
+                std::vector<BuildingTypes> possibleBuildings = getPossibleBuildings(pTechInfo);
 
-            if (!pBuildingInfo)
-            {
-                continue;
-            }
+                for (size_t i = 0, count = possibleBuildings.size(); i < count; ++i)
+                {
+                    boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(possibleBuildings[i]);
 
-            BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(possibleBuildings[i]).getBuildingClassType();
-            const bool isWorldWonder = isWorldWonderClass(buildingClassType), isNationalWonder = isNationalWonderClass(buildingClassType);
-
-            if (isWorldWonder)
-            {
-                globalBuildingsTacticsMap_[possibleBuildings[i]] = makeGlobalBuildingTactics(player, pBuildingInfo);
-            }
-            else if (isNationalWonder)
-            {
-                nationalBuildingsTacticsMap_[possibleBuildings[i]] = makeNationalBuildingTactics(player, pBuildingInfo);
-            }
-            else
-            {
-                CityIter iter(*player.getCvPlayer());
-                while (CvCity* pCity = iter())
-                {                    
-                    if (couldConstructBuilding(player, player.getCity(pCity->getID()), 0, pBuildingInfo))
+                    if (!pBuildingInfo)
                     {
-                        cityBuildingTacticsMap_[pCity->getIDInfo()].push_back(makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+                        continue;
+                    }
+
+                    if (!couldConstructSpecialBuilding(player, lookAheadDepth, pBuildingInfo))
+                    {
+                        continue;
+                    }
+
+                    ReligionTypes religionType = (ReligionTypes)gGlobals.getBuildingInfo(possibleBuildings[i]).getPrereqReligion();
+                    if (religionType != NO_RELIGION)
+                    {
+                        if (player.getCvPlayer()->getHasReligionCount(religionType) == 0)
+                        {
+                            continue;
+                        }
+                    }
+
+                    BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(possibleBuildings[i]).getBuildingClassType();
+                    const bool isWorldWonder = isWorldWonderClass(buildingClassType), isNationalWonder = isNationalWonderClass(buildingClassType);
+
+                    // rebuild these each time - no updateDeps yet
+                    if (isWorldWonder)
+                    {
+                        if (!(gGlobals.getGame().isBuildingClassMaxedOut(buildingClassType)))
+                        {
+                            globalBuildingsTacticsMap_[possibleBuildings[i]] = makeGlobalBuildingTactics(player, pBuildingInfo);
+                        }
+                    }
+                    else if (isNationalWonder)
+                    {
+                        if (!player.getCvPlayer()->isBuildingClassMaxedOut(buildingClassType))
+                        {
+                            nationalBuildingsTacticsMap_[possibleBuildings[i]] = makeNationalBuildingTactics(player, pBuildingInfo);
+                        }
+                    }
+                    else
+                    {
+                        CityIter iter(*player.getCvPlayer());
+                        while (CvCity* pCity = iter())
+                        {       
+                            CityBuildingTacticsList::iterator buildingsIter = cityBuildingTacticsMap_[pCity->getIDInfo()].find(possibleBuildings[i]);
+                            if (buildingsIter == cityBuildingTacticsMap_[pCity->getIDInfo()].end())
+                            {
+                                if (couldConstructBuilding(player, player.getCity(pCity->getID()), 0, pBuildingInfo))
+                                {
+#ifdef ALTAI_DEBUG
+                                    CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__
+                                        << " Adding tactic for building: " << gGlobals.getBuildingInfo(possibleBuildings[i]).getType();
+#endif
+                                    cityBuildingTacticsMap_[pCity->getIDInfo()][possibleBuildings[i]] = makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo);
+                                }
+                            }
+                            else
+                            {
+#ifdef ALTAI_DEBUG
+                                CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__
+                                    << " Updating (new tech) tactic for building: " << gGlobals.getBuildingInfo(possibleBuildings[i]).getType();
+#endif
+                                buildingsIter->second->updateDependencies(player, pCity);
+                            }
+                        }
                     }
                 }
             }
@@ -166,18 +229,8 @@ namespace AltAI
             CityBuildingTacticsMap::iterator iter = cityBuildingTacticsMap_.find(city);
             if (iter != cityBuildingTacticsMap_.end())
             {
-                CityBuildingTacticsList::iterator buildingTacticsIter(iter->second.begin()), endIter(iter->second.end());
-                while (buildingTacticsIter != endIter)
-                {
-                    if ((*buildingTacticsIter)->getBuildingType() == buildingType)
-                    {
-                        iter->second.erase(buildingTacticsIter++);
-                    }
-                    else
-                    {
-                        ++buildingTacticsIter;
-                    }
-                }
+                iter->second.erase(buildingType);
+                updateCityBuildingTacticsDependencies();
             }
         }
     }
@@ -189,9 +242,167 @@ namespace AltAI
         {
             for (CityBuildingTacticsList::iterator buildingTacticsIter(iter->second.begin()), endIter(iter->second.end()); buildingTacticsIter != endIter; ++buildingTacticsIter)
             {
-                (*buildingTacticsIter)->update(player, player.getCity(city.iID).getCityData());
+                buildingTacticsIter->second->update(player, player.getCity(city.iID).getCityData());
             }
         }
+    }
+
+    void PlayerTactics::updateCityReligionBuildingTactics(ReligionTypes religionType)
+    {
+        const int lookAheadDepth = 2;
+
+        for (int i = 0, count = gGlobals.getNumBuildingClassInfos(); i < count; ++i)
+        {
+            BuildingTypes buildingType = getPlayerVersion(player.getPlayerID(), (BuildingClassTypes)i);
+
+            if (buildingType == NO_BUILDING)
+            {
+                continue;
+            }
+            
+            const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
+            if (buildingInfo.getPrereqReligion() == religionType)
+            {
+                boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(buildingType);
+
+                if (!pBuildingInfo)
+                {
+                    continue;
+                }
+
+                if (!couldConstructSpecialBuilding(player, lookAheadDepth, pBuildingInfo))
+                {
+                    continue;
+                }
+
+                const bool isWorldWonder = isWorldWonderClass((BuildingClassTypes)i), isNationalWonder = isNationalWonderClass((BuildingClassTypes)i);
+                if (isWorldWonder)
+                {
+                    globalBuildingsTacticsMap_[buildingType] = makeGlobalBuildingTactics(player, pBuildingInfo);
+                }
+                else if (isNationalWonder)
+                {
+                    nationalBuildingsTacticsMap_[buildingType] = makeNationalBuildingTactics(player, pBuildingInfo);
+                }
+
+                CityIter iter(*player.getCvPlayer());
+                while (CvCity* pCity = iter())
+                {
+                    const City& city = player.getCity(pCity->getID());
+                    if (!couldConstructBuilding(player, city, lookAheadDepth, pBuildingInfo))
+                    {
+                        continue;
+                    }
+#ifdef ALTAI_DEBUG
+                    CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for building: " << gGlobals.getBuildingInfo(buildingType).getType();
+#endif
+                    cityBuildingTacticsMap_[city.getCvCity()->getIDInfo()][buildingType] = makeCityBuildingTactics(player, city, pBuildingInfo);
+                }
+            }
+        }
+    }
+
+    void PlayerTactics::addNewCityBuildingTactics(IDInfo city)
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+        os << "\naddNewCityBuildingTactics for city: " << narrow(getCity(city)->getName());
+#endif
+
+        const int lookAheadDepth = 2;
+
+        for (int i = 0, count = gGlobals.getNumBuildingClassInfos(); i < count; ++i)
+        {
+            BuildingTypes buildingType = getPlayerVersion(player.getPlayerID(), (BuildingClassTypes)i);
+
+            if (buildingType == NO_BUILDING)
+            {
+                continue;
+            }
+
+            boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(buildingType);
+
+            if (!pBuildingInfo)
+            {
+                continue;
+            }
+
+            if (!couldConstructSpecialBuilding(player, lookAheadDepth, pBuildingInfo))
+            {
+//#ifdef ALTAI_DEBUG
+//                os << "\nFailed special building check";
+//#endif
+                continue;
+            }
+
+            ReligionTypes religionType = (ReligionTypes)gGlobals.getBuildingInfo(buildingType).getPrereqReligion();
+            if (religionType != NO_RELIGION)
+            {
+                if (player.getCvPlayer()->getHasReligionCount(religionType) == 0)
+                {
+#ifdef ALTAI_DEBUG
+                    os << "\nFailed religion check";
+#endif
+                    continue;
+                }
+            }
+
+            if (!couldConstructBuilding(player, player.getCity(city.iID), lookAheadDepth, pBuildingInfo))
+            {
+//#ifdef ALTAI_DEBUG
+//                os << "\nFailed construct check";
+//#endif
+                continue;
+            }
+
+            const bool isWorldWonder = isWorldWonderClass((BuildingClassTypes)i), isNationalWonder = isNationalWonderClass((BuildingClassTypes)i);
+
+            if (isWorldWonder)
+            {
+                globalBuildingsTacticsMap_[buildingType] = makeGlobalBuildingTactics(player, pBuildingInfo);
+            }
+            else if (isNationalWonder)
+            {
+                nationalBuildingsTacticsMap_[buildingType] = makeNationalBuildingTactics(player, pBuildingInfo);
+            }
+            else
+            {
+#ifdef ALTAI_DEBUG
+                os << "\n" << __FUNCTION__ " Adding tactic for building: " << gGlobals.getBuildingInfo(buildingType).getType();
+#endif
+                cityBuildingTacticsMap_[city][buildingType] = makeCityBuildingTactics(player, player.getCity(city.iID), pBuildingInfo);
+            }
+        }
+    }
+
+    void PlayerTactics::updateCityBuildingTacticsDependencies()
+    {
+        for (CityBuildingTacticsMap::iterator iter(cityBuildingTacticsMap_.begin()), endIter(cityBuildingTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            CvCity* pCity = getCity(iter->first);
+
+            if (pCity)
+            {
+                CityBuildingTacticsList::iterator buildingTacticsIter(iter->second.begin()), buildingTacticsEndIter(iter->second.end());
+                while (buildingTacticsIter != buildingTacticsEndIter)
+                {
+                    buildingTacticsIter->second->updateDependencies(player, pCity);
+                    ++buildingTacticsIter;
+                }
+            }
+        }
+    }
+
+    void PlayerTactics::updateLimitedBuildingTacticsDependencies()
+    {
+        for (LimitedBuildingsTacticsMap::iterator iter(nationalBuildingsTacticsMap_.begin()), endIter(nationalBuildingsTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            iter->second->updateDependencies(player);
+        }
+    }
+
+    void PlayerTactics::updateGlobalBuildingTacticsDependencies()
+    {
     }
 
     void PlayerTactics::eraseGlobalBuildingTactics(BuildingTypes buildingType)
@@ -598,11 +809,15 @@ namespace AltAI
 
                 for (CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
                 {
-                    (*li)->debug(os);
-                    (*li)->update(player, city.getCityData());
+                    li->second->debug(os);
+                    li->second->update(player, city.getCityData());
 
-                    os << "\nDelta = " << (*li)->getProjection().getOutput() - base;
+                    os << "\nDelta = " << li->second->getProjection().getOutput() - base;
                 }            
+            }
+            else
+            {
+                os << "\nMissing city?";
             }
         }
 
@@ -610,6 +825,7 @@ namespace AltAI
         for (LimitedBuildingsTacticsMap::const_iterator ci(globalBuildingsTacticsMap_.begin()), ciEnd(globalBuildingsTacticsMap_.end()); ci != ciEnd; ++ci)
         {
             os << "\nBuilding: " << gGlobals.getBuildingInfo(ci->first).getType();
+            ci->second->update(player);
             ci->second->debug(os);
         }
 
@@ -617,6 +833,7 @@ namespace AltAI
         for (LimitedBuildingsTacticsMap::const_iterator ci(nationalBuildingsTacticsMap_.begin()), ciEnd(nationalBuildingsTacticsMap_.end()); ci != ciEnd; ++ci)
         {
             os << "\nBuilding: " << gGlobals.getBuildingInfo(ci->first).getType();
+            ci->second->update(player);
             ci->second->debug(os);
         }
 
@@ -637,6 +854,10 @@ namespace AltAI
 
                     os << "\nDelta = " << (*li)->getProjection().getOutput() - base;
                 }            
+            }
+            else
+            {
+                os << "\nMissing city?";
             }
         }
 #endif

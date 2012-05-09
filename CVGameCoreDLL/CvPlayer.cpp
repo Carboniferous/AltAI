@@ -11466,6 +11466,19 @@ void CvPlayer::changeHasReligionCount(ReligionTypes eIndex, int iChange)
 		GC.getGameINLINE().updateBuildingCommerce();
 
 		GC.getGameINLINE().AI_makeAssignWorkDirty();
+
+        // AltAI
+        if (m_bUsingAltAI)
+        {
+            if (m_paiHasReligionCount[eIndex] - iChange == 0)
+            {
+                GC.getGame().getAltAI()->getPlayer(getID())->notifyHaveReligion(eIndex);
+            }
+            else if (m_paiHasReligionCount[eIndex] == 0)
+            {
+                GC.getGame().getAltAI()->getPlayer(getID())->notifyLostReligion(eIndex);
+            }
+        }
 	}
 }
 

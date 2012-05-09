@@ -22,8 +22,8 @@ namespace AltAI
         PlayerTypes getBuildingOriginalOwner(BuildingTypes buildingType) const;
         void setBuildingOriginalOwner(BuildingTypes buildingType);
 
-        void changeNumRealBuildings(BuildingTypes buildingType);
-        void changeNumFreeBuildings(BuildingTypes buildingType);
+        void changeNumRealBuildings(BuildingTypes buildingType, bool adding = true);
+        void changeNumFreeBuildings(BuildingTypes buildingType, bool adding = true);
 
         PlotYield getBuildingYieldChange(BuildingClassTypes buildingClassType) const;
         void setBuildingYieldChange(BuildingClassTypes buildingClassType, PlotYield plotYield);

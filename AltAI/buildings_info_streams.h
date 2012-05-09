@@ -20,6 +20,7 @@ namespace AltAI
     std::ostream& operator << (std::ostream& os, const BuildingInfo::FreeBonusNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::RemoveBonusNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::CityDefenceNode& node);
-    //std::ostream& operator << (std::ostream& os, const BuildingInfo::ReligionNode& node);
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::AreaEffectNode& node);
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::ReligionNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::MiscEffectNode& node);
 }

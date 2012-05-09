@@ -38,4 +38,9 @@ namespace AltAI
     {
         return cityReligions_[religionType] > 0;
     }
+
+    void ReligionHelper::changeReligionCount(ReligionTypes religionType, int change)
+    {
+        cityReligions_[religionType] += change;
+    }
 }

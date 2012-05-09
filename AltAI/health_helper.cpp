@@ -136,6 +136,26 @@ namespace AltAI
         bonusBadHealth_ += change;
     }
 
+    void HealthHelper::changeAreaBuildingGoodHealthiness(int change)
+    {
+        areaBuildingGoodHealth_ += change;
+    }
+
+    void HealthHelper::changeAreaBuildingBadHealthiness(int change)
+    {
+        areaBuildingBadHealth_ += change;
+    }
+
+    void HealthHelper::changePlayerBuildingGoodHealthiness(int change)
+    {
+        playerBuildingGoodHealth_ += change;
+    }
+
+    void HealthHelper::changePlayerBuildingBadHealthiness(int change)
+    {
+        playerBuildingBadHealth_ += change;
+    }
+
     void HealthHelper::setNoUnhealthinessFromBuildings()
     {
         noUnhealthinessFromBuildings_ = true;

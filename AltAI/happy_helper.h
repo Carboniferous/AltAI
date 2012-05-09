@@ -37,10 +37,13 @@ namespace AltAI
         void changeFeatureGoodHappiness(int change);
         void changeFeatureBadHappiness(int change);
 
+        void changeAreaBuildingHappiness(int change);
+
         void changeLargestCityHappiness(int change);
 
         void setMilitaryHappiness(int happyPerUnit);
 
+        void changePlayerBuildingHappiness(int change);
         void changePlayerHappiness(int change);
 
         void setNoUnhappiness(bool newState);

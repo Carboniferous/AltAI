@@ -139,24 +139,34 @@ namespace AltAI
             int defenceBonus, globalDefenceBonus, bombardRateModifier, espionageDefence;
         };
 
-        //struct ReligionNode
-        //{
-        //    bool canSpread;
-        //    ReligionTypes religionType_;
-        //};
+        struct ReligionNode
+        {
+            ReligionNode() : prereqReligion(NO_RELIGION), religionType(NO_RELIGION) {}
+            ReligionTypes prereqReligion, religionType;
+        };
+
+        struct AreaEffectNode
+        {
+            AreaEffectNode() : areaHealth(0), globalHealth(0), areaHappy(0), globalHappy(0) {}
+            int areaHealth, globalHealth;
+            int areaHappy, globalHappy;
+        };
 
         struct MiscEffectNode
         {
-            MiscEffectNode() : cityMaintenanceModifierChange(0), foodKeptPercent(0), hurryAngerModifier(0),
-                noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false), startsGoldenAge(false) {}
+            MiscEffectNode() : cityMaintenanceModifierChange(0), foodKeptPercent(0), hurryAngerModifier(0), globalPopChange(0),
+                noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false), startsGoldenAge(false),
+                makesCityCapital(false), isGovernmentCenter(false) {}
             int cityMaintenanceModifierChange;
             int foodKeptPercent;
             int hurryAngerModifier;
+            int globalPopChange;
             bool noUnhealthinessFromBuildings, noUnhealthinessFromPopulation, startsGoldenAge;
+            bool makesCityCapital, isGovernmentCenter;
         };
 
         typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, YieldNode, CommerceNode, TradeNode, BonusNode, FreeBonusNode, 
-            RemoveBonusNode, SpecialistNode, PowerNode, UnitExpNode, CityDefenceNode, SpecialistSlotNode, MiscEffectNode> BuildingInfoNode;
+            RemoveBonusNode, SpecialistNode, PowerNode, UnitExpNode, CityDefenceNode, SpecialistSlotNode, AreaEffectNode, ReligionNode, MiscEffectNode> BuildingInfoNode;
 
         struct BaseNode
         {

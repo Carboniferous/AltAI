@@ -15,7 +15,6 @@ namespace AltAI
     public:
         explicit MaintenanceHelper(const CvCity* pCity);
         MaintenanceHelper(const XYCoords coords, PlayerTypes playerType);
-        MaintenanceHelper(const MaintenanceHelper& other);
         MaintenanceHelperPtr clone() const;
 
         int getMaintenance() const;
@@ -41,6 +40,9 @@ namespace AltAI
             population_ = population;
         }
 
+        void addGovernmentCentre(IDInfo city);
+        void removeGovernmentCentre(IDInfo city);
+
     private:
         void init_();
         int calcDistanceMaintenance_() const;
@@ -58,5 +60,7 @@ namespace AltAI
 
         int MAX_DISTANCE_CITY_MAINTENANCE_, distanceMaintenancePercent_, distanceHandicapMaintenancePercent_, distanceMaintenanceModifier_, maxPlotDistance_;
         int numCitiesMaintenancePercent_, numCitiesHandicapMaintenancePercent_, maxNumCitiesMaintenance_, numCitiesMaintenanceModifier_;
+
+        std::set<IDInfo> governmentCentres_;
     };
 }

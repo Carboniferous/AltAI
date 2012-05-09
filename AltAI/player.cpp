@@ -150,12 +150,14 @@ namespace AltAI
         if (gGlobals.getGame().getAltAI()->isInit())
         {
             pPlayerAnalysis_->getMapAnalysis()->addCity(pCity);
+            pPlayerAnalysis_->getPlayerTactics()->addNewCityBuildingTactics(pCity->getIDInfo());
         }
     }
 
     void Player::deleteCity(CvCity* pCity)
     {
         pPlayerAnalysis_->getMapAnalysis()->deleteCity(pCity);
+        pPlayerAnalysis_->getPlayerTactics()->deleteCity(pCity);
         cities_.erase(pCity->getID());
     }
 
@@ -971,7 +973,7 @@ namespace AltAI
             }
 
             // add any new buildings this tech makes available, and update existing building tactics data
-            pPlayerAnalysis_->getPlayerTactics()->updateCityBuildingTactics(pTechInfo);
+            pPlayerAnalysis_->getPlayerTactics()->updateCityBuildingTactics(pTechInfo->getTechType());
         }
 
         if (techAffectsImprovements(pTechInfo))
@@ -1022,6 +1024,9 @@ namespace AltAI
 
     void Player::eraseGlobalBuildingTactics(BuildingTypes buildingType)
     {
+#ifdef ALTAI_DEBUG
+        CivLog::getLog(*pPlayer_)->getStream() << "\nErasing global building tactic: " << gGlobals.getBuildingInfo(buildingType).getType();
+#endif
         getAnalysis()->getPlayerTactics()->eraseGlobalBuildingTactics(buildingType);
     }
 
@@ -1299,6 +1304,16 @@ namespace AltAI
             }
         }
         return count;
+    }
+
+    void Player::notifyHaveReligion(ReligionTypes religionType)
+    {
+        pPlayerAnalysis_->getPlayerTactics()->updateCityReligionBuildingTactics(religionType);
+    }
+
+    void Player::notifyLostReligion(ReligionTypes religionType)
+    {
+        // todo
     }
 
     void Player::write(FDataStreamBase* pStream) const
