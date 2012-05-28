@@ -75,6 +75,7 @@ namespace AltAI
         virtual void updateDependencies(const Player&) = 0;
         virtual void addCityTactic(IDInfo, const ICityBuildingTacticsPtr&) = 0;
         virtual void removeCityTactics(IDInfo) = 0;
+        virtual bool empty() const = 0;
 
         virtual BuildingTypes getBuildingType() const = 0;
         virtual void debug(std::ostream&) const = 0;

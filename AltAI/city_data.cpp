@@ -58,6 +58,7 @@ namespace AltAI
         cityPlotOutput_ = other.cityPlotOutput_;
         cityGreatPersonOutput_ = other.cityGreatPersonOutput_;
         includeUnclaimedPlots_ = other.includeUnclaimedPlots_;
+        goldenAgeTurns_ = other.goldenAgeTurns_;
 
         events_ = std::queue<CitySimulationEventPtr>();  // clear events queue
 
@@ -84,7 +85,8 @@ namespace AltAI
         : cityPopulation_(0), workingPopulation_(0), happyCap_(0), currentFood_(0), storedFood_(0),
           currentProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
           commerceYieldModifier_(100), specialConditions_(None), pCity_(pCity), owner_(pCity->getOwner()),
-          coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots)
+          coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots),
+          goldenAgeTurns_(CvPlayerAI::getPlayer(pCity->getOwner()).getGoldenAgeTurns())
     {
         initHelpers_(pCity);
         init_(pCity);
@@ -96,7 +98,8 @@ namespace AltAI
         : cityPopulation_(0), workingPopulation_(0), happyCap_(0), currentFood_(0), storedFood_(0),
           currentProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
           commerceYieldModifier_(100), specialConditions_(None), pCity_(pCity), owner_(pCity_->getOwner()),
-          coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots)
+          coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots),
+          goldenAgeTurns_(CvPlayerAI::getPlayer(pCity->getOwner()).getGoldenAgeTurns())
     {
         initHelpers_(pCity);
         init_(pCity);
@@ -220,6 +223,10 @@ namespace AltAI
                     if (isEmpty(plotYield))  // skip canWork_ check if setting up from planned improvements, as this is looking ahead
                     {
                         continue;  // no point in adding desert, or plots worked by other cities we own (add ones we don't own, in case we end up owning them)
+                    }
+
+                    if (goldenAgeTurns_ > 0)
+                    {
                     }
 
                     initPlot_(pLoopPlot, plotYield, improvementType, featureType, routeType);
@@ -353,7 +360,7 @@ namespace AltAI
         recalcOutputs();
     }
 
-    // first = turns (MAX_INT if never), second = pop change (+1, -1, 0)
+    // first = pop change (+1, -1, 0), second = turns (MAX_INT if never)
     std::pair<int, int> CityData::getTurnsToPopChange() const
     {
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
@@ -399,6 +406,13 @@ namespace AltAI
 
     void CityData::advanceTurn()
     {
+        if (goldenAgeTurns_ > 0)
+        {
+            if (--goldenAgeTurns_ == 0)
+            {
+            }
+        }
+
         // TODO create event when improvements upgrade
         doUpgrades_();
 

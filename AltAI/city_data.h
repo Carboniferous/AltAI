@@ -157,6 +157,11 @@ namespace AltAI
         int getFood() const;
         int getLostFood() const;
 
+        int getGoldenAgeTurns() const
+        {
+            return goldenAgeTurns_;
+        }
+
         int getCurrentProduction() const
         {
             return currentProduction_;
@@ -437,5 +442,6 @@ namespace AltAI
 
         std::queue<CitySimulationEventPtr> events_;
         bool includeUnclaimedPlots_;
+        int goldenAgeTurns_;
     };
 }

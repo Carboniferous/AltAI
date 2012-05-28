@@ -162,6 +162,7 @@ namespace AltAI
         virtual void updateDependencies(const Player& player);
         virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
         virtual void removeCityTactics(IDInfo city);
+        virtual bool empty() const;
 
         virtual BuildingTypes getBuildingType() const;
 
@@ -185,6 +186,7 @@ namespace AltAI
         virtual void updateDependencies(const Player& player);
         virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
         virtual void removeCityTactics(IDInfo city);
+        virtual bool empty() const;
 
         virtual BuildingTypes getBuildingType() const;
 

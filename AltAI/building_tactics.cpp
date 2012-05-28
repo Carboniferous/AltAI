@@ -182,7 +182,7 @@ namespace AltAI
         const CvCity* pCity = city.getCvCity();
         
         if ((constructItem.buildingType != NO_BUILDING &&
-            couldConstructBuilding(player, city, 2, player.getAnalysis()->getBuildingInfo(constructItem.buildingType)) && 
+            couldConstructBuilding(player, city, 2, player.getAnalysis()->getBuildingInfo(constructItem.buildingType), false) && 
             pCity->getFirstBuildingOrder(constructItem.buildingType) == -1) ||
             (constructItem.processType != NO_PROCESS))
         //if (pCity->canConstruct(constructItem.buildingType) && pCity->getFirstBuildingOrder(constructItem.buildingType) == -1)
@@ -453,7 +453,7 @@ namespace AltAI
         const CvCity* pCity = city.getCvCity();
 
         if (constructItem.buildingType != NO_BUILDING && 
-            couldConstructBuilding(player, city, 2, player.getAnalysis()->getBuildingInfo(constructItem.buildingType)) && pCity->getFirstBuildingOrder(constructItem.buildingType) == -1)
+            couldConstructBuilding(player, city, 2, player.getAnalysis()->getBuildingInfo(constructItem.buildingType), false) && pCity->getFirstBuildingOrder(constructItem.buildingType) == -1)
         //if (pCity->canConstruct(constructItem.buildingType) && pCity->getFirstBuildingOrder(constructItem.buildingType) == -1)
         {
             const CityDataPtr& pCityData = city.getCityData();

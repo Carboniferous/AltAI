@@ -357,6 +357,20 @@ namespace AltAI
             buildingLadder.debug(os);
             os << ", delta = " << buildingLadder.getOutput() - currentOutputProjection_.getOutput();
 #endif
+            {
+                CityDataPtr pCityData = pCityData_->clone();
+                std::vector<IProjectionEventPtr> events;
+                events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCityData, player->getAnalysis()->getBuildingInfo(constructItem_.buildingType))));
+                events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pCityData)));
+
+                buildingLadder = getProjectedOutput(*player, pCityData, 50, events);
+#ifdef ALTAI_DEBUG
+                os << "\n" << narrow(pCity_->getName()) << " projection2: ";
+                buildingLadder.debug(os);
+                os << ", delta = " << buildingLadder.getOutput() - currentOutputProjection_.getOutput();
+#endif
+            }
+
             return boost::make_tuple(NO_UNIT, constructItem_.buildingType, NO_PROCESS, NO_PROJECT);
         }
         else if (constructItem_.unitType != NO_UNIT)

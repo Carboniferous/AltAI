@@ -46,7 +46,7 @@ namespace AltAI
 
         void updateCityGlobalBuildingTactics(IDInfo city, BuildingTypes buildingType, int newCount);
         void updateGlobalBuildingTacticsDependencies();
-        void eraseGlobalBuildingTactics(BuildingTypes buildingType);
+        void eraseLimitedBuildingTactics(BuildingTypes buildingType);
 
         void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
 
@@ -80,5 +80,8 @@ namespace AltAI
         // save/load functions
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
+
+    private:
+        void addBuildingTactics_(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, CvCity* pCity);
     };
 }

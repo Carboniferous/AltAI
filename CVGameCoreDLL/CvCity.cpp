@@ -10086,18 +10086,6 @@ void CvCity::setNumRealBuildingTimed(BuildingTypes eIndex, int iNewValue, bool b
 								}
 							}
 						}
-
-                        //AltAI
-                        {
-                            AltAI::PlayerIter playerIter;
-                            while (const CvPlayerAI* player = playerIter())
-                            {
-                                if (player->isUsingAltAI())
-                                {
-                                    GC.getGame().getAltAI()->getPlayer(player->getID())->eraseGlobalBuildingTactics(eIndex);
-                                }
-					        }
-                        }
                     }
 				}
 
@@ -10109,6 +10097,26 @@ void CvCity::setNumRealBuildingTimed(BuildingTypes eIndex, int iNewValue, bool b
 				GC.getGameINLINE().incrementBuildingClassCreatedCount((BuildingClassTypes)(GC.getBuildingInfo(eIndex).getBuildingClassType()));
 			}
 		}
+
+        //AltAI
+        if (bFirst && isWorldWonderClass((BuildingClassTypes)(GC.getBuildingInfo(eIndex).getBuildingClassType())))
+        {
+            AltAI::PlayerIter playerIter;
+            while (const CvPlayerAI* player = playerIter())
+            {
+                if (player->isUsingAltAI())
+                {
+                    GC.getGame().getAltAI()->getPlayer(player->getID())->eraseLimitedBuildingTactics(eIndex);
+                }
+			}
+        }
+
+        // AltAI
+        // don't check bFirst - if acquire national wonder through city conquest - still need to remove it from tactics list
+        if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI() && isNationalWonderClass((BuildingClassTypes)(GC.getBuildingInfo(eIndex).getBuildingClassType())))
+        {
+            GC.getGame().getAltAI()->getPlayer(m_eOwner)->eraseLimitedBuildingTactics(eIndex);
+        }
 
 		//great wall
 		if (bFirst)

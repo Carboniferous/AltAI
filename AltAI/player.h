@@ -67,7 +67,7 @@ namespace AltAI
         void updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType);
         void updatePlotCulture(const CvPlot* pPlot, bool remove);
 
-        void eraseGlobalBuildingTactics(BuildingTypes buildingType);
+        void eraseLimitedBuildingTactics(BuildingTypes buildingType);
 
         void notifyReligionFounded(ReligionTypes religionType, bool isOurs);
 

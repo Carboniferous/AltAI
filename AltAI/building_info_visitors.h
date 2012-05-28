@@ -45,7 +45,7 @@ namespace AltAI
     PlotYield getExtraConditionalYield(XYCoords cityCoords, XYCoords plotCoords,
         const std::vector<ConditionalPlotYieldEnchancingBuilding>& conditionalYieldEnchancingBuildings);
 
-    bool couldConstructBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
+    bool couldConstructBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, bool ignoreRequiredBuildings);
 
     bool couldConstructSpecialBuilding(const Player& player, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 }

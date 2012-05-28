@@ -37,7 +37,7 @@ namespace AltAI
     std::pair<PlotYield, ImprovementTypes> getMaxYield(const PlotInfo::PlotInfoNode& node, PlayerTypes playerIndex, int lookaheadDepth = 0);
 
     // just current yield (should match CvPlot->getYield() - although with the advantage of being const)
-    PlotYield getYield(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType);
+    PlotYield getYield(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType, bool isGoldenAge = false);
 
     // list of improvements and yields
     std::vector<std::pair<PlotYield, ImprovementTypes> > getYields(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, int lookaheadDepth = 0);

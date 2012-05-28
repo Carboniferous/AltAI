@@ -1309,7 +1309,8 @@ namespace AltAI
     class CouldConstructBuildingVisitor : public boost::static_visitor<bool>
     {
     public:
-        CouldConstructBuildingVisitor(const Player& player, const City& city, int lookaheadDepth) : player_(player), city_(city), lookaheadDepth_(lookaheadDepth)
+        CouldConstructBuildingVisitor(const Player& player, const City& city, int lookaheadDepth, bool ignoreRequiredBuildings)
+            : player_(player), city_(city), lookaheadDepth_(lookaheadDepth), ignoreRequiredBuildings_(ignoreRequiredBuildings)
         {
             civHelper_ = player.getCivHelper();
             pAnalysis_ = player.getAnalysis();
@@ -1334,6 +1335,11 @@ namespace AltAI
             }
 
             PlotBuildCondVisitor plotConditionsVisitor(city_);
+            if (ignoreRequiredBuildings_)
+            {
+                plotConditionsVisitor = PlotBuildCondVisitor(city_.getCvCity()->plot());
+            }
+
             for (size_t i = 0, count = node.buildConditions.size(); i < count; ++i)
             {
                 if (!boost::apply_visitor(plotConditionsVisitor, node.buildConditions[i]))
@@ -1359,6 +1365,11 @@ namespace AltAI
             return true;
         }
 
+        bool operator() (const BuildingInfo::ReligionNode& node) const
+        {
+            return node.prereqReligion == NO_RELIGION ? true : player_.getCvPlayer()->getHasReligionCount(node.prereqReligion) > 0;
+        }
+
         bool operator() (const BuildingInfo::MiscEffectNode& node) const
         {
             return !(node.isGovernmentCenter && city_.getCvCity()->isGovernmentCenter());
@@ -1368,13 +1379,14 @@ namespace AltAI
         const Player& player_;
         const City& city_;
         int lookaheadDepth_;
+        bool ignoreRequiredBuildings_;
         boost::shared_ptr<CivHelper> civHelper_;
         boost::shared_ptr<PlayerAnalysis> pAnalysis_;
     };
 
-    bool couldConstructBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    bool couldConstructBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, bool ignoreRequiredBuildings)
     {
-        return boost::apply_visitor(CouldConstructBuildingVisitor(player, city, lookaheadDepth), pBuildingInfo->getInfo());
+        return boost::apply_visitor(CouldConstructBuildingVisitor(player, city, lookaheadDepth, ignoreRequiredBuildings), pBuildingInfo->getInfo());
     }
 
     bool couldConstructSpecialBuilding(const Player& player, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)

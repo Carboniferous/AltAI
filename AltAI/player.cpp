@@ -1022,12 +1022,12 @@ namespace AltAI
         getAnalysis()->getMapAnalysis()->updatePlotCulture(pPlot, remove);
     }
 
-    void Player::eraseGlobalBuildingTactics(BuildingTypes buildingType)
+    void Player::eraseLimitedBuildingTactics(BuildingTypes buildingType)
     {
 #ifdef ALTAI_DEBUG
-        CivLog::getLog(*pPlayer_)->getStream() << "\nErasing global building tactic: " << gGlobals.getBuildingInfo(buildingType).getType();
+        CivLog::getLog(*pPlayer_)->getStream() << "\nErasing limited building tactic: " << gGlobals.getBuildingInfo(buildingType).getType();
 #endif
-        getAnalysis()->getPlayerTactics()->eraseGlobalBuildingTactics(buildingType);
+        getAnalysis()->getPlayerTactics()->eraseLimitedBuildingTactics(buildingType);
     }
 
     void Player::notifyReligionFounded(ReligionTypes religionType, bool isOurs)

@@ -454,6 +454,11 @@ namespace AltAI
         cityTactics_.erase(city);
     }
 
+    bool GlobalBuildingTactic::empty() const
+    {
+        return cityTactics_.empty();
+    }
+
     BuildingTypes GlobalBuildingTactic::getBuildingType() const
     {
         return buildingType_;
@@ -532,6 +537,11 @@ namespace AltAI
     void NationalBuildingTactic::removeCityTactics(IDInfo city)
     {
         cityTactics_.erase(city);
+    }
+
+    bool NationalBuildingTactic::empty() const
+    {
+        return cityTactics_.empty();
     }
 
     BuildingTypes NationalBuildingTactic::getBuildingType() const

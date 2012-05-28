@@ -713,13 +713,21 @@ namespace AltAI
 
     ILimitedBuildingTacticsPtr makeGlobalBuildingTactics(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
     {
+        const int lookAheadDepth = 2;
         ILimitedBuildingTacticsPtr pTactic(new GlobalBuildingTactic(pBuildingInfo->getBuildingType()));
 
         CityIter iter(*player.getCvPlayer());
 
         while (CvCity* pCity = iter())
         {
-            pTactic->addCityTactic(pCity->getIDInfo(), makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+            if (couldConstructBuilding(player, player.getCity(pCity->getID()), lookAheadDepth, pBuildingInfo, true))
+            {
+#ifdef ALTAI_DEBUG
+                CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for building: "
+                    << gGlobals.getBuildingInfo(pBuildingInfo->getBuildingType()).getType();
+#endif
+                pTactic->addCityTactic(pCity->getIDInfo(), makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+            }
         }
 
         return pTactic;
@@ -727,6 +735,7 @@ namespace AltAI
 
     ILimitedBuildingTacticsPtr makeNationalBuildingTactics(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
     {
+        const int lookAheadDepth = 2;
         ILimitedBuildingTacticsPtr pTactic(new NationalBuildingTactic(pBuildingInfo->getBuildingType()));
 
         CityIter iter(*player.getCvPlayer());
@@ -735,7 +744,14 @@ namespace AltAI
         {
             if (!pCity->isNationalWondersMaxed())
             {
-                pTactic->addCityTactic(pCity->getIDInfo(), makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+                if (couldConstructBuilding(player, player.getCity(pCity->getID()), lookAheadDepth, pBuildingInfo, true))
+                {
+#ifdef ALTAI_DEBUG
+                    CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__
+                        << " Adding tactic for building: " << gGlobals.getBuildingInfo(pBuildingInfo->getBuildingType()).getType();
+#endif
+                    pTactic->addCityTactic(pCity->getIDInfo(), makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+                }
             }
         }
 

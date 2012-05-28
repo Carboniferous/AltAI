@@ -319,7 +319,8 @@ namespace AltAI
             node.isGovernmentCenter = buildingInfo.isGovernmentCenter();
 
             if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 ||
-                node.globalPopChange != 0 || node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation)
+                node.globalPopChange != 0 || node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation ||
+                node.makesCityCapital || node.isGovernmentCenter || node.startsGoldenAge)
             {
                 baseNode.nodes.push_back(node);
             }

@@ -23,24 +23,34 @@ namespace AltAI
             return YieldValueFunctor(OutputUtils<PlotYield>::getDefaultWeights());
         }
 
-        // TODO move to more generally available function?
-        // TODO add in golden age modifiers too
-        // TODO add in plot specific modifiers? - no - prob best to change plot_info key in that case
-        PlotYield getExtraYield(PlotYield yield, PlayerTypes playerType)
+        PlotYield getExtraYield(const PlotYield yield, PlayerTypes playerType)
         {
-            PlotYield result(yield);
+            PlotYield newPlotYield(yield);
             const CvPlayer& player = CvPlayerAI::getPlayer(playerType);
             static const int extraYield = gGlobals.getDefineINT("EXTRA_YIELD");
 
             for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
             {
                 int yieldThreshold = player.getExtraYieldThreshold((YieldTypes)yieldType);
-                if (yieldThreshold > 0 && result[yieldType] >= yieldThreshold)
+                if (yieldThreshold > 0 && yield[yieldType] >= yieldThreshold)
                 {
-                    result[yieldType] += extraYield;
+                    newPlotYield[yieldType] += extraYield;
                 }
             }
-            return result;
+            return newPlotYield;
+        }
+
+        PlotYield getExtraGoldenAgeYield(const PlotYield plotYield)
+        {
+            PlotYield newPlotYield(plotYield);
+            for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
+            {
+                if (plotYield[yieldType] >= gGlobals.getYieldInfo((YieldTypes)yieldType).getGoldenAgeYieldThreshold())
+			    {
+				    newPlotYield[yieldType] += gGlobals.getYieldInfo((YieldTypes)yieldType).getGoldenAgeYield();
+                }
+			}
+            return newPlotYield;
         }
     }
 
@@ -457,7 +467,8 @@ namespace AltAI
     class YieldVisitor : public boost::static_visitor<PlotYield>
     {
     public:
-        explicit YieldVisitor(PlayerTypes playerType, RouteTypes routeType = NO_ROUTE) : playerType_(playerType), routeType_(routeType)
+        explicit YieldVisitor(PlayerTypes playerType, RouteTypes routeType = NO_ROUTE, bool isGoldenAge = false)
+            : playerType_(playerType), routeType_(routeType), isGoldenAge_(isGoldenAge)
         {
         }
 
@@ -468,12 +479,14 @@ namespace AltAI
 
         PlotYield operator() (const PlotInfo::BaseNode& node) const
         {
-            return getExtraYield(node.yield + node.bonusYield, playerType_);
+            PlotYield plotYield = getExtraYield(node.yield + node.bonusYield, playerType_);
+            return isGoldenAge_ ? getExtraGoldenAgeYield(plotYield) : plotYield;
         }
 
         PlotYield operator() (const PlotInfo::FeatureRemovedNode& node) const
         {
-            return getExtraYield(node.yield + node.bonusYield, playerType_);
+            PlotYield plotYield = getExtraYield(node.yield + node.bonusYield, playerType_);
+            return isGoldenAge_ ? getExtraGoldenAgeYield(plotYield) : plotYield;
         }
 
         template <typename NodeType> // ImprovementNode and UpgradeNode
@@ -510,19 +523,21 @@ namespace AltAI
                 }
             }
 
-            return getExtraYield(totalYield, playerType_);
+            PlotYield plotYield = getExtraYield(totalYield, playerType_);
+            return isGoldenAge_ ? getExtraGoldenAgeYield(plotYield) : plotYield;
         }
 
     private:
         PlayerTypes playerType_;
         RouteTypes routeType_;
+        bool isGoldenAge_;
     };
 
     class CalcYieldVisitor : public boost::static_visitor<std::pair<bool, PlotYield> >
     {
     public:
-        CalcYieldVisitor(PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType)
-            : playerType_(playerType), improvementType_(improvementType), featureType_(featureType), routeType_(routeType)
+        CalcYieldVisitor(PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType, bool isGoldenAge)
+            : playerType_(playerType), improvementType_(improvementType), featureType_(featureType), routeType_(routeType), isGoldenAge_(isGoldenAge)
         {
         }
 
@@ -540,7 +555,7 @@ namespace AltAI
 
             if (improvementType_ == NO_IMPROVEMENT)
             {
-                return std::make_pair(true, YieldVisitor(playerType_, routeType_)(node));
+                return std::make_pair(true, YieldVisitor(playerType_, routeType_, isGoldenAge_)(node));
             }
 
             for (size_t i = 0, count = node.improvementNodes.size(); i < count; ++i)
@@ -559,7 +574,7 @@ namespace AltAI
         {
             if (node.improvementType == improvementType_)  // found improvement
             {
-                return std::make_pair(true, YieldVisitor(playerType_, routeType_)(node));
+                return std::make_pair(true, YieldVisitor(playerType_, routeType_, isGoldenAge_)(node));
             }
             else if (!node.upgradeNode.empty())
             {
@@ -575,7 +590,7 @@ namespace AltAI
         {
             if (improvementType_ == NO_IMPROVEMENT)
             {
-                return std::make_pair(true, YieldVisitor(playerType_, routeType_)(node));
+                return std::make_pair(true, YieldVisitor(playerType_, routeType_, isGoldenAge_)(node));
             }
 
             for (size_t i = 0, count = node.improvementNodes.size(); i < count; ++i)
@@ -594,22 +609,23 @@ namespace AltAI
         ImprovementTypes improvementType_;
         FeatureTypes featureType_;
         RouteTypes routeType_;
+        bool isGoldenAge_;
     };
 
-    PlotYield getYield(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType)
+    PlotYield getYield(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType, bool isGoldenAge)
     {
-        return boost::apply_visitor(CalcYieldVisitor(playerType, improvementType, featureType, routeType), node).second;
+        return boost::apply_visitor(CalcYieldVisitor(playerType, improvementType, featureType, routeType, isGoldenAge), node).second;
     }
 
     
     std::vector<std::pair<RouteTypes, PlotYield> > getRouteYieldChanges(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType)
     {
         std::vector<std::pair<RouteTypes, PlotYield> > routeYieldChanges;
-        PlotYield baseYield = boost::apply_visitor(CalcYieldVisitor(playerType, improvementType, featureType, NO_ROUTE), node).second;
+        PlotYield baseYield = boost::apply_visitor(CalcYieldVisitor(playerType, improvementType, featureType, NO_ROUTE, false), node).second;
 
         for (int i = 0, count = gGlobals.getNumRouteInfos(); i < count; ++i)
         {
-            routeYieldChanges.push_back(std::make_pair((RouteTypes)i, boost::apply_visitor(CalcYieldVisitor(playerType, improvementType, featureType, (RouteTypes)i), node).second - baseYield));
+            routeYieldChanges.push_back(std::make_pair((RouteTypes)i, boost::apply_visitor(CalcYieldVisitor(playerType, improvementType, featureType, (RouteTypes)i, false), node).second - baseYield));
         }
         return routeYieldChanges;
     }
@@ -814,6 +830,7 @@ namespace AltAI
                 : data_(data), plotData_(plotData), featureType_(featureType), routeType_(routeType), improvementType_(improvementType), plotInfoNode_(plotInfoNode)
             {
                 playerType_ = data_.getCity()->getOwner();
+                isGoldenAge_ = data_.getGoldenAgeTurns() > 0;
             }
 
             void operator() (const PlotInfo::NullNode&) const
@@ -851,7 +868,7 @@ namespace AltAI
             // todo - bonus access changes
             void operator() (const PlotInfo::ImprovementNode& node) const
             {
-                plotData_.plotYield = YieldVisitor(playerType_, routeType_)(node);
+                plotData_.plotYield = YieldVisitor(playerType_, routeType_, isGoldenAge_)(node);
                 plotData_.actualOutput = plotData_.output = makeOutput(plotData_.plotYield, makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent());
 
                 if (!node.upgradeNode.empty())
@@ -882,6 +899,7 @@ namespace AltAI
             FeatureTypes featureType_;
             ImprovementTypes improvementType_;
             RouteTypes routeType_;
+            bool isGoldenAge_;
             const PlotInfo::PlotInfoNode& plotInfoNode_;
         };
     }
