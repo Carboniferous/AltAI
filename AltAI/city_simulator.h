@@ -137,6 +137,10 @@ namespace AltAI
     typedef std::vector<boost::tuple<FeatureTypes, ImprovementTypes, SimulationOutput> > PlotImprovementSimulationResult;
     typedef std::vector<std::pair<XYCoords, PlotImprovementSimulationResult> > PlotImprovementSimulationResults;
 
+    struct ProjectionLadder;
+    typedef std::vector<boost::tuple<FeatureTypes, ImprovementTypes, ProjectionLadder> > PlotImprovementProjections;
+    typedef std::vector<std::pair<XYCoords, PlotImprovementProjections> > PlotImprovementsProjections;
+
     class CitySimulator
     {
     public:
@@ -148,6 +152,8 @@ namespace AltAI
 
         PlotImprovementSimulationResults evaluateAllImprovements(int nTurns, bool ignoreExisting);
         PlotImprovementSimulationResults evaluateImprovements(const PlotsAndImprovements& improvements, const ConstCityDataPtr& pCityData, int nTurns, bool ignoreExisting);
+
+        PlotImprovementsProjections getImprovementProjections(const PlotsAndImprovements& improvements, const ConstCityDataPtr& pCityData, int nTurns, bool ignoreExisting);
 
         std::pair<BuildingTypes, TotalOutput> getBestBuilding(TotalOutputWeights outputWeights, const BuildingSimulationResults& simulationResults) const;
         std::map<BuildingTypes, int> getBuildingValues(TotalOutputWeights outputWeights, const BuildingSimulationResults& simulationResults) const;

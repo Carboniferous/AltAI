@@ -570,8 +570,11 @@ namespace AltAI
         improvementManager.simulateImprovements(outputWeights, __FUNCTION__);
         std::vector<CityImprovementManager::PlotImprovementData> baseImprovements = improvementManager.getImprovements();
 
-        CityDataPtr plotData(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
-        ProjectionLadder base = getProjectedOutput(player, plotData, 50);
+        CityDataPtr pSimulationCityData(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
+        std::vector<IProjectionEventPtr> events;
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+
+        ProjectionLadder base = getProjectedOutput(player, pSimulationCityData, 50, events);
 
         std::list<TechTypes> prereqTechs = pushTechAndPrereqs(pTechInfo->getTechType(), player);
         for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
@@ -600,8 +603,12 @@ namespace AltAI
             cityBuildTactics.push_back(pTactic);
         }
 
-        plotData = CityDataPtr(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
-        ProjectionLadder ladder = getProjectedOutput(player, plotData, 50);
+        pSimulationCityData = CityDataPtr(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
+        events.clear();
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+
+        ProjectionLadder ladder = getProjectedOutput(player, pSimulationCityData, 50, events);
+
         base.debug(os);
         ladder.debug(os);
         os << "\nImprovement delta = " << ladder.getOutput() - base.getOutput();

@@ -156,13 +156,14 @@ namespace AltAI
         {
             MiscEffectNode() : cityMaintenanceModifierChange(0), foodKeptPercent(0), hurryAngerModifier(0), globalPopChange(0),
                 noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false), startsGoldenAge(false),
-                makesCityCapital(false), isGovernmentCenter(false) {}
+                makesCityCapital(false), isGovernmentCenter(false), freeBuildingType(NO_BUILDING) {}
             int cityMaintenanceModifierChange;
             int foodKeptPercent;
             int hurryAngerModifier;
             int globalPopChange;
             bool noUnhealthinessFromBuildings, noUnhealthinessFromPopulation, startsGoldenAge;
             bool makesCityCapital, isGovernmentCenter;
+            BuildingTypes freeBuildingType;
         };
 
         typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, YieldNode, CommerceNode, TradeNode, BonusNode, FreeBonusNode, 

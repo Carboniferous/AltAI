@@ -2,6 +2,7 @@
 #include "./city_data.h"
 #include "./building_helper.h"
 #include "./religion_helper.h"
+#include "./game.h"
 #include "./player.h"
 #include "./city.h"
 #include "./civ_helper.h"
@@ -27,6 +28,29 @@ namespace AltAI
             const Player& player;
             const CvCity* pCity;
         };
+
+        void updateEconomicTactics(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
+        {
+            const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
+            const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity->getID());
+
+            const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
+
+            EconomicBuildingValue economicValue;
+
+            economicValue.buildingType = pCityBuildingTactics->getBuildingType();
+            economicValue.output = ladder.getOutput() - city.getCurrentOutputProjection().getOutput();
+
+            if (!ladder.buildings.empty())
+            {
+                economicValue.nTurns = ladder.buildings[0].first;
+            }
+
+            if (pCityBuildingTactics->getDependencies().empty())
+            {
+                selectionData.economicBuildings.insert(economicValue);
+            }
+        }
     }
 
     ResearchTechDependency::ResearchTechDependency(TechTypes techType) : techType_(techType)
@@ -47,6 +71,11 @@ namespace AltAI
     {
         const CvPlayerAI& player = CvPlayerAI::getPlayer(pCity->getOwner());
         return !CvTeamAI::getTeam(player.getTeam()).isHasTech(techType_);
+    }
+
+    std::pair<BuildQueueTypes, int> ResearchTechDependency::getBuildItem() const
+    {
+        return std::make_pair(NoItem, -1);
     }
 
     void ResearchTechDependency::debug(std::ostream& os) const
@@ -73,6 +102,11 @@ namespace AltAI
     bool CityBuildingDependency::required(const CvCity* pCity) const
     {
         return pCity->getNumBuilding(buildingType_) == 0;
+    }
+
+    std::pair<BuildQueueTypes, int> CityBuildingDependency::getBuildItem() const
+    {
+        return std::make_pair(BuildingItem, buildingType_);
     }
 
     void CityBuildingDependency::debug(std::ostream& os) const
@@ -108,6 +142,11 @@ namespace AltAI
         return buildingCount < count_;
     }
 
+    std::pair<BuildQueueTypes, int> CivBuildingDependency::getBuildItem() const
+    {
+        return std::make_pair(BuildingItem, buildingType_);
+    }
+
     void CivBuildingDependency::debug(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
@@ -115,7 +154,7 @@ namespace AltAI
 #endif
     }
 
-    ReligiousDependency::ReligiousDependency(ReligionTypes religionType) : religionType_(religionType)
+    ReligiousDependency::ReligiousDependency(ReligionTypes religionType, UnitTypes unitType) : religionType_(religionType), unitType_(unitType)
     {
     }
 
@@ -134,6 +173,11 @@ namespace AltAI
         return !pCity->isHasReligion(religionType_);
     }
 
+    std::pair<BuildQueueTypes, int> ReligiousDependency::getBuildItem() const
+    {
+        return std::make_pair(UnitItem, unitType_);
+    }
+
     void ReligiousDependency::debug(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
@@ -143,19 +187,7 @@ namespace AltAI
 
     void FoodBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
-        const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
-
-        EconomicBuildingValue economicValue;
-
-        economicValue.buildingType = pCityBuildingTactics->getBuildingType();
-        economicValue.output = ladder.getOutput();
-
-        if (!ladder.buildings.empty())
-        {
-            economicValue.nTurns = ladder.buildings[0].first;
-        }
-
-        selectionData.economicBuildings.insert(economicValue);
+        updateEconomicTactics(pCityBuildingTactics, selectionData);
     }
 
     void FoodBuildingTactic::debug(std::ostream& os) const
@@ -167,19 +199,7 @@ namespace AltAI
 
     void HappyBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
-        const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
-
-        EconomicBuildingValue economicValue;
-
-        economicValue.buildingType = pCityBuildingTactics->getBuildingType();
-        economicValue.output = ladder.getOutput();
-
-        if (!ladder.buildings.empty())
-        {
-            economicValue.nTurns = ladder.buildings[0].first;
-        }
-
-        selectionData.economicBuildings.insert(economicValue);
+        updateEconomicTactics(pCityBuildingTactics, selectionData);
     }
 
     void HappyBuildingTactic::debug(std::ostream& os) const
@@ -198,19 +218,7 @@ namespace AltAI
 
     void HealthBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
-        const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
-
-        EconomicBuildingValue economicValue;
-
-        economicValue.buildingType = pCityBuildingTactics->getBuildingType();
-        economicValue.output = ladder.getOutput();
-
-        if (!ladder.buildings.empty())
-        {
-            economicValue.nTurns = ladder.buildings[0].first;
-        }
-
-        selectionData.economicBuildings.insert(economicValue);
+        updateEconomicTactics(pCityBuildingTactics, selectionData);
     }
 
     void GoldBuildingTactic::debug(std::ostream& os) const
@@ -222,19 +230,7 @@ namespace AltAI
 
     void GoldBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
-        const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
-
-        EconomicBuildingValue economicValue;
-
-        economicValue.buildingType = pCityBuildingTactics->getBuildingType();
-        economicValue.output = ladder.getOutput();
-
-        if (!ladder.buildings.empty())
-        {
-            economicValue.nTurns = ladder.buildings[0].first;
-        }
-
-        selectionData.economicBuildings.insert(economicValue);
+        updateEconomicTactics(pCityBuildingTactics, selectionData);
     }
 
     void ScienceBuildingTactic::debug(std::ostream& os) const
@@ -246,19 +242,7 @@ namespace AltAI
 
     void ScienceBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
-        const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
-
-        EconomicBuildingValue economicValue;
-
-        economicValue.buildingType = pCityBuildingTactics->getBuildingType();
-        economicValue.output = ladder.getOutput();
-
-        if (!ladder.buildings.empty())
-        {
-            economicValue.nTurns = ladder.buildings[0].first;
-        }
-
-        selectionData.economicBuildings.insert(economicValue);
+        updateEconomicTactics(pCityBuildingTactics, selectionData);
     }
 
     void CultureBuildingTactic::debug(std::ostream& os) const
@@ -270,21 +254,27 @@ namespace AltAI
 
     void CultureBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
+        const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
+        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity->getID());
+
+        updateEconomicTactics(pCityBuildingTactics, selectionData);
+
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
         CultureBuildingValue cultureValue;
-        EconomicBuildingValue economicValue;
 
-        economicValue.buildingType = cultureValue.buildingType = pCityBuildingTactics->getBuildingType();
-        economicValue.output = cultureValue.output = ladder.getOutput();
+        cultureValue.buildingType = pCityBuildingTactics->getBuildingType();
+        cultureValue.output = ladder.getOutput() - city.getCurrentOutputProjection().getOutput();
 
         if (!ladder.buildings.empty())
         {
-            economicValue.nTurns = cultureValue.nTurns = ladder.buildings[0].first;
+            cultureValue.nTurns = ladder.buildings[0].first;
         }
 
-        selectionData.smallCultureBuildings.insert(cultureValue);
-        selectionData.economicBuildings.insert(economicValue);
+        if (pCityBuildingTactics->getDependencies().empty())
+        {
+            selectionData.smallCultureBuildings.insert(cultureValue);
+        }
     }
 
     void EspionageBuildingTactic::debug(std::ostream& os) const
@@ -296,19 +286,7 @@ namespace AltAI
 
     void EspionageBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
-        const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
-
-        EconomicBuildingValue economicValue;
-
-        economicValue.buildingType = pCityBuildingTactics->getBuildingType();
-        economicValue.output = ladder.getOutput();
-
-        if (!ladder.buildings.empty())
-        {
-            economicValue.nTurns = ladder.buildings[0].first;
-        }
-
-        selectionData.economicBuildings.insert(economicValue);
+        updateEconomicTactics(pCityBuildingTactics, selectionData);
     }
 
     void SpecialistBuildingTactic::debug(std::ostream& os) const
@@ -320,23 +298,16 @@ namespace AltAI
 
     void SpecialistBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
-        const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
-
-        EconomicBuildingValue economicValue;
-
-        economicValue.buildingType = pCityBuildingTactics->getBuildingType();
-        economicValue.output = ladder.getOutput();
-
-        if (!ladder.buildings.empty())
-        {
-            economicValue.nTurns = ladder.buildings[0].first;
-        }
-
-        selectionData.economicBuildings.insert(economicValue);
+        updateEconomicTactics(pCityBuildingTactics, selectionData);
     }
      
-    CityBuildingTactic::CityBuildingTactic(BuildingTypes buildingType) : buildingType_(buildingType)
+    CityBuildingTactic::CityBuildingTactic(BuildingTypes buildingType, IDInfo city) : buildingType_(buildingType), city_(city)
     {
+    }
+
+    IDInfo CityBuildingTactic::getCity() const
+    {
+        return city_;
     }
 
     void CityBuildingTactic::addTactic(const ICityBuildingTacticPtr& pBuildingTactic)
@@ -349,9 +320,20 @@ namespace AltAI
         dependentTactics_.push_back(pDependentTactic);
     }
 
+    std::vector<IDependentTacticPtr> CityBuildingTactic::getDependencies() const
+    {
+        return dependentTactics_;
+    }
+
     void CityBuildingTactic::update(const Player& player, const CityDataPtr& pCityData)
     {
-        projection_ = getProjectedOutput(player, pCityData->clone(), player.getAnalysis()->getBuildingInfo(buildingType_), 50);
+        CityDataPtr pCopyCityData = pCityData->clone();
+        pCopyCityData->pushBuilding(buildingType_);
+        std::vector<IProjectionEventPtr> events;
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pCopyCityData)));
+        events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCopyCityData, player.getAnalysis()->getBuildingInfo(buildingType_))));
+
+        projection_ = getProjectedOutput(player, pCopyCityData, 50, events);
     }
 
     void CityBuildingTactic::updateDependencies(const Player& player, const CvCity* pCity)
@@ -449,6 +431,32 @@ namespace AltAI
         cityTactics_[city].push_back(pCityTactic);
     }
 
+    std::list<ICityBuildingTacticsPtr> GlobalBuildingTactic::getCityTactics(IDInfo city) const
+    {
+        CityTacticsMap::const_iterator ci = cityTactics_.find(city);
+        if (ci != cityTactics_.end())
+        {
+            return ci->second;
+        }
+        return std::list<ICityBuildingTacticsPtr>();
+    }
+
+    void GlobalBuildingTactic::apply(TacticSelectionData& selectionData)
+    {
+        for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
+        {
+            for (std::list<ICityBuildingTacticsPtr>::iterator cityIter(iter->second.begin()), cityEndIter(iter->second.end()); cityIter != cityEndIter; ++cityIter)
+            {
+                TacticSelectionData thisCityData;
+                (*cityIter)->apply(thisCityData);
+                if (!thisCityData.economicBuildings.empty())
+                {
+                    selectionData.economicWonders[buildingType_].buildCityValues.push_back(std::make_pair((*cityIter)->getCity(), *thisCityData.economicBuildings.begin()));
+                }
+            } 
+        }
+    }
+
     void GlobalBuildingTactic::removeCityTactics(IDInfo city)
     {
         cityTactics_.erase(city);
@@ -532,6 +540,32 @@ namespace AltAI
     void NationalBuildingTactic::addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic)
     {
         cityTactics_[city].push_back(pCityTactic);
+    }
+
+    void NationalBuildingTactic::apply(TacticSelectionData& selectionData)
+    {
+        for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
+        {
+            for (std::list<ICityBuildingTacticsPtr>::iterator cityIter(iter->second.begin()), cityEndIter(iter->second.end()); cityIter != cityEndIter; ++cityIter)
+            {
+                TacticSelectionData thisCityData;
+                (*cityIter)->apply(thisCityData);
+                if (!thisCityData.economicBuildings.empty())
+                {
+                    selectionData.economicWonders[buildingType_].buildCityValues.push_back(std::make_pair((*cityIter)->getCity(), *thisCityData.economicBuildings.begin()));
+                }
+            } 
+        }
+    }
+
+    std::list<ICityBuildingTacticsPtr> NationalBuildingTactic::getCityTactics(IDInfo city) const
+    {
+        CityTacticsMap::const_iterator ci = cityTactics_.find(city);
+        if (ci != cityTactics_.end())
+        {
+            return ci->second;
+        }
+        return std::list<ICityBuildingTacticsPtr>();
     }
 
     void NationalBuildingTactic::removeCityTactics(IDInfo city)

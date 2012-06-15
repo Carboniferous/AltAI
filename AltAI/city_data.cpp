@@ -37,14 +37,14 @@ namespace AltAI
     {
         cityPopulation_ = other.cityPopulation_, workingPopulation_ = other.workingPopulation_, happyCap_ = other.happyCap_;
 
-        currentFood_ = other.currentFood_, storedFood_ = other.storedFood_, currentProduction_ = other.currentProduction_;
+        currentFood_ = other.currentFood_, storedFood_ = other.storedFood_, accumulatedProduction_ = other.accumulatedProduction_;
         growthThreshold_ = other.growthThreshold_, requiredProduction_ = other.requiredProduction_;
         foodKeptPercent_ = other.foodKeptPercent_;
         commerceYieldModifier_ = other.commerceYieldModifier_;
 
         specialConditions_ = other.specialConditions_;
 
-        queuedBuildings_ = other.queuedBuildings_;
+        buildQueue_ = other.buildQueue_;
 
         pCity_ = other.pCity_;
         owner_ = other.owner_;
@@ -83,7 +83,7 @@ namespace AltAI
 
     CityData::CityData(const CvCity* pCity, bool includeUnclaimedPlots)
         : cityPopulation_(0), workingPopulation_(0), happyCap_(0), currentFood_(0), storedFood_(0),
-          currentProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
+          accumulatedProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
           commerceYieldModifier_(100), specialConditions_(None), pCity_(pCity), owner_(pCity->getOwner()),
           coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots),
           goldenAgeTurns_(CvPlayerAI::getPlayer(pCity->getOwner()).getGoldenAgeTurns())
@@ -96,7 +96,7 @@ namespace AltAI
 
     CityData::CityData(const CvCity* pCity, const std::vector<CityImprovementManager::PlotImprovementData>& improvements, bool includeUnclaimedPlots)
         : cityPopulation_(0), workingPopulation_(0), happyCap_(0), currentFood_(0), storedFood_(0),
-          currentProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
+          accumulatedProduction_(0), growthThreshold_(0), requiredProduction_(-1), foodKeptPercent_(0),
           commerceYieldModifier_(100), specialConditions_(None), pCity_(pCity), owner_(pCity_->getOwner()),
           coords_(pCity->getX(), pCity->getY()), includeUnclaimedPlots_(includeUnclaimedPlots),
           goldenAgeTurns_(CvPlayerAI::getPlayer(pCity->getOwner()).getGoldenAgeTurns())
@@ -363,6 +363,14 @@ namespace AltAI
     // first = pop change (+1, -1, 0), second = turns (MAX_INT if never)
     std::pair<int, int> CityData::getTurnsToPopChange() const
     {
+        if (!buildQueue_.empty() && buildQueue_.top().first == UnitItem)
+        {
+            if (gGlobals.getUnitInfo((UnitTypes)buildQueue_.top().second).isFoodProduction())
+            {
+                return std::make_pair(0, MAX_INT);
+            }
+        }
+
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
         const int requiredFood = 100 * (cityPopulation_ * foodPerPop) + getLostFood();
         const int foodOutput = getFood();
@@ -435,19 +443,43 @@ namespace AltAI
             changePopulation(-1);
         }
 
-        currentProduction_ += totalOutput[OUTPUT_PRODUCTION];
+        accumulatedProduction_ += getCurrentProduction_(totalOutput);
 
         cultureHelper_->advanceTurn(*this, includeUnclaimedPlots_);
 
-        if (currentProduction_ >= requiredProduction_ && !queuedBuildings_.empty())
+        if (accumulatedProduction_ >= requiredProduction_ && !buildQueue_.empty())
         {
-            BuildingTypes completedBuilding = queuedBuildings_.top();
-            buildingsHelper_->changeNumRealBuildings(completedBuilding);
-            events_.push(CitySimulationEventPtr(new TestBuildingBuilt(completedBuilding)));
-
             // TODO handle overflow properly using logic in HurryHelper
-            currentProduction_ = currentProduction_ - requiredProduction_;
-            completeBuilding_();
+            accumulatedProduction_ = 0;
+
+            std::pair<BuildQueueTypes, int> buildItem = buildQueue_.top();
+
+            switch (buildItem.first)
+            {
+            case BuildingItem:
+                {
+                    BuildingTypes completedBuilding = (BuildingTypes)buildItem.second;
+                    buildingsHelper_->changeNumRealBuildings(completedBuilding);
+                    events_.push(CitySimulationEventPtr(new TestBuildingBuilt(completedBuilding)));
+                    buildQueue_.pop();
+                }
+                break;
+            case UnitItem:
+                {
+                    UnitTypes completedUnit = (UnitTypes)buildItem.second;
+                    buildQueue_.pop();
+                }                
+                break;
+            case ProjectItem:
+                {
+                    ProjectTypes completedProject = (ProjectTypes)buildItem.second;
+                    buildQueue_.pop();
+                }
+                break;
+            default: // and process - should never complete
+                break;
+            }
+
             requiredProduction_ = -1;
         }
 
@@ -458,12 +490,25 @@ namespace AltAI
         checkHappyCap();
     }
 
-    void CityData::setBuilding(BuildingTypes buildingType)
+    void CityData::pushBuilding(BuildingTypes buildingType)
     {
         if (buildingType != NO_BUILDING)
         {
-            queuedBuildings_.push(buildingType);
+            buildQueue_.push(std::make_pair(BuildingItem, buildingType));
             requiredProduction_ = 100 * (pCity_->getProductionNeeded(buildingType) - pCity_->getBuildingProduction(buildingType));
+        }
+        else
+        {
+            requiredProduction_ = -1;
+        }
+    }
+
+    void CityData::pushUnit(UnitTypes unitType)
+    {
+        if (unitType != NO_UNIT)
+        {
+            buildQueue_.push(std::make_pair(UnitItem, unitType));
+            requiredProduction_ = 100 * (pCity_->getProductionNeeded(unitType) - pCity_->getUnitProduction(unitType));
         }
         else
         {
@@ -479,7 +524,7 @@ namespace AltAI
             hurryHelper_->updateAngryTimer();
         }
         
-        currentProduction_ = requiredProduction_ + hurryData.extraProduction;
+        accumulatedProduction_ = requiredProduction_ + hurryData.extraProduction;
     }
 
     int CityData::happyPopulation() const
@@ -495,11 +540,6 @@ namespace AltAI
     std::pair<bool, HurryData> CityData::canHurry(HurryTypes hurryType) const
     {
         return hurryHelper_->canHurry(*this, hurryType);
-    }
-
-    void CityData::completeBuilding_()
-    {
-        queuedBuildings_.pop();
     }
 
     int CityData::getNonWorkingPopulation() const
@@ -672,13 +712,26 @@ namespace AltAI
 #endif
     }
 
-    int CityData::getBuildingProductionModifier_() const
+    int CityData::getCurrentProductionModifier_() const
     {
         int productionModifier = 0;
-        if (!queuedBuildings_.empty())
+        if (!buildQueue_.empty())
         {
-            BuildingTypes buildingType = queuedBuildings_.top();
-            productionModifier = buildingsHelper_->getProductionModifier(*this, buildingType);
+            std::pair<BuildQueueTypes, int> buildItem = buildQueue_.top();
+            switch (buildItem.first)
+            {
+            case BuildingItem:
+                productionModifier = buildingsHelper_->getProductionModifier(*this, (BuildingTypes)buildItem.second);
+                break;
+            case UnitItem:
+                productionModifier = modifiersHelper_->getUnitProductionModifier((UnitTypes)buildItem.second);
+                break;
+            case ProjectItem:
+                productionModifier = modifiersHelper_->getProjectProductionModifier(*this, (ProjectTypes)buildItem.second);
+                break;
+            default:  // processes have no extra modifer
+                break;
+            }
         }
 
         return productionModifier;
@@ -692,7 +745,7 @@ namespace AltAI
         YieldModifier commerceYieldModifier = makeYield(100, 100, commerceYieldModifier_);
         TotalOutput totalOutput = makeOutput(tradeRouteHelper_->getTradeYield(), commerceYieldModifier, makeCommerce(100, 100, 100, 100), commercePercent_);
 
-        yieldModifier[OUTPUT_PRODUCTION] += getBuildingProductionModifier_();
+        //yieldModifier[OUTPUT_PRODUCTION] += getCurrentProductionModifier_();  // get this separately
 
         totalOutput += cityPlotOutput_.actualOutput;
 
@@ -1072,5 +1125,28 @@ namespace AltAI
         }
 
         return true;
+    }
+
+    int CityData::getCurrentProduction() const
+    {
+        return getCurrentProduction_(getOutput());
+    }
+
+    int CityData::getCurrentProduction_(TotalOutput currentOutput) const
+    {
+        int production = currentOutput[OUTPUT_PRODUCTION];
+        const int baseModifier = modifiersHelper_->getTotalYieldModifier(*this)[YIELD_PRODUCTION];
+        const int modifier = getCurrentProductionModifier_();
+
+        production = ((production * 100) / baseModifier) * (baseModifier + modifier);
+        production /= 100;
+
+        if (!buildQueue_.empty() && buildQueue_.top().first == UnitItem && gGlobals.getUnitInfo((UnitTypes)buildQueue_.top().second).isFoodProduction())
+        {
+            const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
+            int requiredYield = 100 * (getPopulation() - std::max<int>(0, angryPopulation() - happyPopulation())) * foodPerPop + getLostFood();
+            production += currentOutput[OUTPUT_FOOD] - requiredYield;
+        }
+        return production;
     }
 }

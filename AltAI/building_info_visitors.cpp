@@ -517,6 +517,14 @@ namespace AltAI
                 {
                     pCityData_->getMaintenanceHelper()->addGovernmentCentre(pBuiltCity_->getIDInfo());
                 }
+
+                if (node.freeBuildingType != NO_BUILDING)
+                {
+                    if (pCityData_->getBuildingsHelper()->getNumBuildings(node.freeBuildingType) == 0)
+                    {
+                        pCityData_->getBuildingsHelper()->changeNumFreeBuildings(node.freeBuildingType);
+                    }
+                }
             }
 
         private:

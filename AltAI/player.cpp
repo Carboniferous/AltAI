@@ -1044,6 +1044,23 @@ namespace AltAI
         pPlayerAnalysis_->getPlayerTactics()->updateFirstToTechTactics(techType);
     }
 
+    void Player::logHurry(const CvCity* pCity, const HurryData& hurryData) const
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
+        os << "\nCity: " << narrow(pCity->getName()) << " hurries: ";
+        if (pCity->isProductionBuilding())
+        {
+            os << gGlobals.getBuildingInfo(pCity->getProductionBuilding()).getType();
+        }
+        else if (pCity->isProductionUnit())
+        {
+            os << gGlobals.getUnitInfo(pCity->getProductionUnit()).getType();
+        }
+        os << hurryData;
+#endif
+    }
+
     void Player::setCityDirty(IDInfo city)
     {
         cityFlags_.insert(city);

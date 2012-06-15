@@ -304,7 +304,7 @@ namespace AltAI
             }
         }
 
-        void getMiscEffectNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
+        void getMiscEffectNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo, const BuildingInfoRequestData& requestData)
         {
             BuildingInfo::MiscEffectNode node;
 
@@ -318,9 +318,15 @@ namespace AltAI
             node.makesCityCapital = buildingInfo.isCapital();
             node.isGovernmentCenter = buildingInfo.isGovernmentCenter();
 
+            BuildingClassTypes freeBuildingClass = (BuildingClassTypes)buildingInfo.getFreeBuildingClass();
+            if (freeBuildingClass != NO_BUILDINGCLASS)
+            {
+                node.freeBuildingType = getPlayerVersion(requestData.playerType, freeBuildingClass);
+            }
+
             if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 ||
                 node.globalPopChange != 0 || node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation ||
-                node.makesCityCapital || node.isGovernmentCenter || node.startsGoldenAge)
+                node.makesCityCapital || node.isGovernmentCenter || node.startsGoldenAge || node.freeBuildingType != NO_BUILDING)
             {
                 baseNode.nodes.push_back(node);
             }
@@ -440,7 +446,7 @@ namespace AltAI
             getPowerNode(node, buildingInfo);
             getSpecialistNode(node, buildingInfo);
             getSpecialistSlotNode(node, buildingInfo);
-            getMiscEffectNode(node, buildingInfo);
+            getMiscEffectNode(node, buildingInfo, requestData);
             getCityDefenceNode(node, buildingInfo);
             getUnitExpNode(node, buildingInfo);
             getReligionNode(node, buildingInfo);

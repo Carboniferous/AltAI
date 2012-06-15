@@ -54,6 +54,8 @@ namespace AltAI
 
         void selectCityTactics();
 
+        std::map<IDInfo, std::vector<BuildingTypes> > getBuildingsCityCanAssistWith(IDInfo city) const;
+
         void debugTactics();
 
         std::list<ResearchTech> possibleTechTactics_, selectedTechTactics_;

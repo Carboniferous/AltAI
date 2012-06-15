@@ -670,4 +670,9 @@ namespace AltAI
     }
 
     std::string narrow(const std::wstring& wstr);
+
+    enum BuildQueueTypes
+    {
+        NoItem = -1, BuildingItem, UnitItem, ProjectItem, ProcessItem
+    };
 }

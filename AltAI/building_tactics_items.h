@@ -13,6 +13,7 @@ namespace AltAI
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
+        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -27,6 +28,7 @@ namespace AltAI
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
+        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -41,6 +43,7 @@ namespace AltAI
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
+        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -52,24 +55,28 @@ namespace AltAI
     class ReligiousDependency : public IDependentTactic
     {
     public:
-        explicit ReligiousDependency(ReligionTypes religionType);
+        ReligiousDependency(ReligionTypes religionType, UnitTypes unitType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
+        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;
 
     private:        
         ReligionTypes religionType_;
+        UnitTypes unitType_;
     };
 
     class CityBuildingTactic : public ICityBuildingTactics, public boost::enable_shared_from_this<CityBuildingTactic>
     {
     public:
-        explicit CityBuildingTactic(BuildingTypes buildingType);
+        CityBuildingTactic(BuildingTypes buildingType, IDInfo city);
 
+        virtual IDInfo getCity() const;
         virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
         virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
+        virtual std::vector<IDependentTacticPtr> getDependencies() const;
         virtual void update(const Player& player, const CityDataPtr& pCityData);
         virtual void updateDependencies(const Player& player, const CvCity* pCity);
         virtual void apply(TacticSelectionData& selectionData);
@@ -84,6 +91,7 @@ namespace AltAI
         std::list<ICityBuildingTacticPtr> buildingTactics_;
         ProjectionLadder projection_;
         BuildingTypes buildingType_;
+        IDInfo city_;
     };
 
     class FoodBuildingTactic : public ICityBuildingTactic
@@ -161,6 +169,8 @@ namespace AltAI
         virtual void update(const Player& player);
         virtual void updateDependencies(const Player& player);
         virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
+        virtual std::list<ICityBuildingTacticsPtr> getCityTactics(IDInfo city) const;
+        virtual void apply(TacticSelectionData& selectionData);
         virtual void removeCityTactics(IDInfo city);
         virtual bool empty() const;
 
@@ -185,6 +195,8 @@ namespace AltAI
         virtual void update(const Player& player);
         virtual void updateDependencies(const Player& player);
         virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
+        virtual std::list<ICityBuildingTacticsPtr> getCityTactics(IDInfo city) const;
+        virtual void apply(TacticSelectionData& selectionData);
         virtual void removeCityTactics(IDInfo city);
         virtual bool empty() const;
 

@@ -679,31 +679,94 @@ namespace AltAI
 #endif
 
         CityDataPtr pCityData(new CityData(pCity, includeUnclaimedPlots_));
-        PlotImprovementSimulationResults simulatorResults(simulator.evaluateImprovements(plotsAndImprovements, pCityData, 20, false));
+        //PlotImprovementSimulationResults simulatorResults(simulator.evaluateImprovements(plotsAndImprovements, pCityData, 20, false));
 
-        std::vector<boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, TotalOutput> > bestSimulatedImprovements = simulator.getBestImprovements(outputWeights, simulatorResults);
+        //std::vector<boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, TotalOutput> > bestSimulatedImprovements = simulator.getBestImprovements(outputWeights, simulatorResults);
+
+        PlotImprovementsProjections projections = simulator.getImprovementProjections(plotsAndImprovements, pCityData, 20, false);
+
+        std::vector<boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, TotalOutput> > bestProjectedImprovements;
+        if (!projections.empty() && !projections[0].second.empty())
+        {
+            TotalOutputValueFunctor valueF(outputWeights);
+            ProjectionLadder base = boost::get<2>(projections[0].second[0]);
+            TotalOutput baseOutput = base.getOutput();
+
+            for (size_t i = 1, plotCount = projections.size(); i < plotCount; ++i)
+            {
+                int thisPlotBestValue = 0;
+                size_t bestPlotIndex = MAX_INT;
+                for (size_t j = 0, improvementCount = projections[i].second.size(); j < improvementCount; ++j)
+                {
+                    int thisPlotValue = valueF(boost::get<2>(projections[i].second[j]).getOutput() - baseOutput);
+                    if (thisPlotValue > thisPlotBestValue)
+                    {
+                        thisPlotBestValue = thisPlotValue;
+                        bestPlotIndex = j;
+                    }
+                }
+                if (bestPlotIndex != MAX_INT)
+                {
+                    bestProjectedImprovements.push_back(boost::make_tuple(projections[i].first, boost::get<0>(projections[i].second[bestPlotIndex]),
+                        boost::get<1>(projections[i].second[bestPlotIndex]), boost::get<2>(projections[i].second[bestPlotIndex]).getOutput() - baseOutput));
+                }
+            }
+        }
 
 #ifdef ALTAI_DEBUG
 		{   // debug
             std::ostream& os = CityLog::getLog(pCity)->getStream();
-            os << "\nBest improvements:";
+            /*os << "\nBest improvements:";
 
             for (size_t i = 0, count = bestSimulatedImprovements.size(); i < count; ++i)
             {
                 ImprovementTypes improvementType = boost::get<2>(bestSimulatedImprovements[i]);
-                os << "\n" << boost::get<0>(bestSimulatedImprovements[i]) << 
-                    (improvementType != NO_IMPROVEMENT ? gGlobals.getImprovementInfo(boost::get<2>(bestSimulatedImprovements[i])).getType() : " (none) "); 
+                os << "\n" << boost::get<0>(bestSimulatedImprovements[i]) << " " <<
+                    (improvementType != NO_IMPROVEMENT ? gGlobals.getImprovementInfo(boost::get<2>(bestSimulatedImprovements[i])).getType() : " (none) ")
+                   << ", delta = " << boost::get<3>(bestSimulatedImprovements[i]);
+            }*/
+
+            os << "\nBest projected improvements:";
+
+            for (size_t i = 0, count = bestProjectedImprovements.size(); i < count; ++i)
+            {
+                ImprovementTypes improvementType = boost::get<2>(bestProjectedImprovements[i]);
+                os << "\n" << boost::get<0>(bestProjectedImprovements[i]) << " " <<
+                    (improvementType != NO_IMPROVEMENT ? gGlobals.getImprovementInfo(boost::get<2>(bestProjectedImprovements[i])).getType() : " (none) ")
+                   << ", delta = " << boost::get<3>(bestProjectedImprovements[i]);
             }
         }
 #endif
 
-		TotalOutput baseOutput;
-        for (size_t i = 0, count = bestSimulatedImprovements.size(); i < count; ++i)
+		//TotalOutput baseOutput;
+  //      for (size_t i = 0, count = bestSimulatedImprovements.size(); i < count; ++i)
+  //      {
+  //          XYCoords coords = boost::get<0>(bestSimulatedImprovements[i]);
+		//	if (coords == XYCoords(pCity->getX(), pCity->getY()))
+		//	{
+		//		baseOutput = boost::get<3>(bestSimulatedImprovements[i]);
+		//	}
+		//	else
+		//	{
+		//		for (size_t j = 0, count = improvements_.size(); j < count; ++j)
+		//		{
+		//			if (boost::get<0>(improvements_[j]) == coords)
+		//			{
+		//				// update TotalOutput
+		//				boost::get<4>(improvements_[j]) = boost::get<3>(bestSimulatedImprovements[i]);
+		//				break;
+		//			}
+		//		}
+		//	}
+  //      }
+
+        TotalOutput baseOutput;
+        for (size_t i = 0, count = bestProjectedImprovements.size(); i < count; ++i)
         {
-            XYCoords coords = boost::get<0>(bestSimulatedImprovements[i]);
+            XYCoords coords = boost::get<0>(bestProjectedImprovements[i]);
 			if (coords == XYCoords(pCity->getX(), pCity->getY()))
 			{
-				baseOutput = boost::get<3>(bestSimulatedImprovements[i]);
+				baseOutput = boost::get<3>(bestProjectedImprovements[i]);
 			}
 			else
 			{
@@ -712,7 +775,7 @@ namespace AltAI
 					if (boost::get<0>(improvements_[j]) == coords)
 					{
 						// update TotalOutput
-						boost::get<4>(improvements_[j]) = boost::get<3>(bestSimulatedImprovements[i]);
+						boost::get<4>(improvements_[j]) = boost::get<3>(bestProjectedImprovements[i]);
 						break;
 					}
 				}

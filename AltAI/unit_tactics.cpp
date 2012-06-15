@@ -7,6 +7,7 @@
 #include "./player_analysis.h"
 #include "./gamedata_analysis.h"
 #include "./settler_manager.h"
+#include "./helper_fns.h"
 #include "./unit_analysis.h"
 #include "./civ_helper.h"
 #include "./civ_log.h"
@@ -24,61 +25,72 @@ namespace AltAI
         os << "\nmakeUnitTactics():\n";
 #endif
 
-        for (int i = 0, count = gGlobals.getNumUnitInfos(); i < count; ++i)
+        for (int i = 0, count = gGlobals.getNumUnitClassInfos(); i < count; ++i)
         {
-            bool haveTechPrereqs = true;
-            boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo((UnitTypes)i);
+            UnitTypes unitType = getPlayerVersion(player.getPlayerID(), (UnitClassTypes)i);
 
-            if (pUnitInfo)
+            if (unitType != NO_UNIT)
             {
-                const std::vector<TechTypes>& requiredTechs = getRequiredTechs(pUnitInfo);
-                std::vector<TechTypes> neededTechs;
-
-                for (size_t j = 0, count = requiredTechs.size(); j < count; ++j)
-                {
-                    const int depth = player.getTechResearchDepth(requiredTechs[j]);
-                    if (depth > 2)
-                    {
-                        haveTechPrereqs = false;
-                        break;
-                    }
-                    else if (depth > 0)
-                    {
-                        neededTechs.push_back(requiredTechs[j]);
-                    }
-                }
-
-                if (!haveTechPrereqs)
+                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+                if (unitInfo.getProductionCost() < 0)
                 {
                     continue;
                 }
-#ifdef ALTAI_DEBUG
-                os << "\nChecking unit: " << gGlobals.getUnitInfo((UnitTypes)i).getType();
-#endif
-                ConstructItem constructItem = getEconomicUnitTactics(player, (UnitTypes)i, pUnitInfo);
-#ifdef ALTAI_DEBUG
-                os << constructItem;
-#endif
-                if (constructItem.unitType != NO_UNIT)
-                {
-                    constructItem.requiredTechs = neededTechs;
-                    unitTactics.push_back(constructItem);
-#ifdef ALTAI_DEBUG
-                    os << "\n" << gGlobals.getUnitInfo((UnitTypes)i).getType() << " = " << *unitTactics.rbegin();
-#endif
-                }
 
-                constructItem = getMilitaryExpansionUnitTactics(player, (UnitTypes)i, pUnitInfo);
-#ifdef ALTAI_DEBUG
-                os << constructItem;
-#endif
-                if (constructItem.unitType != NO_UNIT)
+                bool haveTechPrereqs = true;
+                boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(unitType);
+
+                if (pUnitInfo)
                 {
-                    constructItem.requiredTechs = neededTechs;
-                    unitTactics.push_back(constructItem);
+                    const std::vector<TechTypes>& requiredTechs = getRequiredTechs(pUnitInfo);
+                    std::vector<TechTypes> neededTechs;
+
+                    for (size_t j = 0, count = requiredTechs.size(); j < count; ++j)
+                    {
+                        const int depth = player.getTechResearchDepth(requiredTechs[j]);
+                        if (depth > 2)
+                        {
+                            haveTechPrereqs = false;
+                            break;
+                        }
+                        else if (depth > 0)
+                        {
+                            neededTechs.push_back(requiredTechs[j]);
+                        }
+                    }
+
+                    if (!haveTechPrereqs)
+                    {
+                        continue;
+                    }
 #ifdef ALTAI_DEBUG
-                    os << "\n" << gGlobals.getUnitInfo((UnitTypes)i).getType() << " = " << *unitTactics.rbegin();
+                    os << "\nChecking unit: " << gGlobals.getUnitInfo(unitType).getType();
 #endif
+                    ConstructItem constructItem = getEconomicUnitTactics(player, unitType, pUnitInfo);
+#ifdef ALTAI_DEBUG
+                    os << constructItem;
+#endif
+                    if (constructItem.unitType != NO_UNIT)
+                    {
+                        constructItem.requiredTechs = neededTechs;
+                        unitTactics.push_back(constructItem);
+#ifdef ALTAI_DEBUG
+                        os << "\n" << gGlobals.getUnitInfo(unitType).getType() << " = " << *unitTactics.rbegin();
+#endif
+                    }
+
+                    constructItem = getMilitaryExpansionUnitTactics(player, unitType, pUnitInfo);
+#ifdef ALTAI_DEBUG
+                    os << constructItem;
+#endif
+                    if (constructItem.unitType != NO_UNIT)
+                    {
+                        constructItem.requiredTechs = neededTechs;
+                        unitTactics.push_back(constructItem);
+#ifdef ALTAI_DEBUG
+                        os << "\n" << gGlobals.getUnitInfo(unitType).getType() << " = " << *unitTactics.rbegin();
+#endif
+                    }
                 }
             }
         }

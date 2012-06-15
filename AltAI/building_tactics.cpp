@@ -51,9 +51,14 @@ namespace AltAI
                 continue;
             }
 
+            const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
+            if (buildingInfo.getProductionCost() <= 0)
+            {
+                continue;
+            }
+
             if (isNationalWonder)
             {
-                const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
                 if (buildingInfo.isGovernmentCenter())
                 {
                     continue;

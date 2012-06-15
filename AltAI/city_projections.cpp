@@ -4,7 +4,9 @@
 #include "./city.h"
 #include "./maintenance_helper.h"
 #include "./building_helper.h"
+#include "./modifiers_helper.h"
 #include "./buildings_info.h"
+#include "./unit_info.h"
 #include "./civ_log.h"
 
 namespace AltAI
@@ -20,74 +22,6 @@ namespace AltAI
         };
     }
 
-    void ProjectionLadder::debug(std::ostream& os) const
-    {
-        int turn = 0;
-        TotalOutput cumulativeOutput, lastOutput;
-        int cumulativeCost = 0;
-
-        for (size_t i = 0, count = entries.size(); i < count; ++i)
-        {
-            os << "\n\tTurns = " << entries[i].turns << ", pop = " << entries[i].pop << ", " << entries[i].output << ", " << entries[i].cost;
-        }
-
-        for (size_t i = 0, count = entries.size(); i < count; ++i)
-        {         
-            turn += entries[i].turns;
-            cumulativeOutput += entries[i].output * entries[i].turns;
-            cumulativeCost += entries[i].cost * entries[i].turns;
-
-            os << "\n\tPop = " << entries[i].pop << " turn = " << turn << " output = " << cumulativeOutput << " cost = " << cumulativeCost;
-            if (i > 0)
-            {
-                os << ", delta = " << entries[i].output - lastOutput;
-                lastOutput = entries[i].output;
-            }
-        }
-
-        for (size_t i = 0, count = buildings.size(); i < count; ++i)
-        {
-            os << "\n\tBuilding: " << gGlobals.getBuildingInfo(buildings[i].second).getType() << " built: " << buildings[i].first;
-        }
-    }
-
-    TotalOutput ProjectionLadder::getOutput() const
-    {
-        TotalOutput cumulativeOutput;
-        int cumulativeCost = 0;
-        for (size_t i = 0, count = entries.size(); i < count; ++i)
-        {            
-            cumulativeOutput += entries[i].output * entries[i].turns;
-            cumulativeCost += entries[i].cost * entries[i].turns;
-        }
-        cumulativeOutput[OUTPUT_GOLD] -= cumulativeCost;
-        return cumulativeOutput;
-    }
-
-    TotalOutput ProjectionLadder::getOutputAfter(int turn) const
-    {
-        bool includeAll = false;
-        int currentTurn = 0;
-        TotalOutput cumulativeOutput;
-        for (size_t i = 0, count = entries.size(); i < count; ++i)
-        {   
-            currentTurn += entries[i].turns;
-            if (entries[i].turns > turn)
-            {
-                if (includeAll)
-                {
-                    cumulativeOutput += entries[i].turns * entries[i].output;
-                }
-                else
-                {
-                    cumulativeOutput += (currentTurn - turn) * entries[i].output;
-                    includeAll = true;
-                }
-            }            
-        }
-        return cumulativeOutput;
-    }
-
     ProjectionBuildingEvent::ProjectionBuildingEvent(const CityDataPtr& pCityData, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
         : pCity_(pCityData->getCity()), pCityData_(pCityData), pBuildingInfo_(pBuildingInfo)
     {
@@ -97,18 +31,18 @@ namespace AltAI
     
     void ProjectionBuildingEvent::debug(std::ostream& os) const
     {
-        os << "\nProjectionBuildingEvent event: " << " reqd prod = " << requiredProduction_ << " accumualted turns = " << accumulatedTurns_;
+        os << "\nProjectionBuildingEvent event: " << " reqd prod = " << requiredProduction_ << " accumulated turns = " << accumulatedTurns_;
     }
 
     int ProjectionBuildingEvent::getTurnsToEvent() const
     {
-        TotalOutput thisOutput = pCityData_->getOutput();
+        int production = pCityData_->getCurrentProduction();
         int turnsToComplete = MAX_INT;
 
-        if (thisOutput[OUTPUT_PRODUCTION] > 0)
+        if (production > 0)
         {
-            const int productionRate = requiredProduction_ / thisOutput[OUTPUT_PRODUCTION];
-            const int productionDelta = requiredProduction_ % thisOutput[OUTPUT_PRODUCTION];
+            const int productionRate = requiredProduction_ / production;
+            const int productionDelta = requiredProduction_ % production;
                 
             turnsToComplete = productionRate + (productionDelta ? 1 : 0);
         }
@@ -132,9 +66,98 @@ namespace AltAI
         {
             accumulatedTurns_ += nTurns;
             if (turnsToComplete < MAX_INT)
-            {
-                requiredProduction_ -= nTurns * pCityData_->getOutput()[OUTPUT_PRODUCTION];
+            {   
+                int production = pCityData_->getCurrentProduction();
+
+//#ifdef ALTAI_DEBUG                
+//                std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData_->getOwner()))->getStream();
+//                os << "\nBuilding: " << gGlobals.getBuildingInfo(pBuildingInfo_->getBuildingType()).getType() << " adding production: " << production;
+//
+//                YieldModifier yieldModifier = pCityData_->getModifiersHelper()->getTotalYieldModifier(*pCityData_);
+//                int modifier = pCityData_->getBuildingsHelper()->getProductionModifier(*pCityData_, pBuildingInfo_->getBuildingType());
+//                os << " modifier = " << yieldModifier[OUTPUT_PRODUCTION] + modifier;
+//#endif
+                requiredProduction_ -= nTurns * production;
             }
+            return shared_from_this();
+        }
+    }
+
+    ProjectionUnitEvent::ProjectionUnitEvent(const CityDataPtr& pCityData, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+        : pCity_(pCityData->getCity()), pCityData_(pCityData), pUnitInfo_(pUnitInfo)
+    {
+        isFoodProduction_ = gGlobals.getUnitInfo(pUnitInfo->getUnitType()).isFoodProduction();
+        requiredProduction_ = 100 * pCity_->getProductionNeeded(pUnitInfo_->getUnitType());
+        accumulatedTurns_ = 0;
+    }
+    
+    void ProjectionUnitEvent::debug(std::ostream& os) const
+    {
+        os << "\nProjectionUnitEvent event: " << " reqd prod = " << requiredProduction_ << " accumulated turns = " << accumulatedTurns_;
+    }
+
+    int ProjectionUnitEvent::getTurnsToEvent() const
+    {
+        int production = pCityData_->getCurrentProduction();
+        int turnsToComplete = MAX_INT;
+
+        if (production > 0)
+        {
+            const int productionRate = requiredProduction_ / production;
+            const int productionDelta = requiredProduction_ % production;
+                
+            turnsToComplete = productionRate + (productionDelta ? 1 : 0);
+        }
+
+        return turnsToComplete;
+    }
+
+    IProjectionEventPtr ProjectionUnitEvent::update(int nTurns, ProjectionLadder& ladder)
+    {
+        int turnsToComplete = getTurnsToEvent();
+
+        if (turnsToComplete <= nTurns)
+        {
+            requiredProduction_ = 0;
+            ladder.units.push_back(std::make_pair(turnsToComplete + accumulatedTurns_, pUnitInfo_->getUnitType()));
+            return IProjectionEventPtr();  // we're done
+        }
+        else 
+        {
+            accumulatedTurns_ += nTurns;
+            if (turnsToComplete < MAX_INT)
+            {
+                requiredProduction_ -= nTurns * pCityData_->getCurrentProduction();
+            }
+            return shared_from_this();
+        }
+    }
+
+    ProjectionGlobalBuildingEvent::ProjectionGlobalBuildingEvent(const CityDataPtr& pCityData, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int turnBuilt, const CvCity* pBuiltInCity)
+        : pCityData_(pCityData), pBuildingInfo_(pBuildingInfo), remainingTurns_(turnBuilt), pCity_(pCityData->getCity()), pBuiltInCity_(pBuiltInCity)
+    {
+    }
+
+    void ProjectionGlobalBuildingEvent::debug(std::ostream& os) const
+    {
+        os << "\nProjectionGlobalBuildingEvent event: " << " remaining turns = " << remainingTurns_;
+    }
+
+    int ProjectionGlobalBuildingEvent::getTurnsToEvent() const
+    {
+        return remainingTurns_;
+    }
+
+    IProjectionEventPtr ProjectionGlobalBuildingEvent::update(int nTurns, ProjectionLadder& ladder)
+    {
+        if (remainingTurns_ <= nTurns)
+        {
+            updateGlobalRequestData(pCityData_, pBuiltInCity_, pBuildingInfo_);
+            return IProjectionEventPtr();
+        }
+        else 
+        {
+            remainingTurns_ -= nTurns;
             return shared_from_this();
         }
     }
@@ -178,185 +201,11 @@ namespace AltAI
         return shared_from_this();
     }
 
-    ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns)
-    {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
-#endif
-        CityOptimiser cityOptimiser(pCityData);
-
-        std::vector<OutputTypes> outputTypes = boost::assign::list_of(OUTPUT_PRODUCTION)(OUTPUT_RESEARCH);
-        TotalOutputPriority outputPriorities = makeTotalOutputPriorities(outputTypes);
-        TotalOutputWeights outputWeights = makeOutputW(2, 2, 2, 2, 1, 1);
-
-        ProjectionLadder ladder;
-        TotalOutput lastOutput;
-
-//#ifdef ALTAI_DEBUG
-//        os << "\nProjected output for city: " << narrow(pCityData->getCity()->getName());
-//#endif
-
-        while (nTurns > 0)
-        {
-            cityOptimiser.optimise<MixedWeightedTotalOutputOrderFunctor>(outputPriorities, outputWeights, cityOptimiser.getGrowthType());
-            TotalOutput thisOutput = pCityData->getOutput();
-
-//#ifdef ALTAI_DEBUG
-//            os << "\n final output = " << thisOutput << " ";
-//            pCityData->debugBasicData(os);
-//            cityOptimiser.debug(os, true);
-//#endif
-            int turnsToPopChange = MAX_INT, popChange = 0;
-            boost::tie(popChange, turnsToPopChange) = pCityData->getTurnsToPopChange();
-               
-            ladder.entries.push_back(
-                ProjectionLadder::Entry(pCityData->getPopulation(), turnsToPopChange > nTurns ? nTurns : turnsToPopChange, thisOutput,
-                    pCityData->getMaintenanceHelper()->getMaintenance()));
-            lastOutput = thisOutput;
-
-            if (turnsToPopChange < MAX_INT)
-            {
-                int currentFood = 0, storedFood = 0;
-                boost::tie(currentFood, storedFood) = pCityData->getAccumulatedFood(turnsToPopChange);
-                pCityData->setCurrentFood(currentFood);
-                pCityData->setStoredFood(storedFood);
-                pCityData->changePopulation(popChange);
-//#ifdef ALTAI_DEBUG
-//                os << "\nSetting current food = " << currentFood << ", stored food = " << storedFood << ", pop = " << popChange
-//                   << ", growth threshold = " << pCityData->getGrowthThreshold() << " turn = " << nTurns << " food = " << pCityData->getCurrentFood();
-//#endif
-
-                nTurns -= turnsToPopChange;
-            }
-            else
-            {
-                nTurns = 0;
-            }
-        }
-
-//#ifdef ALTAI_DEBUG
-//        ladder.debug(os);
-//#endif
-        return ladder;
-    }
-
-    ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int nTurns)
-    {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
-#endif
-        CityOptimiser cityOptimiser(pCityData);
-
-        std::vector<OutputTypes> outputTypes = boost::assign::list_of(OUTPUT_PRODUCTION)(OUTPUT_RESEARCH);
-        TotalOutputPriority outputPriorities = makeTotalOutputPriorities(outputTypes);
-        TotalOutputWeights outputWeights = makeOutputW(2, 2, 2, 2, 1, 1);
-
-        ProjectionLadder ladder;
-        TotalOutput lastOutput;
-
-        int requiredProduction = 100 * pCityData->getCity()->getProductionNeeded(pBuildingInfo->getBuildingType());
-        int turnBuilt = MAX_INT;
-//#ifdef ALTAI_DEBUG
-//        os << "\nProjected output for city: " << narrow(pCityData->getCity()->getName()) << " building: "
-//           << gGlobals.getBuildingInfo(pBuildingInfo->getBuildingType()).getType() << " reqd prod = " << requiredProduction;
-//#endif
-        const int totalTurns = nTurns;
-        while (nTurns > 0)
-        {
-            cityOptimiser.optimise<MixedWeightedTotalOutputOrderFunctor>(outputPriorities, outputWeights, cityOptimiser.getGrowthType(), false);
-            TotalOutput thisOutput = pCityData->getOutput();            
-
-//#ifdef ALTAI_DEBUG
-//            os << "\n final output = " << thisOutput << " ";
-//            pCityData->debugBasicData(os);
-//            cityOptimiser.debug(os, true);
-//#endif
-            int turnsToPopChange = MAX_INT, popChange = 0;
-            boost::tie(popChange, turnsToPopChange) = pCityData->getTurnsToPopChange();
-
-            if (requiredProduction > 0)
-            {
-                int turnsToComplete = MAX_INT;
-
-                if (thisOutput[OUTPUT_PRODUCTION] > 0)
-                {
-                    const int productionRate = requiredProduction / thisOutput[OUTPUT_PRODUCTION];
-                    const int productionDelta = requiredProduction % thisOutput[OUTPUT_PRODUCTION];
-                
-                    turnsToComplete = productionRate + (productionDelta ? 1 : 0);
-                }
-
-                if (turnsToComplete <= turnsToPopChange)
-                {
-                    ladder.entries.push_back(
-                        ProjectionLadder::Entry(
-                            pCityData->getPopulation(), turnsToComplete > nTurns ? nTurns : turnsToComplete, thisOutput, pCityData->getMaintenanceHelper()->getMaintenance()));
-                    if (turnsToComplete <= nTurns)
-                    {
-                        ladder.buildings.push_back(std::make_pair(totalTurns - nTurns + turnsToComplete, pBuildingInfo->getBuildingType()));
-                    }
-                    lastOutput = thisOutput;
-
-                    int currentFood = 0, storedFood = 0;
-                    boost::tie(currentFood, storedFood) = pCityData->getAccumulatedFood(turnsToComplete);
-                    pCityData->setCurrentFood(currentFood);
-                    pCityData->setStoredFood(storedFood);
-//#ifdef ALTAI_DEBUG
-//                    os << "\nSetting current food = " << currentFood << ", stored food = " << storedFood
-//                       << ", growth threshold = " << pCityData->getGrowthThreshold() << " turn = " << nTurns << " food = " << pCityData->getCurrentFood();
-//#endif
-
-                    requiredProduction = 0;
-                    pCityData->getBuildingsHelper()->changeNumRealBuildings(pBuildingInfo->getBuildingType());
-                    updateRequestData(*pCityData, pBuildingInfo);
-                    cityOptimiser.optimise<MixedWeightedTotalOutputOrderFunctor>(outputPriorities, outputWeights, cityOptimiser.getGrowthType());
-                    nTurns -= turnsToComplete;
-                    turnBuilt = nTurns;
-                    continue;
-                }
-                else if (turnsToComplete < MAX_INT)
-                {
-                    requiredProduction -= turnsToPopChange * thisOutput[OUTPUT_PRODUCTION];
-                }
-            }
-                
-            ladder.entries.push_back(
-                ProjectionLadder::Entry(
-                    pCityData->getPopulation(), turnsToPopChange > nTurns ? nTurns : turnsToPopChange, thisOutput, pCityData->getMaintenanceHelper()->getMaintenance()));
-            lastOutput = thisOutput;
-
-            if (turnsToPopChange < MAX_INT)
-            {
-                int currentFood = 0, storedFood = 0;
-                boost::tie(currentFood, storedFood) = pCityData->getAccumulatedFood(turnsToPopChange);
-                pCityData->setCurrentFood(currentFood);
-                pCityData->setStoredFood(storedFood);
-                pCityData->changePopulation(popChange);
-//#ifdef ALTAI_DEBUG
-//                os << "\nSetting current food = " << currentFood << ", stored food = " << storedFood << ", pop = " << popChange
-//                   << ", growth threshold = " << pCityData->getGrowthThreshold() << " turn = " << nTurns << " food = " << pCityData->getCurrentFood();
-//#endif
-                
-
-                nTurns -= turnsToPopChange;
-            }
-            else
-            {
-                nTurns = 0;
-            }
-        }
-
-//#ifdef ALTAI_DEBUG
-//        ladder.debug(os);
-//#endif
-        return ladder;
-    }
-
     ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns, std::vector<IProjectionEventPtr>& events)
     {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
-#endif
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
+//#endif
         CityOptimiser cityOptimiser(pCityData);
 
         std::vector<OutputTypes> outputTypes = boost::assign::list_of(OUTPUT_PRODUCTION)(OUTPUT_RESEARCH);
@@ -373,13 +222,15 @@ namespace AltAI
 
             int turnsToFirstEvent = MAX_INT, population = pCityData->getPopulation(), maintenance = pCityData->getMaintenanceHelper()->getMaintenance();
             TotalOutput output = pCityData->getOutput();
+            output[OUTPUT_FOOD] -= pCityData->getLostFood();
+
             std::vector<IProjectionEventPtr> newEvents;
             for (size_t i = 0, count = events.size(); i < count; ++i)
             {
-#ifdef ALTAI_DEBUG
-                os << "\nTurns to first event: " << events[i]->getTurnsToEvent() << " (nTurns = " << nTurns << ")";
-                events[i]->debug(os);
-#endif
+//#ifdef ALTAI_DEBUG
+//                os << "\nTurns to first event: " << events[i]->getTurnsToEvent() << " (nTurns = " << nTurns << ")";
+//                events[i]->debug(os);
+//#endif
                 if (events[i]->getTurnsToEvent() <= turnsToFirstEvent)
                 {
                     turnsToFirstEvent = events[i]->getTurnsToEvent();                   
@@ -391,7 +242,7 @@ namespace AltAI
                 }
             }
 
-            ladder.entries.push_back(ProjectionLadder::Entry(population, std::min<int>(nTurns, turnsToFirstEvent), output, maintenance));
+            ladder.entries.push_back(ProjectionLadder::Entry(population, std::min<int>(nTurns, turnsToFirstEvent), output, maintenance, pCityData->getGPP()));
 
             if (turnsToFirstEvent <= nTurns)
             {

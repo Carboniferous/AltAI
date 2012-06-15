@@ -236,8 +236,15 @@ namespace AltAI
         }
 
         // update projection
-        const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
-        currentOutputProjection_ = getProjectedOutput(*player, pCityData_->clone(), 50);
+        {
+            const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
+
+            CityDataPtr pCityData = pCityData_->clone();
+            std::vector<IProjectionEventPtr> events;
+            events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pCityData)));
+
+            currentOutputProjection_ = getProjectedOutput(*player, pCityData, 50, events);
+        }
 
 #ifdef ALTAI_DEBUG
         {
@@ -350,27 +357,18 @@ namespace AltAI
 
         if (constructItem_.buildingType != NO_BUILDING)
         {
-            ProjectionLadder buildingLadder = getProjectedOutput(*player, pCityData_->clone(), player->getAnalysis()->getBuildingInfo(constructItem_.buildingType), 50);
+            /*CityDataPtr pCityData = pCityData_->clone();
+            std::vector<IProjectionEventPtr> events;
+            pCityData->pushBuilding(constructItem_.buildingType);
+            events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCityData, player->getAnalysis()->getBuildingInfo(constructItem_.buildingType))));
+            events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pCityData)));
 
+            ProjectionLadder buildingLadder = getProjectedOutput(*player, pCityData, 50, events);
 #ifdef ALTAI_DEBUG
-            os << "\n" << narrow(pCity_->getName()) << " projection: ";
+            os << "\n" << narrow(pCity_->getName()) << " projection2: ";
             buildingLadder.debug(os);
             os << ", delta = " << buildingLadder.getOutput() - currentOutputProjection_.getOutput();
-#endif
-            {
-                CityDataPtr pCityData = pCityData_->clone();
-                std::vector<IProjectionEventPtr> events;
-                events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCityData, player->getAnalysis()->getBuildingInfo(constructItem_.buildingType))));
-                events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pCityData)));
-
-                buildingLadder = getProjectedOutput(*player, pCityData, 50, events);
-#ifdef ALTAI_DEBUG
-                os << "\n" << narrow(pCity_->getName()) << " projection2: ";
-                buildingLadder.debug(os);
-                os << ", delta = " << buildingLadder.getOutput() - currentOutputProjection_.getOutput();
-#endif
-            }
-
+#endif*/
             return boost::make_tuple(NO_UNIT, constructItem_.buildingType, NO_PROCESS, NO_PROJECT);
         }
         else if (constructItem_.unitType != NO_UNIT)

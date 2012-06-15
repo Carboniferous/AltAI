@@ -27,4 +27,5 @@ namespace AltAI
     std::vector<TechTypes> getOrTechs(const boost::shared_ptr<TechInfo>& pTechInfo);
 
     std::vector<BuildingTypes> getPossibleBuildings(const boost::shared_ptr<TechInfo>& pTechInfo);
+    std::vector<BuildingTypes> getObsoletedBuildings(const boost::shared_ptr<TechInfo>& pTechInfo);
 }

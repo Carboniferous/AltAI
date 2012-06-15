@@ -282,6 +282,12 @@ namespace AltAI
 #endif
         }
 
+        CityDataPtr pSimulationCityData(pCityData->clone());
+        std::vector<IProjectionEventPtr> events;
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+
+        ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
+
         /*std::vector<XYCoords> plotCoords;
         for (PlotDataListConstIter plotIter2(pCityData->getPlotOutputs().begin()); plotIter2 != pCityData->getPlotOutputs().end(); ++plotIter2)
         {
@@ -324,10 +330,20 @@ namespace AltAI
                         SimulationOutput simOutput = simulation.simulateAsIs(nTurns);
                         plotResults.push_back(boost::make_tuple(improvementsIter->second[j].first, improvementsIter->second[j].second, simOutput));
 
-//#ifdef ALTAI_DEBUG
-//                        CityLog::getLog(pCity_)->getStream() << "\nPlot: " << plotIter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
-//                        simOutput.debugResults(CityLog::getLog(pCity_)->getStream());
-//#endif
+                        pSimulationCityData = CityDataPtr(pCityData->clone());
+                        simulatedPlotIter = pSimulationCityData->findPlot(plotIter->coords);
+                        updateCityOutputData(*pSimulationCityData, *simulatedPlotIter, improvementsIter->second[j].first, plotIter->routeType, improvementsIter->second[j].second);
+                        events.clear();
+                        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+
+                        ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
+#ifdef ALTAI_DEBUG
+                        std::ostream& os = CityLog::getLog(pCity_)->getStream();
+                        os << "\nPlot: " << plotIter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
+                        base.debug(os);
+                        ladder.debug(os);
+                        os << "\nLadder improvement delta = " << ladder.getOutput() - base.getOutput();
+#endif
                     }
                     outputs.push_back(std::make_pair(plotIter->coords, plotResults));
                 }
@@ -374,6 +390,54 @@ namespace AltAI
 #endif
 
         return outputs;
+    }
+
+    PlotImprovementsProjections CitySimulator::getImprovementProjections(const PlotsAndImprovements& improvements, const ConstCityDataPtr& pCityData, int nTurns, bool ignoreExisting)
+    {
+        PlotImprovementsProjections results;
+
+        CityDataPtr pSimulationCityData(pCityData->clone());
+        std::vector<IProjectionEventPtr> events;
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+
+        ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
+
+        PlotImprovementProjections baseResult;
+        baseResult.push_back(boost::make_tuple(NO_FEATURE, NO_IMPROVEMENT, base));
+        results.push_back(std::make_pair(XYCoords(pCityData->getCity()->getX(), pCityData->getCity()->getY()), baseResult));
+
+        for (PlotDataListConstIter plotIter(pCityData->getPlotOutputs().begin()); plotIter != pCityData->getPlotOutputs().end(); ++plotIter)
+        {
+            if (plotIter->controlled && (!ignoreExisting || plotIter->improvementType == NO_IMPROVEMENT))
+            {
+                PlotsAndImprovements::const_iterator improvementsIter = std::find_if(improvements.begin(), improvements.end(), PlotFinder(plotIter->coords));
+                if (improvementsIter != improvements.end())
+                {
+                    PlotImprovementProjections plotResults;
+                    for (size_t j = 0, count = improvementsIter->second.size(); j < count; ++j)
+                    {
+                        pSimulationCityData = CityDataPtr(pCityData->clone());
+                        PlotDataListIter simulatedPlotIter = pSimulationCityData->findPlot(plotIter->coords);
+                        updateCityOutputData(*pSimulationCityData, *simulatedPlotIter, improvementsIter->second[j].first, plotIter->routeType, improvementsIter->second[j].second);
+
+                        events.clear();
+                        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+
+                        ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
+                        plotResults.push_back(boost::make_tuple(improvementsIter->second[j].first, improvementsIter->second[j].second, ladder));
+//#ifdef ALTAI_DEBUG
+//                        std::ostream& os = CityLog::getLog(pCity_)->getStream();
+//                        os << "\nPlot: " << plotIter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
+//                        base.debug(os);
+//                        ladder.debug(os);
+//                        os << "\nLadder improvement delta = " << ladder.getOutput() - base.getOutput();
+//#endif
+                    }
+                    results.push_back(std::make_pair(plotIter->coords, plotResults));
+                }
+            }
+        }
+        return results;
     }
 
     CitySimulation::CitySimulation(const CvCity* pCity, const CityDataPtr& pCityData, const ConstructItem& constructItem)
@@ -519,7 +583,7 @@ namespace AltAI
 
         pLog_->logBuilding(constructItem_.buildingType);
 
-        pCityData_->setBuilding(constructItem_.buildingType);
+        pCityData_->pushBuilding(constructItem_.buildingType);
         optimisePlots();
 
         while (!buildingBuilt_ && turn_ < nTurns)
@@ -587,7 +651,7 @@ namespace AltAI
 
         pLog_->logBuilding(constructItem_.buildingType);
 
-        pCityData_->setBuilding(constructItem_.buildingType);
+        pCityData_->pushBuilding(constructItem_.buildingType);
 
         optimisePlots();
         //pCityOptimiser_->optimise(OUTPUT_PRODUCTION);

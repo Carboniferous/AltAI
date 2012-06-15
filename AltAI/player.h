@@ -22,6 +22,7 @@ namespace AltAI
     class IPlotEvent;
     class City;
     class SettlerManager;
+    struct HurryData;
 
     class Player
     {
@@ -96,6 +97,7 @@ namespace AltAI
         int getTechResearchDepth(TechTypes techType) const;
         ResearchTech getCurrentResearchTech() const;
         void notifyFirstToTechDiscovered(TeamTypes teamType, TechTypes techType);
+        void logHurry(const CvCity* pCity, const HurryData& hurryData) const;
 
         void logStuckSelectionGroup(CvUnit* pHeadUnit) const;
         void logInvalidUnitBuild(const CvUnit* pUnit, BuildTypes buildType) const;

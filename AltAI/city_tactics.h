@@ -35,10 +35,17 @@ namespace AltAI
         bool operator < (const EconomicBuildingValue& other) const;
     };
 
-    struct TacticSelectionData
+    struct EconomicWonderValue
     {
+        std::vector<std::pair<IDInfo, EconomicBuildingValue> > buildCityValues;
+    };
+
+    struct TacticSelectionData
+    {        
         std::set<CultureBuildingValue> smallCultureBuildings;
         std::set<EconomicBuildingValue> economicBuildings;
+        std::map<IDInfo, std::vector<BuildingTypes> > buildingsCityCanAssistWith;
+        std::map<BuildingTypes, EconomicWonderValue> economicWonders;
     };
 
     ConstructItem getConstructItem(const PlayerTactics& playerTactics, const City& city);

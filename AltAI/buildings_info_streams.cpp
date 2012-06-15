@@ -350,6 +350,10 @@ namespace AltAI
         {
             os << " is gov. centre ";
         }
+        if (node.freeBuildingType != NO_BUILDING)
+        {
+            os << " gives free building: " << gGlobals.getBuildingInfo(node.freeBuildingType).getType();
+        }
         return os;
     }
 

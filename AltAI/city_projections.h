@@ -1,15 +1,17 @@
 #pragma once
 
 #include "./utils.h"
+#include "./city_projections_ladder.h"
 
 namespace AltAI
 {
+    class Player;
     class CityData;
     typedef boost::shared_ptr<CityData> CityDataPtr;
     class BuildingInfo;
+    class UnitInfo;
     struct ProjectionLadder;
     struct IProjectionEvent;
-
     typedef boost::shared_ptr<IProjectionEvent> IProjectionEventPtr;
 
     struct IProjectionEvent
@@ -50,28 +52,39 @@ namespace AltAI
         int accumulatedTurns_;
     };
 
-    struct ProjectionLadder
+    class ProjectionUnitEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionUnitEvent>
     {
-        std::vector<std::pair<int, BuildingTypes> > buildings;
-        struct Entry
-        {
-            Entry(int pop_, int turns_, TotalOutput output_, int cost_) : pop(pop_), turns(turns_), output(output_), cost(cost_)
-            {
-            }
-            int pop, turns, cost;
-            TotalOutput output;
-        };
-        std::vector<Entry> entries;
+    public:
+        ProjectionUnitEvent(const CityDataPtr& pCityData, const boost::shared_ptr<UnitInfo>& pUnitInfo);
 
-        TotalOutput getOutput() const;
-        TotalOutput getOutputAfter(int turn) const;
-        void debug(std::ostream& os) const;
+        virtual void debug(std::ostream& os) const;
+        virtual int getTurnsToEvent() const;
+        virtual IProjectionEventPtr update(int nTurns, ProjectionLadder& ladder);
+
+    private:
+        const CvCity* pCity_;
+        CityDataPtr pCityData_;
+        boost::shared_ptr<UnitInfo> pUnitInfo_;
+        bool isFoodProduction_;
+        int requiredProduction_;
+        int accumulatedTurns_;
     };
 
-    class BuildingInfo;
-    class Player;
+    class ProjectionGlobalBuildingEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionGlobalBuildingEvent>
+    {
+    public:
+        ProjectionGlobalBuildingEvent(const CityDataPtr& pCityData, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int turnBuilt, const CvCity* pBuiltInCity);
 
-    ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int nTurns);
-    ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns);
+        virtual void debug(std::ostream& os) const;
+        virtual int getTurnsToEvent() const;
+        virtual IProjectionEventPtr update(int nTurns, ProjectionLadder& ladder);
+
+    private:        
+        CityDataPtr pCityData_;
+        boost::shared_ptr<BuildingInfo> pBuildingInfo_;
+        int remainingTurns_;
+        const CvCity* pCity_, *pBuiltInCity_;
+    };
+
     ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns, std::vector<IProjectionEventPtr>& events);
 }

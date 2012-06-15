@@ -89,14 +89,15 @@ namespace AltAI
         // current food, stored food
         std::pair<int, int> getAccumulatedFood(int nTurns);
 
-        void setBuilding(BuildingTypes buildingType);
+        void pushBuilding(BuildingTypes buildingType);
+        void pushUnit(UnitTypes unitType);
         int getNumBuildings(BuildingTypes buildingType) const;
         void hurry(const HurryData& hurryData);
         std::pair<bool, HurryData> canHurry(HurryTypes hurryType) const;
 
-        const std::stack<BuildingTypes>& getQueuedBuildings() const
+        const std::stack<std::pair<BuildQueueTypes, int> >& getBuildQueue() const
         {
-            return queuedBuildings_;
+            return buildQueue_;
         }
 
         void changePopulation(int change);
@@ -162,10 +163,7 @@ namespace AltAI
             return goldenAgeTurns_;
         }
 
-        int getCurrentProduction() const
-        {
-            return currentProduction_;
-        }
+        int getCurrentProduction() const;
 
         int getRequiredProduction() const
         {
@@ -389,9 +387,8 @@ namespace AltAI
         void init_(const CvCity* pCity);
         void initPlot_(const CvPlot* pPlot, PlotYield plotYield, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType);
 
-        int getBuildingProductionModifier_() const;
-        void completeBuilding_();
-        int setBuilding_();
+        int getCurrentProduction_(TotalOutput currentOutput) const;
+        int getCurrentProductionModifier_() const;
 
         void calcOutputsFromPlotData_(const CvCity* pCity);
         void calcOutputsFromPlannedImprovements_(const std::vector<CityImprovementManager::PlotImprovementData>& improvements);
@@ -404,14 +401,14 @@ namespace AltAI
 
         int cityPopulation_, workingPopulation_, happyCap_;
 
-        int currentFood_, storedFood_, currentProduction_;
+        int currentFood_, storedFood_, accumulatedProduction_;
         int growthThreshold_, requiredProduction_;
         int foodKeptPercent_;
         int commerceYieldModifier_;
 
         SpecialConditions specialConditions_;
 
-        std::stack<BuildingTypes> queuedBuildings_;
+        std::stack<std::pair<BuildQueueTypes, int> > buildQueue_;
 
         const CvCity* pCity_;
         PlayerTypes owner_;

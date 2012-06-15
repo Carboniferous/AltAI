@@ -26,7 +26,10 @@ namespace AltAI
         }
 
         CityDataPtr pSimulationCityData(new CityData(pCityData->getCity(), plotData_, true));
-        projection_ = getProjectedOutput(player, pSimulationCityData, 50);
+        std::vector<IProjectionEventPtr> events;
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+
+        projection_ = getProjectedOutput(player, pSimulationCityData, 50, events);
 
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {

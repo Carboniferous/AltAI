@@ -17,7 +17,10 @@ namespace AltAI
 
         int getNumBuildings(BuildingTypes buildingType) const;
         int getNumRealBuildings(BuildingTypes buildingType) const;
+        int getNumActiveBuildings(BuildingTypes buildingType) const;
         int getNumFreeBuildings(BuildingTypes buildingType) const;
+
+        int getBuildingOriginalTime(BuildingTypes buildingType) const;
 
         PlayerTypes getBuildingOriginalOwner(BuildingTypes buildingType) const;
         void setBuildingOriginalOwner(BuildingTypes buildingType);
@@ -50,8 +53,10 @@ namespace AltAI
         const CvCity* pCity_;
         PlayerTypes owner_;
 
-        std::vector<int> buildings_;
+        std::vector<int> buildings_, realBuildings_, activeBuildings_;
         std::vector<int> freeBuildings_;
+
+        std::vector<int> originalBuildTimes_;
 
         std::vector<PlayerTypes> buildingOriginalOwners_;
 

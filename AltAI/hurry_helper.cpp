@@ -74,7 +74,7 @@ namespace AltAI
         HurryData hurryData(hurryType);
         bool costsPopulation = productionPerPopulation_[hurryType] != 0, costsGold = goldPerProduction_[hurryType] != 0;
 
-        if ((!costsPopulation && !costsGold) || data.getQueuedBuildings().empty())
+        if ((!costsPopulation && !costsGold) || data.getBuildQueue().empty())
         {
             return std::make_pair(false, hurryData);
         }
@@ -90,15 +90,29 @@ namespace AltAI
     HurryData HurryHelper::getHurryCosts_(const CityData& data, HurryTypes hurryType) const
     {
         bool costsPopulation = productionPerPopulation_[hurryType] != 0, costsGold = goldPerProduction_[hurryType] != 0;
-        BuildingTypes buildingType = data.getQueuedBuildings().top();
+        std::pair<BuildQueueTypes, int> buildItem = data.getBuildQueue().top();
 
-        int hurryCostModifier = getHurryCostModifier_(gGlobals.getBuildingInfo(buildingType).getHurryCostModifier(), data.getCurrentProduction() == 0);
+        int hurryCostModifierModifier = 0;
+        int productionModifier = 0;
+        if (buildItem.first == BuildingItem)
+        {
+            hurryCostModifierModifier = gGlobals.getBuildingInfo((BuildingTypes)buildItem.second).getHurryCostModifier();
+            productionModifier = data.getModifiersHelper()->getBuildingProductionModifier(data, (BuildingTypes)buildItem.second);
+        }
+        else if (buildItem.first == UnitItem)
+        {
+            hurryCostModifierModifier = gGlobals.getUnitInfo((UnitTypes)buildItem.second).getHurryCostModifier();
+            productionModifier = data.getModifiersHelper()-> getUnitProductionModifier((UnitTypes)buildItem.second);
+        }
+
+        int hurryCostModifier = getHurryCostModifier_(hurryCostModifierModifier, data.getCurrentProduction() == 0);
 
         int production = (((data.getRequiredProduction() - data.getCurrentProduction()) / 100) * hurryCostModifier + 99) / 100;
 
         if (costsPopulation) // this is only included for whipping, not rush-buying
         {
-	        int extraProduction = (production * data.getModifiersHelper()->getBuildingProductionModifier(data, buildingType)) / 100;
+            int extraProduction = (production * productionModifier) / 100;
+
 	        if (extraProduction > 0)
     	    {
 	    	    production = (production * production + (extraProduction - 1)) / extraProduction;
@@ -114,7 +128,7 @@ namespace AltAI
 	        hurryData.hurryPopulation = std::max<int>(1, 1 + hurryData.hurryPopulation);
 
             hurryData.extraProduction = 100 * (data.getRequiredProduction() / 100 - 
-                (hurryData.hurryPopulation * productionPerPopulation_[hurryType] * data.getModifiersHelper()->getBuildingProductionModifier(data, buildingType) / 100) / std::max<int>(1, hurryCostModifier));
+                (hurryData.hurryPopulation * productionPerPopulation_[hurryType] * productionModifier / 100) / std::max<int>(1, hurryCostModifier));
         }
         
         if (costsGold)
@@ -154,6 +168,10 @@ namespace AltAI
             if (hurryData.hurryGold > 0)
             {
                 os << "Gold cost = " << hurryData.hurryGold << " ";
+            }
+            if (hurryData.extraProduction != 0)
+            {
+                os << "Overflow production = " << hurryData.extraProduction << " ";
             }
         }
         else

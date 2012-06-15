@@ -532,7 +532,7 @@ namespace AltAI
 
         void operator() (const BuildingInfo::BaseNode& node)
         {
-            pTactic_ = ICityBuildingTacticsPtr(new CityBuildingTactic(buildingType_));
+            pTactic_ = ICityBuildingTacticsPtr(new CityBuildingTactic(buildingType_, city_.getCvCity()->getIDInfo()));
 
             MakeBuildingTacticsDependenciesVisitor dependentTacticsVisitor(player_, city_);
             for (size_t i = 0, count = node.buildConditions.size(); i < count; ++i)
@@ -618,7 +618,15 @@ namespace AltAI
         {
             if (node.prereqReligion != NO_RELIGION && !city_.getCvCity()->isHasReligion(node.prereqReligion))
             {
-                pTactic_->addDependency(IDependentTacticPtr(new ReligiousDependency(node.prereqReligion)));
+                for (int i = 0, count = gGlobals.getNumUnitClassInfos(); i < count; ++i)
+                {
+                    UnitTypes unitType = getPlayerVersion(player_.getPlayerID(), (UnitClassTypes)i);
+                    if (unitType != NO_UNIT && gGlobals.getUnitInfo(unitType).getReligionSpreads(node.prereqReligion) > 0)
+                    {
+                        pTactic_->addDependency(IDependentTacticPtr(new ReligiousDependency(node.prereqReligion, unitType)));
+                        break;
+                    }
+                }                
             }
         }
 

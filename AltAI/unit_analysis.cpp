@@ -736,158 +736,163 @@ namespace AltAI
         }
 
         boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis = player_.getAnalysis();
-        for (int i = 0, count = gGlobals.getNumUnitInfos(); i < count; ++i)
+        for (int i = 0, count = gGlobals.getNumUnitClassInfos(); i < count; ++i)
         {
-            boost::shared_ptr<UnitInfo> pUnitInfo = pPlayerAnalysis->getUnitInfo((UnitTypes)i);
-            if (pUnitInfo)
-            {
-                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo((UnitTypes)i);
+            UnitTypes unitType = getPlayerVersion(player_.getPlayerID(), (UnitClassTypes)i);
 
-                if (unitInfo.getUnitCombatType() == NO_UNITCOMBAT)
+            if (unitType != NO_UNIT)
+            {
+                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+                if (unitInfo.getProductionCost() < 0 || unitInfo.getUnitCombatType() == NO_UNITCOMBAT)
                 {
                     continue;
                 }
+                
+                boost::shared_ptr<UnitInfo> pUnitInfo = pPlayerAnalysis->getUnitInfo(unitType);
 
-                Promotions freePromotions = getFreePromotions(player_.getAnalysis()->getUnitInfo((UnitTypes)i));
-
-                for (int j = 0; j <= maxPromotionSearchDepth_; ++j)
+                if (pUnitInfo)
                 {
-                    RemainingLevelsAndPromotions requiredPromotions;
+                    Promotions freePromotions = getFreePromotions(pUnitInfo);
 
-                    int baseCityAttack = unitInfo.getCityAttackModifier();
-                    int baseCityDefence = unitInfo.getCityDefenseModifier();
-
-                    int bestCityAttack = 0, additionalCityAttack = 0;
-
-                    boost::tie(bestCityAttack, requiredPromotions) = calculateBestPromotions_(cityAttackPromotions_, unitInfo.getCityAttackModifier(), 
-                        pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCityAttackPercent), j);
-
-					// still have more promotions available
-					if (requiredPromotions.first > 0)
-					{
-						boost::tie(additionalCityAttack, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
-
-						if (requiredPromotions.first > 0)
-						{
-							boost::tie(additionalCityAttack, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-								pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-						}
-					}
-
-                    if (bestCityAttack > 0)
+                    for (int j = 0; j <= maxPromotionSearchDepth_; ++j)
                     {
-                        combinePromotions(requiredPromotions.second, freePromotions);
-						cityAttackUnits_[j].insert(std::make_pair(bestCityAttack, std::make_pair((UnitTypes)i, requiredPromotions)));
-                    }
+                        RemainingLevelsAndPromotions requiredPromotions;
 
-                    int bestCityDefence = 0, additionalCityDefence = 0;
-                    
-                    boost::tie(bestCityDefence, requiredPromotions) = calculateBestPromotions_(cityDefencePromotions_, unitInfo.getCityDefenseModifier(),
-                        pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCityDefensePercent), j);
+                        int baseCityAttack = unitInfo.getCityAttackModifier();
+                        int baseCityDefence = unitInfo.getCityDefenseModifier();
 
-					// still have more promotions available
-					if (requiredPromotions.first > 0)
-					{
-						boost::tie(additionalCityDefence, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+                        int bestCityAttack = 0, additionalCityAttack = 0;
 
-						if (requiredPromotions.first > 0)
-						{
-							boost::tie(additionalCityDefence, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-								pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-						}
-					}
+                        boost::tie(bestCityAttack, requiredPromotions) = calculateBestPromotions_(cityAttackPromotions_, unitInfo.getCityAttackModifier(), 
+                            pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCityAttackPercent), j);
 
-                    if (bestCityDefence > 0)
-                    {
-                        combinePromotions(requiredPromotions.second, freePromotions);
-						cityDefenceUnits_[j].insert(std::make_pair(bestCityDefence, std::make_pair((UnitTypes)i, requiredPromotions)));
-                    }
-
-                    int bestCombatPercent = 0, additionalCombat = 0;
-                    
-                    boost::tie(bestCombatPercent, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, pUnitInfo,
-                        PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), j);
-
-					// still have more promotions available
-					if (requiredPromotions.first > 0)
-					{
-						boost::tie(additionalCombat, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-							pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-					}
-
-                    if (bestCombatPercent > 0)
-                    {
-                        combinePromotions(requiredPromotions.second, freePromotions);
-						combatUnits_[j].insert(std::make_pair(bestCombatPercent, std::make_pair((UnitTypes)i, requiredPromotions)));
-                    }
-
-                    int bestFirstStrikes = 0, additionalFSCombat = 0;
-                    
-                    boost::tie(bestFirstStrikes, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(),
-                        pUnitInfo, FirstStrikesPromotionValueFunctor(), j);
-
-					if (requiredPromotions.first > 0)
-					{
-						boost::tie(additionalFSCombat, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
-					}
-
-                    if (bestFirstStrikes > 0)
-                    {
-                        combinePromotions(requiredPromotions.second, freePromotions);
-						firstStrikeUnits_[j].insert(std::make_pair(bestFirstStrikes, std::make_pair((UnitTypes)i, requiredPromotions)));
-                    }
-
-                    for (std::map<UnitCombatTypes, PromotionsMap>::const_iterator ci(unitCounterPromotionsMap_.begin()), ciEnd(unitCounterPromotionsMap_.end()); ci != ciEnd; ++ci)
-                    {
-                        int baseCounter = unitInfo.getUnitCombatModifier(ci->first);
-                        int bestCounterValue = 0, extraValue;
-                        
-                        boost::tie(bestCounterValue, requiredPromotions) = calculateBestPromotions_(ci->second, baseCounter, pUnitInfo,
-                            UnitCombatPromotionValueFunctor(&CvPromotionInfo::getUnitCombatModifierPercent, ci->first), j);
-
-                        // still have more promotions available
+					    // still have more promotions available
 					    if (requiredPromotions.first > 0)
 					    {
-						    boost::tie(extraValue, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+						    boost::tie(additionalCityAttack, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
 							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
 
 						    if (requiredPromotions.first > 0)
 						    {
-							    boost::tie(extraValue, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+							    boost::tie(additionalCityAttack, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
 								    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
 						    }
 					    }
 
-                        if (bestCounterValue > 0)
+                        if (bestCityAttack > 0)
                         {
                             combinePromotions(requiredPromotions.second, freePromotions);
-                            unitCounterUnits_[ci->first][j].insert(std::make_pair(bestCounterValue, std::make_pair((UnitTypes)i, requiredPromotions)));
+						    cityAttackUnits_[j].insert(std::make_pair(bestCityAttack, std::make_pair(unitType, requiredPromotions)));
                         }
-                    }
 
-                    int mostMoves = 0, extras = 0;
-                    boost::tie(mostMoves, requiredPromotions) = calculateBestPromotions_(movementPromotions_, unitInfo.getMoves(), pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getMovesChange), j);
+                        int bestCityDefence = 0, additionalCityDefence = 0;
+                    
+                        boost::tie(bestCityDefence, requiredPromotions) = calculateBestPromotions_(cityDefencePromotions_, unitInfo.getCityDefenseModifier(),
+                            pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCityDefensePercent), j);
 
-                    // still have more promotions available
-					if (requiredPromotions.first > 0)
-					{
-						boost::tie(extras, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+					    // still have more promotions available
+					    if (requiredPromotions.first > 0)
+					    {
+						    boost::tie(additionalCityDefence, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
 
-						if (requiredPromotions.first > 0)
-						{
-							boost::tie(extras, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-								pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-						}
-					}
+						    if (requiredPromotions.first > 0)
+						    {
+							    boost::tie(additionalCityDefence, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+								    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+						    }
+					    }
 
-                    if (mostMoves > 1)
-                    {
-                        combinePromotions(requiredPromotions.second, freePromotions);
-                        fastUnits_[j].insert(std::make_pair(mostMoves, std::make_pair((UnitTypes)i, requiredPromotions)));
+                        if (bestCityDefence > 0)
+                        {
+                            combinePromotions(requiredPromotions.second, freePromotions);
+						    cityDefenceUnits_[j].insert(std::make_pair(bestCityDefence, std::make_pair(unitType, requiredPromotions)));
+                        }
+
+                        int bestCombatPercent = 0, additionalCombat = 0;
+                    
+                        boost::tie(bestCombatPercent, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, pUnitInfo,
+                            PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), j);
+
+					    // still have more promotions available
+					    if (requiredPromotions.first > 0)
+					    {
+						    boost::tie(additionalCombat, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+							    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+					    }
+
+                        if (bestCombatPercent > 0)
+                        {
+                            combinePromotions(requiredPromotions.second, freePromotions);
+						    combatUnits_[j].insert(std::make_pair(bestCombatPercent, std::make_pair(unitType, requiredPromotions)));
+                        }
+
+                        int bestFirstStrikes = 0, additionalFSCombat = 0;
+                    
+                        boost::tie(bestFirstStrikes, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(),
+                            pUnitInfo, FirstStrikesPromotionValueFunctor(), j);
+
+					    if (requiredPromotions.first > 0)
+					    {
+						    boost::tie(additionalFSCombat, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+					    }
+
+                        if (bestFirstStrikes > 0)
+                        {
+                            combinePromotions(requiredPromotions.second, freePromotions);
+						    firstStrikeUnits_[j].insert(std::make_pair(bestFirstStrikes, std::make_pair(unitType, requiredPromotions)));
+                        }
+
+                        for (std::map<UnitCombatTypes, PromotionsMap>::const_iterator ci(unitCounterPromotionsMap_.begin()), ciEnd(unitCounterPromotionsMap_.end()); ci != ciEnd; ++ci)
+                        {
+                            int baseCounter = unitInfo.getUnitCombatModifier(ci->first);
+                            int bestCounterValue = 0, extraValue;
+                        
+                            boost::tie(bestCounterValue, requiredPromotions) = calculateBestPromotions_(ci->second, baseCounter, pUnitInfo,
+                                UnitCombatPromotionValueFunctor(&CvPromotionInfo::getUnitCombatModifierPercent, ci->first), j);
+
+                            // still have more promotions available
+					        if (requiredPromotions.first > 0)
+					        {
+						        boost::tie(extraValue, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+							        pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+
+						        if (requiredPromotions.first > 0)
+						        {
+							        boost::tie(extraValue, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+								        pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+						        }
+					        }
+
+                            if (bestCounterValue > 0)
+                            {
+                                combinePromotions(requiredPromotions.second, freePromotions);
+                                unitCounterUnits_[ci->first][j].insert(std::make_pair(bestCounterValue, std::make_pair(unitType, requiredPromotions)));
+                            }
+                        }
+
+                        int mostMoves = 0, extras = 0;
+                        boost::tie(mostMoves, requiredPromotions) = calculateBestPromotions_(movementPromotions_, unitInfo.getMoves(), pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getMovesChange), j);
+
+                        // still have more promotions available
+					    if (requiredPromotions.first > 0)
+					    {
+						    boost::tie(extras, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+
+						    if (requiredPromotions.first > 0)
+						    {
+							    boost::tie(extras, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+								    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+						    }
+					    }
+
+                        if (mostMoves > 1)
+                        {
+                            combinePromotions(requiredPromotions.second, freePromotions);
+                            fastUnits_[j].insert(std::make_pair(mostMoves, std::make_pair(unitType, requiredPromotions)));
+                        }
                     }
                 }
             }

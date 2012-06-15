@@ -497,6 +497,12 @@
 				RelativePath=".\city_projections.h">
 			</File>
 			<File
+				RelativePath=".\city_projections_ladder.cpp">
+			</File>
+			<File
+				RelativePath=".\city_projections_ladder.h">
+			</File>
+			<File
 				RelativePath=".\city_simulator.cpp">
 			</File>
 			<File

@@ -19,6 +19,7 @@ namespace AltAI
         virtual void apply(const CityDataPtr&) = 0;
         virtual void remove(const CityDataPtr&) = 0;
         virtual bool required(const CvCity*) const = 0;
+        virtual std::pair<BuildQueueTypes, int> getBuildItem() const = 0;
 
         virtual void debug(std::ostream&) const = 0;
     };
@@ -54,8 +55,10 @@ namespace AltAI
     public:
         virtual ~ICityBuildingTactics() = 0 {}
 
+        virtual IDInfo getCity() const = 0;
         virtual void addTactic(const ICityBuildingTacticPtr&) = 0;
         virtual void addDependency(const IDependentTacticPtr&) = 0;
+        virtual std::vector<IDependentTacticPtr> getDependencies() const = 0;
         virtual void update(const Player&, const CityDataPtr&) = 0;
         virtual void updateDependencies(const Player&, const CvCity*) = 0;
         virtual void apply(TacticSelectionData&) = 0;
@@ -74,6 +77,8 @@ namespace AltAI
         virtual void update(const Player&) = 0;
         virtual void updateDependencies(const Player&) = 0;
         virtual void addCityTactic(IDInfo, const ICityBuildingTacticsPtr&) = 0;
+        virtual std::list<ICityBuildingTacticsPtr> getCityTactics(IDInfo) const = 0;
+        virtual void apply(TacticSelectionData&) = 0;
         virtual void removeCityTactics(IDInfo) = 0;
         virtual bool empty() const = 0;
 

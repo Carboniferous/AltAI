@@ -343,7 +343,7 @@ namespace AltAI
     class TechBuildingsVisitor : public boost::static_visitor<std::vector<BuildingTypes> >
     {
     public:
-        TechBuildingsVisitor()
+        explicit TechBuildingsVisitor(bool obsoletes) : obsoletes_(obsoletes)
         {
         }
 
@@ -369,8 +369,11 @@ namespace AltAI
 
         result_type operator() (const TechInfo::BuildingNode& node) const
         {
-            return node.buildingType != NO_BUILDING && !node.obsoletes ? result_type(1, node.buildingType) : result_type();
+            return node.buildingType != NO_BUILDING && node.obsoletes == obsoletes_ ? result_type(1, node.buildingType) : result_type();
         }
+
+    private:
+        bool obsoletes_;
     };
 
     // This and its companion PushTechResearchVisitor are based on pushResearch and findPathLength in CvPlayer
@@ -605,6 +608,11 @@ namespace AltAI
 
     std::vector<BuildingTypes> getPossibleBuildings(const boost::shared_ptr<TechInfo>& pTechInfo)
     {
-        return boost::apply_visitor(TechBuildingsVisitor(), pTechInfo->getInfo());
+        return boost::apply_visitor(TechBuildingsVisitor(false), pTechInfo->getInfo());
+    }
+
+    std::vector<BuildingTypes> getObsoletedBuildings(const boost::shared_ptr<TechInfo>& pTechInfo)
+    {
+        return boost::apply_visitor(TechBuildingsVisitor(true), pTechInfo->getInfo());
     }
 }

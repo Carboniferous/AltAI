@@ -14,13 +14,20 @@ namespace AltAI
 
         const int buildingCount = gGlobals.getNumBuildingInfos();
         buildings_.resize(buildingCount, 0);
+        realBuildings_.resize(buildingCount, 0);
+        activeBuildings_.resize(buildingCount, 0);
         freeBuildings_.resize(buildingCount, 0);
         buildingOriginalOwners_.resize(buildingCount);
+        originalBuildTimes_.resize(buildingCount);
 
         for (int i = 0; i < buildingCount; ++i)
         {
-            buildings_[i] = pCity_->getNumRealBuilding((BuildingTypes)i);
+            buildings_[i] = pCity_->getNumBuilding((BuildingTypes)i);
+            realBuildings_[i] = pCity_->getNumRealBuilding((BuildingTypes)i);
+            activeBuildings_[i] = pCity_->getNumActiveBuilding((BuildingTypes)i);
             freeBuildings_[i] = pCity_->getNumFreeBuilding((BuildingTypes)i);
+            originalBuildTimes_[i] = pCity_->getBuildingOriginalTime((BuildingTypes)i);
+
             // oddly, ownership is per building type, not per building (not big deal as only matters for culture buildings, and these are mostly destroyed on capture)
             buildingOriginalOwners_[i] = (PlayerTypes)pCity->getBuildingOriginalOwner((BuildingTypes)i);
         }
@@ -61,7 +68,17 @@ namespace AltAI
 
     int BuildingsHelper::getNumRealBuildings(BuildingTypes buildingType) const
     {
-        return buildings_[buildingType];
+        return realBuildings_[buildingType];
+    }
+
+    int BuildingsHelper::getNumActiveBuildings(BuildingTypes buildingType) const
+    {
+        return activeBuildings_[buildingType];
+    }
+
+    int BuildingsHelper::getBuildingOriginalTime(BuildingTypes buildingType) const
+    {
+        return originalBuildTimes_[buildingType];
     }
 
     PlayerTypes BuildingsHelper::getBuildingOriginalOwner(BuildingTypes buildingType) const
@@ -78,12 +95,22 @@ namespace AltAI
     {
         if (adding)
         {
-            ++buildings_[buildingType];
+            ++realBuildings_[buildingType];
+            ++activeBuildings_[buildingType];
             setBuildingOriginalOwner(buildingType);
+            if (originalBuildTimes_[buildingType] == MIN_INT)
+            {
+                originalBuildTimes_[buildingType] = gGlobals.getGame().getGameTurnYear();
+            }
         }
         else
         {
-            --buildings_[buildingType];
+            --activeBuildings_[buildingType];
+            --realBuildings_[buildingType];
+            if (realBuildings_[buildingType] == 0)
+            {
+                originalBuildTimes_[buildingType] = MIN_INT;
+            }
         }        
     }
 
@@ -92,10 +119,12 @@ namespace AltAI
         if (adding)
         {
             ++freeBuildings_[buildingType];
+            ++activeBuildings_[buildingType];
             setBuildingOriginalOwner(buildingType);
         }
         else
         {
+            --activeBuildings_[buildingType];
             --freeBuildings_[buildingType];
         }
     }
@@ -164,9 +193,9 @@ namespace AltAI
 
         Commerce totalCommerce;
         const int buildingCount = getNumBuildings(buildingType);
-        const int activeBuildingCount = pCity_->getNumActiveBuilding(buildingType);  // todo
-        const int originalBuildTime = pCity_->getBuildingOriginalTime(buildingType);  // todo
-        const int gameTurnYear = gGlobals.getGame().getGameTurnYear(); // todo
+        const int activeBuildingCount = getNumActiveBuildings(buildingType);
+        const int originalBuildTime = getBuildingOriginalTime(buildingType);
+        const int gameTurnYear = gGlobals.getGame().getGameTurnYear();
 
         ReligionTypes stateReligion = data.getReligionHelper()->getStateReligion();
 
