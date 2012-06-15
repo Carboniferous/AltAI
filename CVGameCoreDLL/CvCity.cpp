@@ -33,6 +33,7 @@
 #include "player.h"
 #include "city.h"
 #include "iters.h"
+#include "hurry_helper.h"
 
 // Public Functions...
 
@@ -3269,7 +3270,9 @@ void CvCity::hurry(HurryTypes eHurry)
 	iHurryPopulation = hurryPopulation(eHurry);
 	iHurryAngerLength = hurryAngerLength(eHurry);
 
-	changeProduction(hurryProduction(eHurry));
+    // AltAI - store this so we can log it
+    int iProductionLeft = hurryProduction(eHurry);
+	changeProduction(iProductionLeft);
 
 	GET_PLAYER(getOwnerINLINE()).changeGold(-(iHurryGold));
 	changePopulation(-(iHurryPopulation));
@@ -3280,6 +3283,17 @@ void CvCity::hurry(HurryTypes eHurry)
 	{
 		gDLL->getInterfaceIFace()->setDirty(SelectionButtons_DIRTY_BIT, true);
 	}
+
+    // AltAI
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        AltAI::HurryData hurryData(eHurry);
+        hurryData.hurryPopulation = iHurryPopulation;
+        hurryData.hurryGold = iHurryGold;
+        hurryData.extraProduction = iProductionLeft;
+
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->logHurry(this, hurryData);
+    }
 
 	// Python Event
 	CvEventReporter::getInstance().cityHurry(this, eHurry);
