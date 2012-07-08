@@ -27,26 +27,44 @@ namespace AltAI
 
                 const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
 
-                if (buildingInfo.getPrereqAndTech() == requestData.techType)
-                {
-                    baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType));
-                    continue;
+                SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)buildingInfo.getSpecialBuildingType();
+
+                if (specialBuildingType != NO_SPECIALBUILDING)
+                {                    
+                    const CvSpecialBuildingInfo& specialBuildingInfo = gGlobals.getSpecialBuildingInfo(specialBuildingType);
+
+                    if ((TechTypes)specialBuildingInfo.getTechPrereq() == requestData.techType)
+                    {
+                        baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType, false));
+                    }
+                    else if ((TechTypes)specialBuildingInfo.getObsoleteTech() == requestData.techType)
+                    {
+                        baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType, true));
+                    }
                 }
                 else
                 {
-                    for (int j = 0; j < gGlobals.getNUM_BUILDING_AND_TECH_PREREQS(); ++j)
-	                {
-                		if (buildingInfo.getPrereqAndTechs(j) == requestData.techType)
-                        {
-                            baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType));
-                            continue;
+                    if (buildingInfo.getPrereqAndTech() == requestData.techType)
+                    {
+                        baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType));
+                        continue;
+                    }
+                    else
+                    {
+                        for (int j = 0; j < gGlobals.getNUM_BUILDING_AND_TECH_PREREQS(); ++j)
+	                    {
+                		    if (buildingInfo.getPrereqAndTechs(j) == requestData.techType)
+                            {
+                                baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType));
+                                continue;
+                            }
                         }
                     }
-                }
 
-                if (buildingInfo.getObsoleteTech() == requestData.techType)
-                {
-                    baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType, true));
+                    if (buildingInfo.getObsoleteTech() == requestData.techType)
+                    {
+                        baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType, true));
+                    }
                 }
             }
         }

@@ -169,17 +169,17 @@ namespace AltAI
     ConstructItem selectExpansionBuildingTactics(const Player& player, const City& city, const ConstructItem& constructItem)
     {
 #ifdef ALTAI_DEBUG
-        // debug
+//        // debug
         boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
         std::ostream& os = pCivLog->getStream();
-        if (constructItem.buildingType != NO_BUILDING)
-        {
-            os << "\nChecking building: " << gGlobals.getBuildingInfo(constructItem.buildingType).getType() << " for city: " << narrow(city.getCvCity()->getName());
-        }
-        else if (constructItem.processType != NO_PROCESS)
-        {
-            os << "\nChecking process: " << gGlobals.getProcessInfo(constructItem.processType).getType() << " for city: " << narrow(city.getCvCity()->getName());
-        }
+//        if (constructItem.buildingType != NO_BUILDING)
+//        {
+//            os << "\nChecking building: " << gGlobals.getBuildingInfo(constructItem.buildingType).getType() << " for city: " << narrow(city.getCvCity()->getName());
+//        }
+//        else if (constructItem.processType != NO_PROCESS)
+//        {
+//            os << "\nChecking process: " << gGlobals.getProcessInfo(constructItem.processType).getType() << " for city: " << narrow(city.getCvCity()->getName());
+//        }
 #endif
         ConstructItem selectedConstructItem(NO_BUILDING);
 

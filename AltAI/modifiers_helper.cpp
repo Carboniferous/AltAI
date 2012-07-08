@@ -32,6 +32,7 @@ namespace AltAI
         {
             commerceModifier_[i] = pCity->getCommerceRateModifier((CommerceTypes)i);
             playerCommerceModifier_[i] = player.getCommerceRateModifier((CommerceTypes)i);
+            stateReligionCommerceModifier_[i] = player.getStateReligionBuildingCommerce((CommerceTypes)i);
             if (pCity->isCapital())
             {
                 capitalCommerceModifier_[i] = player.getCapitalCommerceRateModifier((CommerceTypes)i);
@@ -72,6 +73,11 @@ namespace AltAI
     CommerceModifier ModifiersHelper::getTotalCommerceModifier() const
     {
         return makeCommerce(100, 100, 100, 100) + commerceModifier_ + playerCommerceModifier_ + capitalCommerceModifier_;
+    }
+
+    CommerceModifier ModifiersHelper::getStateReligionBuildingCommerce() const
+    {
+        return stateReligionCommerceModifier_;
     }
 
     int ModifiersHelper::getUnitProductionModifier(UnitTypes unitType) const
@@ -183,6 +189,11 @@ namespace AltAI
     void ModifiersHelper::changeCapitalCommerceModifier(CommerceModifier modifier)
     {
         capitalCommerceModifier_ += modifier;
+    }
+
+    void ModifiersHelper::changeStateReligionCommerceModifier(CommerceModifier modifier)
+    {
+        stateReligionCommerceModifier_ += modifier;
     }
 
     void ModifiersHelper::changeStateReligionBuildingProductionModifier(int change)

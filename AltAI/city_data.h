@@ -91,6 +91,8 @@ namespace AltAI
 
         void pushBuilding(BuildingTypes buildingType);
         void pushUnit(UnitTypes unitType);
+        void pushProcess(ProcessTypes processType);
+
         int getNumBuildings(BuildingTypes buildingType) const;
         void hurry(const HurryData& hurryData);
         std::pair<bool, HurryData> canHurry(HurryTypes hurryType) const;
@@ -151,6 +153,7 @@ namespace AltAI
         int getNonWorkingPopulation() const;
 
         TotalOutput getOutput() const;
+        TotalOutput getProcessOutput() const;
         TotalOutput getActualOutput() const;  // account for lost and consumed food
         PlotYield getPlotYield() const;
         GreatPersonOutputMap getGPP() const;

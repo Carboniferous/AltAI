@@ -18,6 +18,7 @@ namespace AltAI
 
         YieldModifier getTotalYieldModifier(const CityData& data) const;
         CommerceModifier getTotalCommerceModifier() const;
+        CommerceModifier getStateReligionBuildingCommerce() const;
 
         int getUnitProductionModifier(UnitTypes unitType) const;
         int getBuildingProductionModifier(const CityData& data, BuildingTypes buildingType) const;
@@ -33,6 +34,7 @@ namespace AltAI
         void changeCommerceModifier(CommerceModifier modifier);
         void changePlayerCommerceModifier(CommerceModifier modifier);
         void changeCapitalCommerceModifier(CommerceModifier modifier);
+        void changeStateReligionCommerceModifier(CommerceModifier modifier);
 
         void changeStateReligionBuildingProductionModifier(int change);
         void changeMilitaryProductionModifier(int change);
@@ -51,6 +53,6 @@ namespace AltAI
         int spaceProductionModifier_, playerSpaceProductionModifier_;
 
         CommerceModifier commerceModifier_;
-        CommerceModifier playerCommerceModifier_, capitalCommerceModifier_;
+        CommerceModifier playerCommerceModifier_, capitalCommerceModifier_, stateReligionCommerceModifier_;
     };
 }

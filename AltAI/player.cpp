@@ -151,6 +151,7 @@ namespace AltAI
         {
             pPlayerAnalysis_->getMapAnalysis()->addCity(pCity);
             pPlayerAnalysis_->getPlayerTactics()->addNewCityBuildingTactics(pCity->getIDInfo());
+            pPlayerAnalysis_->getPlayerTactics()->addNewCityUnitTactics(pCity->getIDInfo());
         }
     }
 
@@ -970,11 +971,14 @@ namespace AltAI
             for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
             {
                 iter->second.setFlag(City::NeedsBuildingCalcs);
-            }
-
-            // add any new buildings this tech makes available, and update existing building tactics data
-            pPlayerAnalysis_->getPlayerTactics()->updateCityBuildingTactics(pTechInfo->getTechType());
+            }            
         }
+
+        // add any new buildings this tech makes available, and update existing building tactics data
+        pPlayerAnalysis_->getPlayerTactics()->updateCityBuildingTactics(pTechInfo->getTechType());
+
+        // add any new units this tech makes available, and update existing unit tactics data
+        pPlayerAnalysis_->getPlayerTactics()->updateCityUnitTactics(pTechInfo->getTechType());
 
         if (techAffectsImprovements(pTechInfo))
         {

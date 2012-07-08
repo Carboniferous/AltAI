@@ -148,7 +148,7 @@ namespace AltAI
 
         BuildingSimulationResults evaluateBasicBuildings(int nTurns);
         BuildingSimulationResults evaluateHurryBuilding(BuildingTypes buildingType, int turns);
-        void evaluateBuilding(BuildingTypes buildingType, int turns, BuildingSimulationResults& results, bool doBaseLine);
+        //void evaluateBuilding(BuildingTypes buildingType, int turns, BuildingSimulationResults& results, bool doBaseLine);
 
         PlotImprovementSimulationResults evaluateAllImprovements(int nTurns, bool ignoreExisting);
         PlotImprovementSimulationResults evaluateImprovements(const PlotsAndImprovements& improvements, const ConstCityDataPtr& pCityData, int nTurns, bool ignoreExisting);

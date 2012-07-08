@@ -9,6 +9,31 @@ namespace AltAI
 
 	typedef std::set<PromotionTypes> Promotions;
 
+    struct UnitData
+    {
+        enum Flags
+        {
+            None = 0, CityAttack = (1 << 0)
+        };
+
+        explicit UnitData(const CvUnitInfo& unitInfo_);
+
+        void applyPromotion(const CvPromotionInfo& promotion);
+
+		// calculate our strength as defender
+        int calculateStrength(const UnitData& other, int flags = 0) const;
+
+        // calculate our strength as attacker
+        int calculateStrength(int flags) const;
+
+        const CvUnitInfo& unitInfo;
+
+        int combat, firstStrikes, chanceFirstStrikes, firePower, combatLimit;
+        int cityAttackPercent, cityDefencePercent;
+        bool immuneToFirstStrikes;
+        std::map<UnitCombatTypes, int> unitCombatModifiers;
+    };
+
     class UnitAnalysis
     {
     public:

@@ -124,7 +124,7 @@ namespace AltAI
                 maxResearchRateWithProcesses = player.getMaxResearchRateWithProcesses();
                 rankAndMaxProduction = player.getCityRank(city.getCvCity()->getIDInfo(), OUTPUT_PRODUCTION);
 
-                bestEconomicBuilding = bestSmallCultureBuilding = bestMilitaryBuilding = bestEconomicWonder = NO_BUILDING;
+                bestEconomicBuilding = bestSmallCultureBuilding = bestMilitaryBuilding = bestEconomicWonder = bestEconomicNationalWonder = NO_BUILDING;
 
                 bestCollateralUnit = bestCityDefenceUnit = bestScoutUnit = bestCombatUnit = bestSeaDefenceUnit = bestSeaTransportUnit = bestSeaScoutUnit = NO_UNIT;
                 bestDependentTacticUnit = NO_UNIT;
@@ -285,11 +285,11 @@ namespace AltAI
 
                             if (iter->economicFlags) // is an economic building
                             {
-#ifdef ALTAI_DEBUG
-                                os << "\nSimulating building: " << gGlobals.getBuildingInfo(iter->buildingType).getType();
-#endif
-                                simulator.evaluateBuilding(iter->buildingType, nTurns, simulationResults, doBaseline);
-                                doBaseline = false;
+//#ifdef ALTAI_DEBUG
+//                                os << "\nSimulating building: " << gGlobals.getBuildingInfo(iter->buildingType).getType();
+//#endif
+//                                simulator.evaluateBuilding(iter->buildingType, nTurns, simulationResults, doBaseline);
+//                                doBaseline = false;
                             }
                             else if (iter->militaryFlags)
                             {
@@ -300,11 +300,11 @@ namespace AltAI
                         }
                     }
 
-#ifdef ALTAI_DEBUG
-                    // debug
-                    simulationResults.debugResults(CityLog::getLog(city.getCvCity())->getStream());
-                    simulationResults.debugResults(os);
-#endif
+//#ifdef ALTAI_DEBUG
+//                    // debug
+//                    simulationResults.debugResults(CityLog::getLog(city.getCvCity())->getStream());
+//                    simulationResults.debugResults(os);
+//#endif
 
                     for (int i = 0; i < EconomicFlags::Num_Output_FlagTypes; ++i)
                     {
@@ -414,6 +414,21 @@ namespace AltAI
                 if (bestEconomicWonder != NO_BUILDING)
                 {
                     os << "\nbestEconomicWonder = " << gGlobals.getBuildingInfo(bestEconomicWonder).getType();
+                }
+                if (bestEconomicNationalWonder != NO_BUILDING)
+                {
+                    os << "\nbestEconomicNationalWonder = " << gGlobals.getBuildingInfo(bestEconomicNationalWonder).getType();
+                }
+                switch (bestDependentBuild.first)
+                {
+                    case BuildingItem:
+                        os << "\nBest dependent build: " << gGlobals.getBuildingInfo((BuildingTypes)bestDependentBuild.second).getType();
+                        break;
+                    case UnitItem:
+                        os << "\nBest dependent build: " << gGlobals.getUnitInfo((UnitTypes)bestDependentBuild.second).getType();
+                        break;
+                    default:
+                        break;
                 }
                 if (bestMilitaryBuilding != NO_BUILDING)
                 {
@@ -567,42 +582,42 @@ namespace AltAI
                 boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
                 std::ostream& os = pCivLog->getStream();
 #endif
-                if (economicFlagsUnion & EconomicFlags::Output_Culture)
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\n(getConstructItem): Turn = " << gGlobals.getGame().getGameTurn();
-#endif
-                    bestSmallCultureBuilding = NO_BUILDING;
-                    int bestValue = MAX_INT;
-                    for (std::map<BuildingTypes, BuildingSelectionHelper>::const_iterator ci(buildingSelectionData.begin()), ciEnd(buildingSelectionData.end()); ci != ciEnd; ++ci)
-                    {
-                        if (ci->second.constructItem.buildingFlags & (BuildingFlags::Building_World_Wonder & BuildingFlags::Building_National_Wonder))
-                        {
-#ifdef ALTAI_DEBUG
-                            os << "\n(calculateSmallCultureBuilding) skipping building as is wonder: " << gGlobals.getBuildingInfo(ci->first).getType();
-#endif
-                            continue;
-                        }
-#ifdef ALTAI_DEBUG
-                        os << "\n(calculateSmallCultureBuilding) checking building: " << gGlobals.getBuildingInfo(ci->first).getType();
-#endif
-                        std::map<int, int>::const_iterator iter = ci->second.simulationValuesMap.find(EconomicFlags::Output_Culture);
-                        if (iter != ci->second.simulationValuesMap.end())
-                        {
-                            //int thisValue = iter->second;
-                            int requiredProduction = city.getCvCity()->getProductionNeeded(ci->first) - city.getCvCity()->getBuildingProduction(ci->first);
-                            //thisValue /= requiredProduction;
-#ifdef ALTAI_DEBUG
-                            os << " required production = " << requiredProduction << " value = " << iter->second;
-#endif
-                            if (requiredProduction < bestValue)
-                            {
-                                bestValue = requiredProduction;
-                                bestSmallCultureBuilding = ci->second.constructItem.buildingType;
-                            }
-                        }
-                    }
-                }
+//                if (economicFlagsUnion & EconomicFlags::Output_Culture)
+//                {
+//#ifdef ALTAI_DEBUG
+//                    os << "\n(getConstructItem): Turn = " << gGlobals.getGame().getGameTurn();
+//#endif
+//                    bestSmallCultureBuilding = NO_BUILDING;
+//                    int bestValue = MAX_INT;
+//                    for (std::map<BuildingTypes, BuildingSelectionHelper>::const_iterator ci(buildingSelectionData.begin()), ciEnd(buildingSelectionData.end()); ci != ciEnd; ++ci)
+//                    {
+//                        if (ci->second.constructItem.buildingFlags & (BuildingFlags::Building_World_Wonder & BuildingFlags::Building_National_Wonder))
+//                        {
+//#ifdef ALTAI_DEBUG
+//                            os << "\n(calculateSmallCultureBuilding) skipping building as is wonder: " << gGlobals.getBuildingInfo(ci->first).getType();
+//#endif
+//                            continue;
+//                        }
+//#ifdef ALTAI_DEBUG
+//                        os << "\n(calculateSmallCultureBuilding) checking building: " << gGlobals.getBuildingInfo(ci->first).getType();
+//#endif
+//                        std::map<int, int>::const_iterator iter = ci->second.simulationValuesMap.find(EconomicFlags::Output_Culture);
+//                        if (iter != ci->second.simulationValuesMap.end())
+//                        {
+//                            //int thisValue = iter->second;
+//                            int requiredProduction = city.getCvCity()->getProductionNeeded(ci->first) - city.getCvCity()->getBuildingProduction(ci->first);
+//                            //thisValue /= requiredProduction;
+//#ifdef ALTAI_DEBUG
+//                            os << " required production = " << requiredProduction << " value = " << iter->second;
+//#endif
+//                            if (requiredProduction < bestValue)
+//                            {
+//                                bestValue = requiredProduction;
+//                                bestSmallCultureBuilding = ci->second.constructItem.buildingType;
+//                            }
+//                        }
+//                    }
+//                }
 
                 TotalOutput base = city.getCurrentOutputProjection().getOutput();
                 for (std::set<CultureBuildingValue>::const_iterator ci(tacticSelectionData.smallCultureBuildings.begin()), ciEnd(tacticSelectionData.smallCultureBuildings.end()); ci != ciEnd; ++ci)
@@ -636,7 +651,7 @@ namespace AltAI
                 std::ostream& os = pCivLog->getStream();
 #endif
 
-                if (economicFlagsUnion)
+                /*if (economicFlagsUnion)
                 {
 #ifdef ALTAI_DEBUG
                     os << "\n(calculateBestEconomicBuilding): Turn = " << gGlobals.getGame().getGameTurn();
@@ -658,29 +673,30 @@ namespace AltAI
                             }
                         }
                     }
-                }
+                }*/
 
-                TotalOutput base = city.getCurrentOutputProjection().getOutput();
+#ifdef ALTAI_DEBUG
+                {
+                    TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                    TotalOutputWeights weights = makeOutputW(20, 20, 20, 20, 1, 1);
+                    TotalOutputValueFunctor valueF(weights);
+
+                    for (std::set<EconomicBuildingValue>::const_iterator ci(tacticSelectionData.economicBuildings.begin()), ciEnd(tacticSelectionData.economicBuildings.end()); ci != ciEnd; ++ci)
+                    {
+                        os << "\n(Economic Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType()
+                           << " turns = " << ci->nTurns << ", delta = " << ci->output << " value = " << (valueF(ci->output) / (ci->nTurns == 0 ? 1 : ci->nTurns));
+                    }
+                }
+#endif
+                TotalOutputWeights weights = makeOutputW(20, 20, 20, 20, 1, 1), pureEconomicWeights = makeOutputW(1, 1, 1, 1, 0, 0);
+                TotalOutputValueFunctor valueF(weights), econValueF(pureEconomicWeights);
+
                 for (std::set<EconomicBuildingValue>::const_iterator ci(tacticSelectionData.economicBuildings.begin()), ciEnd(tacticSelectionData.economicBuildings.end()); ci != ciEnd; ++ci)
                 {
-#ifdef ALTAI_DEBUG
-                    TotalOutputWeights weights = makeOutputW(20, 20, 20, 20, 1, 1);
-                    TotalOutputValueFunctor valueF(weights);
-
-                    os << "\n(Economic Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType()
-                       << " turns = " << ci->nTurns << ", delta = " << ci->output << " value = " << (valueF(ci->output) / (ci->nTurns == 0 ? 1 : ci->nTurns));
-#endif
-                }
-
-                if (!tacticSelectionData.economicBuildings.empty())
-                {
-                    TotalOutputWeights weights = makeOutputW(20, 20, 20, 20, 1, 1);
-                    TotalOutputValueFunctor valueF(weights);
-
-                    std::set<EconomicBuildingValue>::const_iterator ci(tacticSelectionData.economicBuildings.begin());
-                    if (valueF(ci->output) / std::max<int>(1, ci->nTurns) > 1000)
+                    if (valueF(ci->output) / std::max<int>(1, ci->nTurns) > 1000 && econValueF(ci->output) > 0)
                     {
                         bestEconomicBuilding = ci->buildingType;
+                        break;
                     }
                 }
             }
@@ -688,7 +704,7 @@ namespace AltAI
             void calculateBestEconomicWonder()
             {
                 TotalOutput base = city.getCurrentOutputProjection().getOutput();
-                int bestValue = 0;
+                int bestValue = 0, bestValueBuiltTurns = 0;
                 BuildingTypes bestWonder = NO_BUILDING;
                 TotalOutputWeights weights = makeOutputW(20, 20, 20, 20, 1, 1);
                 TotalOutputValueFunctor valueF(weights);
@@ -703,7 +719,7 @@ namespace AltAI
                     for (size_t i = 0, count = ci->second.buildCityValues.size(); i < count; ++i)
                     {
                         const int thisBuiltTurn = ci->second.buildCityValues[i].second.nTurns;
-                        if (thisBuiltTurn > 0 && thisBuiltTurn < firstBuiltTurn)
+                        if (ci->second.buildCityValues[i].second.buildingType != NO_BUILDING && thisBuiltTurn < firstBuiltTurn)
                         {
                             firstBuiltTurn = ci->second.buildCityValues[i].second.nTurns;
                             firstBuiltCity = ci->second.buildCityValues[i].first;
@@ -717,12 +733,13 @@ namespace AltAI
                         }
                     }
 
-                    if (firstBuiltCity == city.getCvCity()->getIDInfo() || (thisCityBuiltTurn > 0 && 4 * thisCityBuiltTurn / 5 < firstBuiltTurn))
+                    if (firstBuiltCity == city.getCvCity()->getIDInfo() || 4 * thisCityBuiltTurn / 5 < firstBuiltTurn)
                     {
                         int thisValue = valueF(thisDelta);
                         if (thisValue > bestValue)
                         {
                             bestValue = thisValue;
+                            bestValueBuiltTurns = thisCityBuiltTurn;
                             bestWonder = ci->first;
                         }
                     }
@@ -748,6 +765,98 @@ namespace AltAI
                 if (bestWonder != NO_BUILDING)
                 {
                     bestEconomicWonder = bestWonder;
+                    if (!tacticSelectionData.economicBuildings.empty())
+                    {
+                        std::set<EconomicBuildingValue>::const_iterator ci(tacticSelectionData.economicBuildings.begin());
+                        if (valueF(ci->output) / std::max<int>(1, ci->nTurns) < bestValue / bestValueBuiltTurns)
+                        {
+                            bestEconomicBuilding = bestEconomicWonder;
+                        }
+                    }
+                }
+            }
+
+            void calculateBestEconomicNationalWonder()
+            {
+                TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                int overallBestValue = 0, overallBestValueTurns = MAX_INT;
+                BuildingTypes bestNationalWonder = NO_BUILDING;
+                TotalOutputWeights weights = makeOutputW(20, 20, 20, 20, 1, 1);
+                TotalOutputValueFunctor valueF(weights);
+
+                for (std::map<BuildingTypes, EconomicWonderValue>::const_iterator ci(tacticSelectionData.nationalWonders.begin()), ciEnd(tacticSelectionData.nationalWonders.end());
+                    ci != ciEnd; ++ci)
+                {
+                    if (tacticSelectionData.exclusions.find(ci->first) != tacticSelectionData.exclusions.end())
+                    {
+                        continue;
+                    }
+
+                    int bestBuiltTurn = MAX_INT, thisCityBuiltTurn = MAX_INT;
+                    TotalOutput bestDelta, thisDelta;
+                    IDInfo bestBuiltCity;
+                    
+                    for (size_t i = 0, count = ci->second.buildCityValues.size(); i < count; ++i)
+                    {
+                        if (ci->second.buildCityValues[i].second.buildingType != NO_BUILDING)
+                        {
+                            const TotalOutput delta = ci->second.buildCityValues[i].second.output;
+                            if (valueF(delta) > valueF(bestDelta))
+                            {
+                                bestDelta = delta;
+                                bestBuiltTurn = ci->second.buildCityValues[i].second.nTurns;
+                                bestBuiltCity = ci->second.buildCityValues[i].first;
+                            }
+
+                            if (ci->second.buildCityValues[i].first == city.getCvCity()->getIDInfo())
+                            {
+                                thisDelta = delta;
+                                thisCityBuiltTurn = ci->second.buildCityValues[i].second.nTurns;
+                            }
+                        }
+                    }
+
+                    if (bestBuiltCity == city.getCvCity()->getIDInfo())
+                    {
+                        int thisValue = valueF(bestDelta);
+                        if (thisValue > overallBestValue)
+                        {
+                            overallBestValue = thisValue;
+                            overallBestValueTurns = bestBuiltTurn;
+                            bestNationalWonder = ci->first;
+                        }
+                    }
+
+#ifdef ALTAI_DEBUG
+                    std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+
+                    os << "\nNational Wonder: " << gGlobals.getBuildingInfo(ci->first).getType();
+
+                    if (bestBuiltCity.eOwner != NO_PLAYER)
+                    {
+                        os << " best build time = " << bestBuiltTurn << ", in city: " << narrow(getCity(bestBuiltCity)->getName()) << " delta = " << bestDelta
+                           << " this city build time = " << thisCityBuiltTurn << ", delta = " << thisDelta;
+                    }
+                    else
+                    {
+                        os << " not built anywhere or no value";
+                    }
+#endif
+                }
+
+                if (bestNationalWonder != NO_BUILDING)
+                {
+                    bestEconomicNationalWonder = bestNationalWonder;
+                    TotalOutput bestEconomicOutput = tacticSelectionData.getEconomicBuildingOutput(bestEconomicBuilding, city.getCvCity()->getIDInfo());
+                    if (valueF(bestEconomicOutput) < overallBestValue)
+                    {
+                        bestEconomicBuilding = bestEconomicNationalWonder;
+                    }
+#ifdef ALTAI_DEBUG
+                    std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+                    os << "\nBest National Wonder: " << gGlobals.getBuildingInfo(bestNationalWonder).getType()
+                       << " value = " << overallBestValue << ", build time = " << overallBestValueTurns;
+#endif
                 }
             }
 
@@ -796,6 +905,8 @@ namespace AltAI
                     }
                 }
 
+                bestDependentBuild = buildItem;
+
 #ifdef ALTAI_DEBUG
                 if (bestBuildingType != NO_BUILDING)
                 {
@@ -824,30 +935,106 @@ namespace AltAI
 #endif
             }
 
-            void calculateBestMilitaryBuilding()
+            void calculateBestLocalEconomicDependentTactic()
             {
-                if (militaryFlagsUnion)
+                TotalOutputWeights weights = makeOutputW(20, 20, 20, 20, 1, 1);
+                TotalOutputValueFunctor valueF(weights);
+                int bestValue = 0;
+                IDInfo bestCity;
+                BuildingTypes bestBuildingType = NO_BUILDING;
+                std::pair<BuildQueueTypes, int> buildItem(NoItem, -1);
+
+                TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                PlayerTactics::CityBuildingTacticsMap::const_iterator ci = playerTactics.cityBuildingTacticsMap_.find(city.getCvCity()->getIDInfo());
+
+                for (std::map<BuildingTypes, std::vector<BuildingTypes> >::const_iterator di(tacticSelectionData.dependentBuildings.begin()),
+                    diEnd(tacticSelectionData.dependentBuildings.end()); di != diEnd; ++di)
                 {
-#ifdef ALTAI_DEBUG
-                    // debug
-                    boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
-                    std::ostream& os = pCivLog->getStream();
-                    os << "\n(calculateBestMilitaryBuilding): Turn = " << gGlobals.getGame().getGameTurn();
-#endif
-                    BuildingTypes bestBuilding = NO_BUILDING;
-                    int bestValue = 0;
-                    for (std::map<BuildingTypes, BuildingSelectionHelper>::const_iterator ci(buildingSelectionData.begin()), ciEnd(buildingSelectionData.end()); ci != ciEnd; ++ci)
+                    for (size_t i = 0, count = di->second.size(); i < count; ++i)
                     {
-#ifdef ALTAI_DEBUG
-                        os << "\n(calculateBestMilitaryBuilding) checking building: " << gGlobals.getBuildingInfo(ci->first).getType();
-#endif
-                        if (ci->second.constructItem.militaryFlags & MilitaryFlags::Output_Experience)
+                        PlayerTactics::CityBuildingTacticsList::const_iterator li = ci->second.find(di->second[i]);
+                        if (li != ci->second.end())
                         {
-                            bestBuilding = ci->first;
-                            break;
+                            const ProjectionLadder& ladder = li->second->getProjection();
+                            if (!ladder.buildings.empty())
+                            {
+                                int nTurns = ladder.buildings[0].first;
+                                int thisValue = valueF(ladder.getOutput() - base) / std::max<int>(1, nTurns);
+                                if (thisValue > bestValue)
+                                {
+                                    bestValue = thisValue;
+                                    bestBuildingType = li->second->getBuildingType();
+                                    bestCity = ci->first;
+
+                                    const std::vector<IDependentTacticPtr>& dependentTactics = li->second->getDependencies();
+                                    if (!dependentTactics.empty())
+                                    {
+                                        buildItem = dependentTactics[0]->getBuildItem();
+                                    }
+                                }
+                            }
                         }
                     }
-                    bestMilitaryBuilding = bestBuilding;
+                }
+
+                bestDependentBuild = buildItem;
+
+#ifdef ALTAI_DEBUG
+                if (bestBuildingType != NO_BUILDING)
+                {
+                    std::ostream& os = CivLog::getLog(*playerTactics.player.getCvPlayer())->getStream();
+                    os << "\nBest build for this city to help itself: " << narrow(getCity(bestCity)->getName()) << " with building: "
+                       << gGlobals.getBuildingInfo(bestBuildingType).getType() << " with value = " << bestValue;
+                    if (buildItem.first == BuildingItem)
+                    {
+                        os << " build item = " << gGlobals.getBuildingInfo((BuildingTypes)buildItem.second).getType();
+                    }
+                    else if (buildItem.first == UnitItem)
+                    {
+                        os << " build item = " << gGlobals.getUnitInfo((UnitTypes)buildItem.second).getType();
+                    }
+                }
+#endif
+            }
+
+            void calculateBestMilitaryBuilding()
+            {
+//                if (militaryFlagsUnion)
+//                {
+//#ifdef ALTAI_DEBUG
+//                    // debug
+//                    boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
+//                    std::ostream& os = pCivLog->getStream();
+//                    os << "\n(calculateBestMilitaryBuilding): Turn = " << gGlobals.getGame().getGameTurn();
+//#endif
+//                    BuildingTypes bestBuilding = NO_BUILDING;
+//                    int bestValue = 0;
+//                    for (std::map<BuildingTypes, BuildingSelectionHelper>::const_iterator ci(buildingSelectionData.begin()), ciEnd(buildingSelectionData.end()); ci != ciEnd; ++ci)
+//                    {
+//#ifdef ALTAI_DEBUG
+//                        os << "\n(calculateBestMilitaryBuilding) checking building: " << gGlobals.getBuildingInfo(ci->first).getType();
+//#endif
+//                        if (ci->second.constructItem.militaryFlags & MilitaryFlags::Output_Experience)
+//                        {
+//                            bestBuilding = ci->first;
+//                            break;
+//                        }
+//                    }
+//                    bestMilitaryBuilding = bestBuilding;
+//                }
+
+#ifdef ALTAI_DEBUG
+                std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+
+                for (std::set<MilitaryBuildingValue>::const_iterator ci(tacticSelectionData.militaryBuildings.begin()), ciEnd(tacticSelectionData.militaryBuildings.end()); ci != ciEnd; ++ci)
+                {
+                    os << "\n(Military Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType() << " turns = " << ci->nTurns;
+                }
+#endif
+
+                if (!tacticSelectionData.militaryBuildings.empty())
+                {
+                    bestMilitaryBuilding = tacticSelectionData.militaryBuildings.begin()->buildingType;
                 }
             }
 
@@ -1032,6 +1219,20 @@ namespace AltAI
                 else if (bestCombatUnit != NO_UNIT)
                 {
                     bestCityDefenceUnit = bestCombatUnit;
+                }
+
+                for (std::set<CityDefenceUnitValue>::const_iterator ci(tacticSelectionData.cityDefenceUnits.begin()), ciEnd(tacticSelectionData.cityDefenceUnits.end()); ci != ciEnd; ++ci)
+                {
+#ifdef ALTAI_DEBUG
+                    std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+                    os << "\n(City Defence Unit): " << gGlobals.getUnitInfo(ci->unitType).getType()
+                       << " turns = " << ci->nTurns << ", value = " << ci->unitAnalysisValue;
+#endif
+                }
+
+                if (!tacticSelectionData.cityDefenceUnits.empty())
+                {
+                    bestCityDefenceUnit = tacticSelectionData.cityDefenceUnits.begin()->unitType;
                 }
             }
 
@@ -1463,7 +1664,7 @@ namespace AltAI
                     }
 
                     // can build something which has an economic benefit
-                    if (bestEconomicBuilding != NO_BUILDING && setConstructItem(bestEconomicBuilding))
+                    if (bestEconomicBuilding != NO_BUILDING && setConstructItem(bestEconomicBuilding, true))
                     {
 #ifdef ALTAI_DEBUG
                         os << "\n(getConstructItem) Returning best economic building: " << gGlobals.getBuildingInfo(bestEconomicBuilding).getType() << selection;
@@ -1758,19 +1959,56 @@ namespace AltAI
                     }
 
                     // build something economic
-                    if (bestEconomicBuilding != NO_BUILDING && setConstructItem(bestEconomicBuilding))
+                    if (bestEconomicBuilding != NO_BUILDING && setConstructItem(bestEconomicBuilding, true))
                     {
 #ifdef ALTAI_DEBUG
                         os << "\n(getConstructItem) Returning best economic building: " << gGlobals.getBuildingInfo(bestEconomicBuilding).getType() << selection;
 #endif
                         return selection;
                     }
-                    else if (bestEconomicWonder != NO_BUILDING && setConstructItem(bestEconomicWonder))
+                    else if (bestEconomicWonder != NO_BUILDING && setConstructItem(bestEconomicWonder, true))
                     {
 #ifdef ALTAI_DEBUG
                         os << "\n(getConstructItem) Returning best economic wonder: " << gGlobals.getBuildingInfo(bestEconomicWonder).getType() << selection;
 #endif
                         return selection;
+                    }
+                    else if (bestEconomicNationalWonder != NO_BUILDING && setConstructItem(bestEconomicNationalWonder, true))
+                    {
+#ifdef ALTAI_DEBUG
+                        os << "\n(getConstructItem) Returning best economic national wonder: " << gGlobals.getBuildingInfo(bestEconomicNationalWonder).getType() << selection;
+#endif
+                        return selection;
+                    }
+
+                    switch (bestDependentBuild.first)
+                    {
+                        case BuildingItem:
+#ifdef ALTAI_DEBUG
+                            os << "\n(getConstructItem) Attempting best dependent build: " << gGlobals.getBuildingInfo((BuildingTypes)bestDependentBuild.second).getType() << selection;
+#endif
+                            if (setConstructItem((BuildingTypes)bestDependentBuild.second, true))
+                            {
+#ifdef ALTAI_DEBUG
+                                os << "\n(getConstructItem) Returning best dependent build: " << gGlobals.getBuildingInfo((BuildingTypes)bestDependentBuild.second).getType() << selection;
+#endif
+                                return selection;
+                            }
+                            break;
+                        case UnitItem:
+#ifdef ALTAI_DEBUG
+                            os << "\n(getConstructItem) Attempting best dependent build: " << gGlobals.getUnitInfo((UnitTypes)bestDependentBuild.second).getType() << selection;
+#endif
+                            if (setConstructItem((UnitTypes)bestDependentBuild.second, true))
+                            {
+#ifdef ALTAI_DEBUG
+                                os << "\n(getConstructItem) Returning best dependent build: " << gGlobals.getUnitInfo((UnitTypes)bestDependentBuild.second).getType() << selection;
+#endif
+                                return selection;
+                            }
+                            break;
+                        default:
+                            break;
                     }
 
                     // choose a process
@@ -1819,26 +2057,42 @@ namespace AltAI
                 return units[ci - counts.begin()];
             }
 
-            bool setConstructItem(UnitTypes unitType)
+            bool setConstructItem(UnitTypes unitType, bool ignoreSelectionData = false)
             {
-                UnitSelectionData::const_iterator iter = unitSelectionData.find(unitType);
-                if (iter != unitSelectionData.end())
+                if (!ignoreSelectionData)
                 {
-                    selection = iter->second.constructItem;
-                    return true;
+                    UnitSelectionData::const_iterator iter = unitSelectionData.find(unitType);
+                    if (iter != unitSelectionData.end())
+                    {
+                        selection = iter->second.constructItem;
+                        return true;
+                    }
+                    return false;
                 }
-                return false;
+                else
+                {
+                    selection = ConstructItem(unitType);
+                }
+                return true;
             }
 
-            bool setConstructItem(BuildingTypes buildingType)
+            bool setConstructItem(BuildingTypes buildingType, bool ignoreSelectionData = true)
             {
-                std::map<BuildingTypes, BuildingSelectionHelper>::const_iterator iter = buildingSelectionData.find(buildingType);
-                if (iter != buildingSelectionData.end())
+                if (!ignoreSelectionData)
                 {
-                    selection = iter->second.constructItem;
-                    return true;
+                    std::map<BuildingTypes, BuildingSelectionHelper>::const_iterator iter = buildingSelectionData.find(buildingType);
+                    if (iter != buildingSelectionData.end())
+                    {
+                        selection = iter->second.constructItem;
+                        return true;
+                    }
+                    return false;
                 }
-                return false;
+                else
+                {
+                    selection = ConstructItem(buildingType);
+                }
+                return true;
             }
 
             bool setConstructItem(ProcessTypes processType)
@@ -1900,7 +2154,9 @@ namespace AltAI
             std::pair<int, int> rankAndMaxProduction;
             int unworkedGoodImprovementCount;
 
-            BuildingTypes bestSmallCultureBuilding, bestEconomicBuilding, bestMilitaryBuilding, bestEconomicWonder;
+            BuildingTypes bestSmallCultureBuilding, bestEconomicBuilding, bestMilitaryBuilding, bestEconomicWonder, bestEconomicNationalWonder;
+
+            std::pair<BuildQueueTypes, int> bestDependentBuild;
 
             // todo - move unit data into separate unit manager
             UnitTypes bestCombatUnit, bestScoutUnit, bestCityDefenceUnit, bestCollateralUnit, bestSeaDefenceUnit, bestSeaTransportUnit, bestSeaScoutUnit;
@@ -1932,6 +2188,158 @@ namespace AltAI
         return valueF(output) / std::max<int>(1, nTurns) > valueF(other.output) / std::max<int>(1, other.nTurns);
     }
 
+    bool MilitaryBuildingValue::operator < (const MilitaryBuildingValue& other) const
+    {
+        //int freeExperience, globalFreeExperience;
+        //std::vector<std::pair<DomainTypes, int> > domainFreeExperience;
+        //std::vector<std::pair<UnitCombatTypes, int> > combatTypeFreeExperience;
+        //PromotionTypes freePromotion;
+
+        if (globalFreeExperience != other.globalFreeExperience)
+        {
+            return globalFreeExperience > other.globalFreeExperience;
+        }
+
+        if (freeExperience != other.freeExperience)
+        {
+            return freeExperience > other.freeExperience;
+        }
+
+        if (!domainFreeExperience.empty() || !other.domainFreeExperience.empty())
+        {
+            // compare matched entries
+            int ourTotal = 0;
+            for (std::map<DomainTypes, int>::const_iterator ci(domainFreeExperience.begin()), ciEnd(domainFreeExperience.end()); ci != ciEnd; ++ci)
+            {
+                ourTotal += ci->second;
+
+                std::map<DomainTypes, int>::const_iterator otherIter = other.domainFreeExperience.find(ci->first);
+                if (otherIter != other.domainFreeExperience.end())
+                {
+                    if (otherIter->second != ci->second)
+                    {
+                        return ci->second > otherIter->second;
+                    }
+                }
+            }
+
+            // and the other way round
+            int theirTotal = 0;
+            for (std::map<DomainTypes, int>::const_iterator ci(other.domainFreeExperience.begin()), ciEnd(other.domainFreeExperience.end()); ci != ciEnd; ++ci)
+            {
+                theirTotal += ci->second;
+
+                std::map<DomainTypes, int>::const_iterator thisIter = domainFreeExperience.find(ci->first);
+                if (thisIter != domainFreeExperience.end())
+                {
+                    if (thisIter->second != ci->second)
+                    {
+                        return thisIter->second > ci->second;
+                    }
+                }
+            }
+
+            return ourTotal > theirTotal;
+        }
+
+        if (!combatTypeFreeExperience.empty() || !other.combatTypeFreeExperience.empty())
+        {
+            // compare matched entries
+            int ourTotal = 0;
+            for (std::map<UnitCombatTypes, int>::const_iterator ci(combatTypeFreeExperience.begin()), ciEnd(combatTypeFreeExperience.end()); ci != ciEnd; ++ci)
+            {
+                ourTotal += ci->second;
+
+                std::map<UnitCombatTypes, int>::const_iterator otherIter = other.combatTypeFreeExperience.find(ci->first);
+                if (otherIter != other.combatTypeFreeExperience.end())
+                {
+                    if (otherIter->second != ci->second)
+                    {
+                        return ci->second > otherIter->second;
+                    }
+                }
+            }
+
+            // and the other way round
+            int theirTotal = 0;
+            for (std::map<UnitCombatTypes, int>::const_iterator ci(other.combatTypeFreeExperience.begin()), ciEnd(other.combatTypeFreeExperience.end()); ci != ciEnd; ++ci)
+            {
+                theirTotal += ci->second;
+
+                std::map<UnitCombatTypes, int>::const_iterator thisIter = combatTypeFreeExperience.find(ci->first);
+                if (thisIter != combatTypeFreeExperience.end())
+                {
+                    if (thisIter->second != ci->second)
+                    {
+                        return thisIter->second > ci->second;
+                    }
+                }
+            }
+
+            return ourTotal > theirTotal;
+        }
+
+        // TODO - use data from unit analysis here
+        return freePromotion != NO_PROMOTION && other.freePromotion == NO_PROMOTION;
+    }
+
+    bool CityDefenceUnitValue::operator < (const CityDefenceUnitValue& other) const
+    {
+        return unitAnalysisValue / std::max<int>(1, nTurns) > other.unitAnalysisValue / std::max<int>(1, other.nTurns);
+    }
+
+    TotalOutput TacticSelectionData::getEconomicBuildingOutput(BuildingTypes buildingType, IDInfo city) const
+    {
+        TotalOutput output;
+        if (buildingType == NO_BUILDING)
+        {
+            return output;
+        }
+
+        BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(buildingType).getBuildingClassType();
+        const bool isWorldWonder = isWorldWonderClass(buildingClassType), isNationalWonder = isNationalWonderClass(buildingClassType);
+        if (isWorldWonder)
+        {
+            std::map<BuildingTypes, EconomicWonderValue>::const_iterator ci = economicWonders.find(buildingType);
+            if (ci != economicWonders.end())
+            {
+                for (size_t i = 0, count = ci->second.buildCityValues.size(); i < count; ++i)
+                {
+                    if (ci->second.buildCityValues[i].first == city && ci->second.buildCityValues[i].second.buildingType == buildingType)
+                    {
+                        return ci->second.buildCityValues[i].second.output;
+                    }
+                }
+            }
+        }
+        else if (isNationalWonder)
+        {
+            std::map<BuildingTypes, EconomicWonderValue>::const_iterator ci = nationalWonders.find(buildingType);
+            if (ci != nationalWonders.end())
+            {
+                for (size_t i = 0, count = ci->second.buildCityValues.size(); i < count; ++i)
+                {
+                    if (ci->second.buildCityValues[i].first == city && ci->second.buildCityValues[i].second.buildingType == buildingType)
+                    {
+                        return ci->second.buildCityValues[i].second.output;
+                    }
+                }
+            }
+        }
+        if (!isWorldWonder && !isNationalWonder)
+        {
+            for (std::set<EconomicBuildingValue>::const_iterator ci(economicBuildings.begin()), ciEnd(economicBuildings.end()); ci != ciEnd; ++ci)
+            {
+                if (ci->buildingType == buildingType)
+                {
+                    return ci->output;
+                }
+            }
+        }
+
+        return output;
+    }
+
     ConstructItem getConstructItem(const PlayerTactics& playerTactics, const City& city)
     {
 #ifdef ALTAI_DEBUG
@@ -1939,6 +2347,7 @@ namespace AltAI
 #endif
         CityBuildSelectionData selectionData(playerTactics, city);
 
+        // city buildings
         PlayerTactics::CityBuildingTacticsMap::const_iterator ci = playerTactics.cityBuildingTacticsMap_.find(city.getCvCity()->getIDInfo());
         if (ci != playerTactics.cityBuildingTacticsMap_.end())
         {
@@ -1949,10 +2358,35 @@ namespace AltAI
             }
 
             selectionData.tacticSelectionData.buildingsCityCanAssistWith = playerTactics.getBuildingsCityCanAssistWith(city.getCvCity()->getIDInfo());
+            selectionData.tacticSelectionData.dependentBuildings = playerTactics.getPossibleDependentBuildings(city.getCvCity()->getIDInfo());
         }
 
+        // city units
+        for (PlayerTactics::UnitTacticsMap::const_iterator iter(playerTactics.unitTacticsMap_.begin()),
+            endIter(playerTactics.unitTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            if (iter->second)
+            {
+                ICityUnitTacticsPtr pCityUnitTacticsPtr = iter->second->getCityTactics(city.getCvCity()->getIDInfo());
+                if (pCityUnitTacticsPtr)
+                {
+                    pCityUnitTacticsPtr->update(playerTactics.player, city.getCityData());
+                    pCityUnitTacticsPtr->apply(selectionData.tacticSelectionData);
+                }
+            }
+        }
+
+        // wonders
         for (PlayerTactics::LimitedBuildingsTacticsMap::const_iterator iter(playerTactics.globalBuildingsTacticsMap_.begin()),
             endIter(playerTactics.globalBuildingsTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            iter->second->update(playerTactics.player);
+            iter->second->apply(selectionData.tacticSelectionData);
+        }
+
+        // national wonders
+        for (PlayerTactics::LimitedBuildingsTacticsMap::const_iterator iter(playerTactics.nationalBuildingsTacticsMap_.begin()),
+            endIter(playerTactics.nationalBuildingsTacticsMap_.end()); iter != endIter; ++iter)
         {
             iter->second->update(playerTactics.player);
             iter->second->apply(selectionData.tacticSelectionData);
@@ -1968,7 +2402,9 @@ namespace AltAI
         selectionData.calculateSmallCultureBuilding();
         selectionData.calculateBestEconomicBuilding();
         selectionData.calculateBestEconomicWonder();
+        selectionData.calculateBestEconomicNationalWonder();
         selectionData.calculateBestEconomicDependentTactic();
+        selectionData.calculateBestLocalEconomicDependentTactic();
         selectionData.calculateBestMilitaryBuilding();
         selectionData.calculateBestProcesses();
 
@@ -1987,24 +2423,24 @@ namespace AltAI
         selectionData.calculateBestScoutUnit();
         selectionData.calculateBestUnits();
 
-        selectionData.debug();
+        //selectionData.debug();
 
         ConstructItem selection = selectionData.getSelection();
 
 #ifdef ALTAI_DEBUG
         CityDataPtr pCityData = city.getCityData()->clone();
         std::vector<IProjectionEventPtr> events;
-        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pCityData)));
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
         if (selection.buildingType != NO_BUILDING)
         {            
             pCityData->pushBuilding(selection.buildingType);
-            events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCityData, playerTactics.player.getAnalysis()->getBuildingInfo(selection.buildingType))));
+            events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCityData->getCity(), playerTactics.player.getAnalysis()->getBuildingInfo(selection.buildingType))));
         }
         else if (selection.unitType != NO_UNIT)
         {
             pCityData->pushUnit(selection.unitType);
-            events.push_back(IProjectionEventPtr(new ProjectionUnitEvent(pCityData, playerTactics.player.getAnalysis()->getUnitInfo(selection.unitType))));
+            events.push_back(IProjectionEventPtr(new ProjectionUnitEvent(pCityData->getCity(), playerTactics.player.getAnalysis()->getUnitInfo(selection.unitType))));
         }
 
         ProjectionLadder projection = getProjectedOutput(playerTactics.player, pCityData, 50, events);

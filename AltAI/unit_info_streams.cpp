@@ -177,6 +177,21 @@ namespace AltAI
         return os;
     }
 
+    std::ostream& operator << (std::ostream& os, const UnitInfo::CorporationNode& node)
+    {
+        os << "\n\t can spread: ";
+        for (size_t i = 0, count = node.corporationSpreads.size(); i < count; ++i)
+        {
+            os << gGlobals.getCorporationInfo(node.corporationSpreads[i].first).getType() << " prob = " << node.corporationSpreads[i].second;
+        }
+
+        if (node.prereqCorporation != NO_CORPORATION)
+        {
+            os << " requires corporation: " << gGlobals.getCorporationInfo(node.prereqCorporation).getType();
+        }
+        return os;
+    }
+
     std::ostream& operator << (std::ostream& os, const UnitInfo::MiscAbilityNode& node)
     {
         if (node.canFoundCity)
@@ -219,6 +234,16 @@ namespace AltAI
                 os << ", ";
             }
             os << gGlobals.getTechInfo(node.techTypes[i]).getType();
+        }
+
+        if (node.prereqBuildingType != NO_BUILDING)
+        {
+            os << " requires: " << gGlobals.getBuildingInfo(node.prereqBuildingType).getType() << " ";
+        }
+
+        if (node.specialUnitType != NO_SPECIALUNIT)
+        {
+            os << " requires: " << gGlobals.getSpecialUnitInfo(node.specialUnitType).getType() << " ";
         }
 
         for (size_t i = 0, count = node.nodes.size(); i < count; ++i)

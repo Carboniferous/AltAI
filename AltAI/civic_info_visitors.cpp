@@ -586,7 +586,6 @@ namespace AltAI
             }
         }
 
-        // hurrying is useful for building units too
         result_type operator() (const CivicInfo::BuildingNode& node) const
         {
             if (isAdding_)

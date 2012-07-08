@@ -1,11 +1,16 @@
 #include "./unit_tactics_visitors.h"
 #include "./unit_info.h"
 #include "./unit_info_visitors.h"
+#include "./city_unit_tactics.h"
+#include "./building_tactics_items.h"
+#include "./unit_tactics_items.h"
+#include "./building_tactics_deps.h"
 #include "./tactic_actions.h"
 #include "./tactic_streams.h"
 #include "./player.h"
 #include "./player_analysis.h"
 #include "./unit_analysis.h"
+#include "./iters.h"
 #include "./helper_fns.h"
 #include "./city.h"
 #include "./civ_helper.h"
@@ -197,6 +202,182 @@ namespace AltAI
         ConstructItem constructItem_;
     };
 
+    class MakeUnitTacticsDependenciesVisitor : public boost::static_visitor<>
+    {
+    public:
+        MakeUnitTacticsDependenciesVisitor(const Player& player, const City& city)
+            : player_(player), city_(city)
+        {
+        }
+
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const UnitInfo::BaseNode& node)
+        {
+            if (!(node.andBonusTypes.empty() && node.orBonusTypes.empty()))
+            {
+                std::vector<BonusTypes> missingAndBonuses, missingOrBonuses;
+                for (size_t i = 0, count = node.andBonusTypes.size(); i < count; ++i)
+                {
+                    if (!city_.getCvCity()->hasBonus(node.andBonusTypes[i]))
+                    {
+                        missingAndBonuses.push_back(node.andBonusTypes[i]);
+                    }
+                }
+
+                for (size_t i = 0, count = node.orBonusTypes.size(); i < count; ++i)
+                {
+                    if (city_.getCvCity()->hasBonus(node.orBonusTypes[i]))
+                    {
+                        missingOrBonuses.clear();
+                        break;
+                    }
+                    else
+                    {
+                        missingOrBonuses.push_back(node.orBonusTypes[i]);
+                    }
+                }
+
+                if (!missingAndBonuses.empty())
+                {
+                    dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(missingAndBonuses, node.unitType, false)));
+                }
+
+                if (!missingOrBonuses.empty())
+                {
+                    dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(missingOrBonuses, node.unitType, true)));
+                }
+            }
+
+            for (size_t i = 0, count = node.techTypes.size(); i < count; ++i)
+            {
+                if (player_.getTechResearchDepth(node.techTypes[i]) > 0)
+                {
+                    dependentTactics_.push_back(IDependentTacticPtr(new ResearchTechDependency(node.techTypes[i])));
+                }
+            }
+
+            bool passedBuildingCheck = node.prereqBuildingType == NO_BUILDING;
+            if (!passedBuildingCheck)
+            {
+                SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)gGlobals.getBuildingInfo(node.prereqBuildingType).getSpecialBuildingType();
+                if (specialBuildingType != NO_SPECIALBUILDING)
+                {
+                    passedBuildingCheck = player_.getCivHelper()->getSpecialBuildingNotRequiredCount(specialBuildingType) > 0;
+                }
+            }
+
+            if (!passedBuildingCheck)
+            {
+                passedBuildingCheck = city_.getCvCity()->getNumBuilding(node.prereqBuildingType) > 0;
+            }
+
+            if (!passedBuildingCheck)
+            {
+                dependentTactics_.push_back(IDependentTacticPtr(new CityBuildingDependency(node.prereqBuildingType)));
+            }
+        }
+
+        const std::vector<IDependentTacticPtr>& getDependentTactics() const
+        {
+            return dependentTactics_;
+        }
+
+    private:
+        const Player& player_;
+        const City& city_;
+        std::vector<IDependentTacticPtr> dependentTactics_;
+    };
+
+    class MakeUnitTacticsVisitor : public boost::static_visitor<>
+    {
+    public:
+        MakeUnitTacticsVisitor(const Player& player, const City& city, UnitTypes unitType)
+            : unitInfo_(gGlobals.getUnitInfo(unitType)), player_(player), city_(city), unitType_(unitType)
+        {
+            pUnitAnalysis_ = player_.getAnalysis()->getUnitAnalysis();           
+        }
+
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const UnitInfo::BaseNode& node)
+        {
+            pTactic_ = ICityUnitTacticsPtr(new CityUnitTactic(unitType_, city_.getCvCity()->getIDInfo()));
+
+            MakeUnitTacticsDependenciesVisitor dependentTacticsVisitor(player_, city_);
+            dependentTacticsVisitor(node);
+
+            const std::vector<IDependentTacticPtr>& dependentTactics = dependentTacticsVisitor.getDependentTactics();
+            for (size_t i = 0, count = dependentTactics.size(); i < count; ++i)
+            {
+                pTactic_->addDependency(dependentTactics[i]);
+            }
+
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                boost::apply_visitor(*this, node.nodes[i]);
+            }
+
+            
+        }
+
+        void operator() (const UnitInfo::CityCombatNode& node)
+        {
+        }
+
+        void operator() (const UnitInfo::CollateralNode& node)
+        {
+        }
+
+        void operator() (const UnitInfo::ReligionNode& node)
+        {
+        }
+        
+        void operator() (const UnitInfo::MiscAbilityNode& node)
+        {
+        }
+
+        void operator() (const UnitInfo::BuildNode& node)
+        {
+        }
+
+        void operator() (const UnitInfo::PromotionsNode& node)
+        {
+            
+        }
+        
+        void operator() (const UnitInfo::CombatBonusNode& node)
+        {
+        }
+
+        void operator() (const UnitInfo::AirCombatNode& node)
+        {
+        }
+
+        void operator() (const UnitInfo::UpgradeNode& node)
+        {
+        }
+
+        const ICityUnitTacticsPtr& getTactic() const
+        {
+            return pTactic_;
+        }
+
+    private:
+        UnitTypes unitType_;
+        const CvUnitInfo& unitInfo_;
+        const Player& player_;
+        const City& city_;
+        ICityUnitTacticsPtr pTactic_;
+        boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;
+    };
+
     ConstructItem getEconomicUnitTactics(const Player& player, UnitTypes unitType, const boost::shared_ptr<UnitInfo>& pUnitInfo)
     {
         MakeEconomicUnitConditionsVisitor visitor(player, unitType);
@@ -211,5 +392,84 @@ namespace AltAI
         boost::apply_visitor(visitor, pUnitInfo->getInfo());
 
         return visitor.getConstructItem();
+    }
+
+    ICityUnitTacticsPtr makeCityUnitTactics(const Player& player, const City& city, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    {
+        const UnitTypes unitType = pUnitInfo->getUnitType();
+        const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(pUnitInfo->getUnitType());
+        boost::shared_ptr<UnitAnalysis> pUnitAnalysis = player.getAnalysis()->getUnitAnalysis();   
+
+        MakeUnitTacticsVisitor visitor(player, city, pUnitInfo->getUnitType());
+        boost::apply_visitor(visitor, pUnitInfo->getInfo());
+        ICityUnitTacticsPtr pCityUnitTactics = visitor.getTactic();
+
+        int maxPromotionLevel = 0;
+        int freeExperience = ((CvCity*)city.getCvCity())->getProductionExperience(unitType);
+        int requiredExperience = 2;
+        while (freeExperience > requiredExperience)
+        {
+            // TODO - handle charismatic
+            requiredExperience += 2 * ++maxPromotionLevel + 1;
+        }
+       
+        {
+            UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
+
+            UnitData unitData(unitInfo);
+            for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		    {
+			    unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		    }
+
+            if (unitData.cityAttackPercent > 0)
+            {
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityAttackUnitTactic()));
+            }
+        }
+
+        {
+            UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityDefencePromotions(unitType, maxPromotionLevel);
+
+            UnitData unitData(unitInfo);
+            for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		    {
+			    unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		    }
+
+            if (unitData.cityDefencePercent > 0)
+            {
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityDefenceUnitTactic()));
+            }
+        }
+
+        return pCityUnitTactics;
+    }
+
+    IUnitTacticsPtr makeUnitTactics(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    {
+        const int lookAheadDepth = 2;
+        if (couldConstructUnit(player, lookAheadDepth, pUnitInfo, true))
+        {
+            const UnitTypes unitType = pUnitInfo->getUnitType();
+            const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+
+            IUnitTacticsPtr pTactic(new UnitTactic(unitType));
+
+            CityIter iter(*player.getCvPlayer());
+
+            while (CvCity* pCity = iter())
+            {
+#ifdef ALTAI_DEBUG
+                CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for unit: " << unitInfo.getType();
+#endif
+                
+                pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, player.getCity(pCity->getID()), pUnitInfo));               
+            }
+
+            return pTactic;
+        }
+
+        return IUnitTacticsPtr();
     }
 }

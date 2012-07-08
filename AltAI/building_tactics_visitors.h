@@ -17,5 +17,5 @@ namespace AltAI
     ILimitedBuildingTacticsPtr makeGlobalBuildingTactics(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
     ILimitedBuildingTacticsPtr makeNationalBuildingTactics(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 
-    TotalOutput getProjectedEconomicImpact(const Player& player, const City& city, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int selectedEconomicFlags);
+    IProcessTacticsPtr makeProcessTactics(const Player& player, ProcessTypes processType);
 }

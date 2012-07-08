@@ -443,6 +443,11 @@ namespace AltAI
                     {
                         pCityData_->getModifiersHelper()->changeCommerceModifier(node.modifier);
                     }
+
+                    if (!isEmpty(node.stateReligionCommerce))
+                    {
+                        pCityData_->getModifiersHelper()->changeStateReligionCommerceModifier(node.stateReligionCommerce);
+                    }
                 }
             }
 
@@ -1416,5 +1421,58 @@ namespace AltAI
         }
 
         return true;
+    }
+
+    class BuildingProjectionEventVisitor : public boost::static_visitor<>
+    {
+    public:
+        BuildingProjectionEventVisitor(const Player& player, int baseTurn)
+            : baseTurn_(baseTurn)
+        {
+            civHelper_ = player.getCivHelper();
+            pAnalysis_ = player.getAnalysis();
+        }
+
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const BuildingInfo::BaseNode& node)
+        {
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                boost::apply_visitor(*this, node.nodes[i]);
+            }
+        }
+
+        void operator() (const BuildingInfo::MiscEffectNode& node)
+        {
+            for (size_t i = 0, count = node.civicTypes.size(); i < count; ++i)
+            {
+                if (!civHelper_->civicIsAvailable(node.civicTypes[i]) && !civHelper_->isInCivic(node.civicTypes[i]))
+                {
+                    events_.push_back(IProjectionEventPtr(new ProjectionChangeCivicEvent(pAnalysis_->getCivicInfo(node.civicTypes[i]), baseTurn_)));
+                }
+            }
+        }
+
+        const std::vector<IProjectionEventPtr>& getEvents() const
+        {
+            return events_;
+        }
+
+    private:
+        boost::shared_ptr<CivHelper> civHelper_;
+        boost::shared_ptr<PlayerAnalysis> pAnalysis_;
+        std::vector<IProjectionEventPtr> events_;
+        const int baseTurn_;
+    };
+
+    std::vector<IProjectionEventPtr> getPossibleEvents(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int baseEventTurn)
+    {
+        BuildingProjectionEventVisitor visitor(player, baseEventTurn);
+        boost::apply_visitor(visitor, pBuildingInfo->getInfo());
+        return visitor.getEvents();
     }
 }

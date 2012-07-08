@@ -354,6 +354,15 @@ namespace AltAI
         {
             os << " gives free building: " << gGlobals.getBuildingInfo(node.freeBuildingType).getType();
         }
+        if (!node.civicTypes.empty())
+        {
+            os << " allows civics: ";
+            for (size_t i = 0, count = node.civicTypes.size(); i < count; ++i)
+            {
+                if (i > 0) os << ", ";
+                os << gGlobals.getCivicInfo(node.civicTypes[i]).getType();
+            }
+        }
         return os;
     }
 

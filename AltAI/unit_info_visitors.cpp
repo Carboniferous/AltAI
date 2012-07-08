@@ -29,7 +29,8 @@ namespace AltAI
     class CouldConstructUnitVisitor : public boost::static_visitor<bool>
     {
     public:
-        CouldConstructUnitVisitor(const Player& player, int lookaheadDepth) : player_(player), lookaheadDepth_(lookaheadDepth)
+        CouldConstructUnitVisitor(const Player& player, int lookaheadDepth, bool ignoreRequiredResources)
+            : player_(player), lookaheadDepth_(lookaheadDepth), ignoreRequiredResources_(ignoreRequiredResources)
         {
             civHelper_ = player.getCivHelper();
             pAnalysis_ = player.getAnalysis();
@@ -38,7 +39,7 @@ namespace AltAI
         template <typename T>
             bool operator() (const T&) const
         {
-            return false;
+            return true;
         }
 
         bool operator() (const UnitInfo::ReligionNode& node) const
@@ -57,7 +58,26 @@ namespace AltAI
                 }
             }
 
-            return false;
+            return node.prereqReligion == NO_RELIGION;
+        }
+
+        bool operator() (const UnitInfo::CorporationNode& node) const
+        {
+            if (node.prereqCorporation != NO_CORPORATION)
+            {
+                CityIter cityIter(*player_.getCvPlayer());
+                CvCity* pCity;
+
+                while (pCity = cityIter())
+                {
+                    if (pCity->isHasCorporation(node.prereqCorporation))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return node.prereqCorporation == NO_CORPORATION;
         }
 
         bool operator() (const UnitInfo::BaseNode& node) const
@@ -76,9 +96,26 @@ namespace AltAI
                 }
             }
 
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                if (!boost::apply_visitor(*this, node.nodes[i]))
+                {
+                    return false;
+                }
+            }
+
+            if (node.specialUnitType != NO_SPECIALUNIT)
+            {
+                if (!gGlobals.getGame().isSpecialUnitValid(node.specialUnitType))
+                {
+                    return false;
+                }
+            }
+
             // todo - add religion and any other checks
-            bool passedAreaCheck = !(node.minAreaSize > -1), passedBonusCheck = node.andBonusTypes.empty() && node.orBonusTypes.empty();
+            bool passedAreaCheck = !(node.minAreaSize > -1), passedBonusCheck = ignoreRequiredResources_ || (node.andBonusTypes.empty() && node.orBonusTypes.empty());
             bool passedBuildingCheck = node.prereqBuildingType == NO_BUILDING;
+
             if (!passedBuildingCheck)
             {
                 SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)gGlobals.getBuildingInfo(node.prereqBuildingType).getSpecialBuildingType();
@@ -155,13 +192,14 @@ namespace AltAI
     private:
         const Player& player_;
         int lookaheadDepth_;
+        bool ignoreRequiredResources_;
         boost::shared_ptr<CivHelper> civHelper_;
         boost::shared_ptr<PlayerAnalysis> pAnalysis_;
     };
 
-    bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources)
     {
-        CouldConstructUnitVisitor visitor(player, lookaheadDepth);
+        CouldConstructUnitVisitor visitor(player, lookaheadDepth, ignoreRequiredResources);
         return boost::apply_visitor(visitor, pUnitInfo->getInfo());
     }
 

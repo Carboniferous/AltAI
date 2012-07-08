@@ -599,6 +599,12 @@
 				RelativePath=".\building_tactics.h">
 			</File>
 			<File
+				RelativePath=".\building_tactics_deps.cpp">
+			</File>
+			<File
+				RelativePath=".\building_tactics_deps.h">
+			</File>
+			<File
 				RelativePath=".\building_tactics_items.cpp">
 			</File>
 			<File
@@ -611,10 +617,22 @@
 				RelativePath=".\building_tactics_visitors.h">
 			</File>
 			<File
+				RelativePath=".\city_building_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\city_building_tactics.h">
+			</File>
+			<File
 				RelativePath=".\city_tactics.cpp">
 			</File>
 			<File
 				RelativePath=".\city_tactics.h">
+			</File>
+			<File
+				RelativePath=".\city_unit_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\city_unit_tactics.h">
 			</File>
 			<File
 				RelativePath=".\project_tactics.cpp">
@@ -639,6 +657,9 @@
 			</File>
 			<File
 				RelativePath=".\tactic_streams.h">
+			</File>
+			<File
+				RelativePath=".\tactics_interfaces.cpp">
 			</File>
 			<File
 				RelativePath=".\tactics_interfaces.h">
@@ -672,6 +693,12 @@
 			</File>
 			<File
 				RelativePath=".\unit_tactics.h">
+			</File>
+			<File
+				RelativePath=".\unit_tactics_items.cpp">
+			</File>
+			<File
+				RelativePath=".\unit_tactics_items.h">
 			</File>
 			<File
 				RelativePath=".\unit_tactics_visitors.cpp">

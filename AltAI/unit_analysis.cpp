@@ -11,103 +11,6 @@ namespace AltAI
 {
     namespace
     {
-        struct UnitData
-        {
-            enum Flags
-            {
-                None = 0, CityAttack = (1 << 0)
-            };
-
-            explicit UnitData(const CvUnitInfo& unitInfo_) :
-                unitInfo(unitInfo_),
-                combat(100 * unitInfo.getCombat()), 
-                firstStrikes(unitInfo.getFirstStrikes()),
-                chanceFirstStrikes(unitInfo.getChanceFirstStrikes()),
-                firePower(unitInfo.getCombat()),
-                combatLimit(unitInfo.getCombatLimit()),
-                cityAttackPercent(unitInfo.getCityAttackModifier()), cityDefencePercent(unitInfo.getCityDefenseModifier()),
-                immuneToFirstStrikes(unitInfo.isFirstStrikeImmune())
-            {
-            }
-
-            void applyPromotion(const CvPromotionInfo& promotion)
-            {
-                combat += unitInfo.getCombat() * promotion.getCombatPercent();
-                firstStrikes += promotion.getFirstStrikesChange();
-                chanceFirstStrikes += promotion.getChanceFirstStrikesChange();
-                if (promotion.isImmuneToFirstStrikes())
-                {
-                    immuneToFirstStrikes = true;
-                }
-
-                cityAttackPercent += promotion.getCityAttackPercent();
-                cityDefencePercent += promotion.getCityDefensePercent();
-
-                for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
-                {
-                    if (promotion.getUnitCombatModifierPercent(i) != 0)
-                    {
-                        unitCombatModifiers[(UnitCombatTypes)i] += promotion.getUnitCombatModifierPercent(i);
-                    }
-                }
-            }
-
-			// calculate our strength as defender
-            int calculateStrength(const UnitData& other, int flags = 0) const
-            {
-				// unit class type modifiers - add defence, subtract the other unit's attack modifier
-                int modifier = unitInfo.getUnitClassDefenseModifier(other.unitInfo.getUnitClassType());
-                modifier -= other.unitInfo.getUnitClassAttackModifier(unitInfo.getUnitClassType());
-				// unit type modifiers - add defence, subtract other's attack bonus
-                modifier += unitInfo.getUnitCombatModifier(other.unitInfo.getUnitCombatType());
-                modifier -= other.unitInfo.getUnitCombatModifier(unitInfo.getUnitCombatType());
-
-                std::map<UnitCombatTypes, int>::const_iterator ci = unitCombatModifiers.find((UnitCombatTypes)other.unitInfo.getUnitCombatType());
-                if (ci != unitCombatModifiers.end())
-                {
-                    modifier += ci->second;
-                }
-
-                ci = other.unitCombatModifiers.find((UnitCombatTypes)unitInfo.getUnitCombatType());
-                if (ci != other.unitCombatModifiers.end())
-                {
-                    modifier -= ci->second;
-                }
-
-				// if attacker is attacking a city (so we are the defender)
-                if (flags & CityAttack)
-                {
-					// subtract attacker's city attack bonus and add our city defence bonus
-                    modifier -= other.cityAttackPercent;
-                    modifier += cityDefencePercent;
-                }
-
-                int strength = combat;
-                if (modifier > 0)
-	            {
-		            strength = strength * (modifier + 100);
-	            }
-	            else
-	            {
-		            strength = (strength * 10000) / (100 - modifier);
-	            }
-                return strength / 100;
-            }
-
-            // calculate our strength as attacker
-            int calculateStrength(int flags) const
-            {
-                return combat;
-            }
-
-            const CvUnitInfo& unitInfo;
-
-            int combat, firstStrikes, chanceFirstStrikes, firePower, combatLimit;
-            int cityAttackPercent, cityDefencePercent;
-            bool immuneToFirstStrikes;
-            std::map<UnitCombatTypes, int> unitCombatModifiers;
-        };
-
         int getCombatOdds(const UnitData& attacker, const UnitData& defender, int flags = 0)
         {
             const int attHP = gGlobals.getMAX_HIT_POINTS();
@@ -213,6 +116,88 @@ namespace AltAI
                 return 2 * promotionInfo.getFirstStrikesChange() + promotionInfo.getChanceFirstStrikesChange();
             }
         };
+    }
+
+    UnitData::UnitData(const CvUnitInfo& unitInfo_) :
+        unitInfo(unitInfo_),
+        combat(100 * unitInfo.getCombat()), 
+        firstStrikes(unitInfo.getFirstStrikes()),
+        chanceFirstStrikes(unitInfo.getChanceFirstStrikes()),
+        firePower(unitInfo.getCombat()),
+        combatLimit(unitInfo.getCombatLimit()),
+        cityAttackPercent(unitInfo.getCityAttackModifier()), cityDefencePercent(unitInfo.getCityDefenseModifier()),
+        immuneToFirstStrikes(unitInfo.isFirstStrikeImmune())
+    {
+    }
+
+    void UnitData::applyPromotion(const CvPromotionInfo& promotion)
+    {
+        combat += unitInfo.getCombat() * promotion.getCombatPercent();
+        firstStrikes += promotion.getFirstStrikesChange();
+        chanceFirstStrikes += promotion.getChanceFirstStrikesChange();
+        if (promotion.isImmuneToFirstStrikes())
+        {
+            immuneToFirstStrikes = true;
+        }
+
+        cityAttackPercent += promotion.getCityAttackPercent();
+        cityDefencePercent += promotion.getCityDefensePercent();
+
+        for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
+        {
+            if (promotion.getUnitCombatModifierPercent(i) != 0)
+            {
+                unitCombatModifiers[(UnitCombatTypes)i] += promotion.getUnitCombatModifierPercent(i);
+            }
+        }
+    }
+
+	// calculate our strength as defender
+    int UnitData::calculateStrength(const UnitData& other, int flags) const
+    {
+		// unit class type modifiers - add defence, subtract the other unit's attack modifier
+        int modifier = unitInfo.getUnitClassDefenseModifier(other.unitInfo.getUnitClassType());
+        modifier -= other.unitInfo.getUnitClassAttackModifier(unitInfo.getUnitClassType());
+		// unit type modifiers - add defence, subtract other's attack bonus
+        modifier += unitInfo.getUnitCombatModifier(other.unitInfo.getUnitCombatType());
+        modifier -= other.unitInfo.getUnitCombatModifier(unitInfo.getUnitCombatType());
+
+        std::map<UnitCombatTypes, int>::const_iterator ci = unitCombatModifiers.find((UnitCombatTypes)other.unitInfo.getUnitCombatType());
+        if (ci != unitCombatModifiers.end())
+        {
+            modifier += ci->second;
+        }
+
+        ci = other.unitCombatModifiers.find((UnitCombatTypes)unitInfo.getUnitCombatType());
+        if (ci != other.unitCombatModifiers.end())
+        {
+            modifier -= ci->second;
+        }
+
+		// if attacker is attacking a city (so we are the defender)
+        if (flags & CityAttack)
+        {
+			// subtract attacker's city attack bonus and add our city defence bonus
+            modifier -= other.cityAttackPercent;
+            modifier += cityDefencePercent;
+        }
+
+        int strength = combat;
+        if (modifier > 0)
+	    {
+		    strength = strength * (modifier + 100);
+	    }
+	    else
+	    {
+		    strength = (strength * 10000) / (100 - modifier);
+	    }
+        return strength / 100;
+    }
+
+    // calculate our strength as attacker
+    int UnitData::calculateStrength(int flags) const
+    {
+        return combat;
     }
 
     UnitAnalysis::UnitAnalysis(const Player& player) : player_(player)
@@ -357,31 +342,33 @@ namespace AltAI
     int UnitAnalysis::getCurrentUnitValue(UnitTypes unitType) const
     {
         int value = 0, maxValue = 0;
+        const int minValue = 600;
         CombatDataMap::const_iterator ci = combatDataMap_.find(unitType);
         if (ci != combatDataMap_.end())
         {
             for (UnitCombatDataMap::const_iterator iter = ci->second.begin(), iterEnd = ci->second.end(); iter != iterEnd; ++iter)
             {
-                if (iter->second.attackOdds > 200)
-                {
-                    value += iter->second.attackOdds;
-                    maxValue += 1000;
-                }
+                maxValue += 2000;
 
-                if (iter->second.defenceOdds > 200)
+                if (iter->second.attackOdds > minValue)
+                {
+                    value += iter->second.attackOdds;                 
+                }                
+
+                if (iter->second.defenceOdds > minValue)
                 {
                     value += iter->second.defenceOdds;
-                    maxValue += 1000;
                 }                
             }
         }
 
-        return (100 * value) / std::max<int>(1, maxValue);
+        return std::max<int>(1, (1000 * value) / std::max<int>(1, maxValue));
     }
 
     int UnitAnalysis::getCityAttackUnitValue(UnitTypes unitType) const
     {
         int value = 0, maxValue = 0;
+        const int minValue = 600;
         UnitCombatInfoMap::const_iterator ci = cityAttackUnitValues_.find(unitType);
         if (ci != cityAttackUnitValues_.end())
         {
@@ -393,20 +380,23 @@ namespace AltAI
                 {
                     for (UnitAITypesCombatOddsMap::const_iterator oddsIter(AIIter->second.begin()), oddsEndIter(AIIter->second.end()); oddsIter != oddsEndIter; ++oddsIter)
                     {
-                        value += oddsIter->second.first;
+                        if (oddsIter->second.first > minValue)
+                        {
+                            value += oddsIter->second.first;
+                        }
                         maxValue += 1000;
                     }
                 }
             }
         }
 
-        int finalValue = (100 * value) / std::max<int>(1, maxValue);
-        return finalValue == 0 && value > 0 ? 1 : finalValue;
+        return std::max<int>(1, (1000 * value) / std::max<int>(1, maxValue));
     }
 
     int UnitAnalysis::getCityDefenceUnitValue(UnitTypes unitType) const
     {
         int value = 0, maxValue = 0;
+        const int minValue = 600;
         UnitCombatInfoMap::const_iterator ci = cityDefenceUnitValues_.find(unitType);
         if (ci != cityDefenceUnitValues_.end())
         {
@@ -418,20 +408,23 @@ namespace AltAI
                 {
                     for (UnitAITypesCombatOddsMap::const_iterator oddsIter(AIIter->second.begin()), oddsEndIter(AIIter->second.end()); oddsIter != oddsEndIter; ++oddsIter)
                     {
-                        value += oddsIter->second.first;
+                        if (oddsIter->second.first > minValue)
+                        {
+                            value += oddsIter->second.first;
+                        }
                         maxValue += 1000;
                     }
                 }
             }
         }
 
-        int finalValue = (100 * value) / std::max<int>(1, maxValue);
-        return finalValue == 0 && value > 0 ? 1 : finalValue;
+        return std::max<int>(1, (1000 * value) / std::max<int>(1, maxValue));
     }
 
     int UnitAnalysis::getAttackUnitValue(UnitTypes unitType) const
     {
         int value = 0, maxValue = 0;
+        const int minValue = 600;
         UnitCombatInfoMap::const_iterator ci = attackUnitValues_.find(unitType);
         if (ci != attackUnitValues_.end())
         {
@@ -443,20 +436,23 @@ namespace AltAI
                 {
                     for (UnitAITypesCombatOddsMap::const_iterator oddsIter(AIIter->second.begin()), oddsEndIter(AIIter->second.end()); oddsIter != oddsEndIter; ++oddsIter)
                     {
-                        value += oddsIter->second.first;
+                        if (oddsIter->second.first > minValue)
+                        {
+                            value += oddsIter->second.first;
+                        }
                         maxValue += 1000;
                     }
                 }
             }
         }
 
-        int finalValue = (100 * value) / std::max<int>(1, maxValue);
-        return finalValue == 0 && value > 0 ? 1 : finalValue;
+        return std::max<int>(1, (1000 * value) / std::max<int>(1, maxValue));
     }
 
     int UnitAnalysis::getDefenceUnitValue(UnitTypes unitType) const
     {
         int value = 0, maxValue = 0;
+        const int minValue = 600;
         UnitCombatInfoMap::const_iterator ci = defenceUnitValues_.find(unitType);
         if (ci != defenceUnitValues_.end())
         {
@@ -468,20 +464,23 @@ namespace AltAI
                 {
                     for (UnitAITypesCombatOddsMap::const_iterator oddsIter(AIIter->second.begin()), oddsEndIter(AIIter->second.end()); oddsIter != oddsEndIter; ++oddsIter)
                     {
-                        value += oddsIter->second.first;
+                        if (oddsIter->second.first > minValue)
+                        {
+                            value += oddsIter->second.first;
+                        }
                         maxValue += 1000;
                     }
                 }
             }
         }
 
-        int finalValue = (100 * value) / std::max<int>(1, maxValue);
-        return finalValue == 0 && value > 0 ? 1 : finalValue;
+        return std::max<int>(1, (1000 * value) / std::max<int>(1, maxValue));
     }
 
     int UnitAnalysis::getUnitCounterValue(UnitTypes unitType, UnitCombatTypes unitCombatType) const
     {
         int value = 0, maxValue = 0;
+        const int minValue = 600;
         UnitCombatInfoMap::const_iterator ci = attackUnitCounterValues_.find(unitType);
         if (ci != attackUnitCounterValues_.end())
         {
@@ -495,7 +494,10 @@ namespace AltAI
                     {
                         for (UnitAITypesCombatOddsMap::const_iterator oddsIter(AIIter->second.begin()), oddsEndIter(AIIter->second.end()); oddsIter != oddsEndIter; ++oddsIter)
                         {
-                            value += oddsIter->second.first;
+                            if (oddsIter->second.first > minValue)
+                            {
+                                value += oddsIter->second.first;
+                            }
                             maxValue += 1000;
                         }
                     }
@@ -503,9 +505,7 @@ namespace AltAI
             }
         }
 
-        
-        int finalValue = (100 * value) / std::max<int>(1, maxValue);
-        return finalValue == 0 && value > 0 ? 1 : finalValue;
+        return (1000 * value) / std::max<int>(1, maxValue);
     }
 
     UnitAnalysis::RemainingLevelsAndPromotions UnitAnalysis::getCityAttackPromotions(UnitTypes unitType, int level) const
@@ -919,7 +919,7 @@ namespace AltAI
 		for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
 		{
 #ifdef ALTAI_DEBUG
-            //os << "\n\tfor level: " << i;
+            os << "\n\tfor level: " << i;
 #endif
 			RemainingLevelsAndPromotions attackPromotions = getCityAttackPromotions(unitType, i);
 
@@ -928,13 +928,13 @@ namespace AltAI
 				attackPromotions = getCombatPromotions(unitType, i);
 			}
 #ifdef ALTAI_DEBUG
-            //os << " attack promotions = ";
+            os << " attack promotions = ";
 #endif
 			UnitData attacker(unitInfo);
 			for (Promotions::const_iterator ci(attackPromotions.second.begin()), ciEnd(attackPromotions.second.end()); ci != ciEnd; ++ci)
 			{
 #ifdef ALTAI_DEBUG
-                //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
+                os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
 #endif
 				attacker.applyPromotion(gGlobals.getPromotionInfo(*ci));
 			}
@@ -956,26 +956,29 @@ namespace AltAI
 							defencePromotions = getCombatPromotions(defaultUnit, i);
 						}
 #ifdef ALTAI_DEBUG
-                        //os << "\n defender promotions = ";
+                        os << "\n defender promotions = ";
 #endif
 						UnitData defender(otherUnitInfo);
 						for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
 						{
 #ifdef ALTAI_DEBUG
-                            //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
+                            os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
 #endif
 							defender.applyPromotion(gGlobals.getPromotionInfo(*ci));
 						}
 
 						int attackOdds = getCombatOdds(attacker, defender, UnitData::CityAttack);
 #ifdef ALTAI_DEBUG
-                        /*os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(UnitData::CityAttack) 
+                        os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(UnitData::CityAttack) 
                            << " defence str = " << defender.calculateStrength(attacker, UnitData::CityAttack)
                            << " attacker combat = " << attacker.combat << " defender combat = " << defender.combat
-                           << " city attack % = " << attacker.cityAttackPercent; */
+                           << " city attack % = " << attacker.cityAttackPercent;
 #endif
 						int defenceOdds = getCombatOdds(defender, attacker, UnitData::CityAttack);
 
+#ifdef ALTAI_DEBUG
+                        os << "\n\t attack = " << attackOdds << ", defence = " << defenceOdds;
+#endif
 						if (attackOdds > 0)
 						{
 							cityAttackUnitValues_[unitType][i][defaultUnit].insert(std::make_pair(UNITAI_CITY_DEFENSE, std::make_pair(attackOdds, 1000 - defenceOdds)));

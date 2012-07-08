@@ -2,96 +2,19 @@
 
 #include "./utils.h"
 #include "./tactics_interfaces.h"
-#include "./city_projections.h"
 
 namespace AltAI
 {
-    class ResearchTechDependency : public IDependentTactic
+    class EconomicBuildingTactic : public ICityBuildingTactic
     {
     public:
-        explicit ResearchTechDependency(TechTypes techType);
-        virtual void apply(const CityDataPtr& pCityData);
-        virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-
         virtual void debug(std::ostream& os) const;
+        virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
 
-    private:
-        TechTypes techType_;
-    };
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
 
-    class CityBuildingDependency : public IDependentTactic
-    {
-    public:
-        explicit CityBuildingDependency(BuildingTypes buildingType);
-        virtual void apply(const CityDataPtr& pCityData);
-        virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-
-        virtual void debug(std::ostream& os) const;
-
-    private:
-        BuildingTypes buildingType_;
-    };
-
-    class CivBuildingDependency : public IDependentTactic
-    {
-    public:
-        CivBuildingDependency(BuildingTypes buildingType, int count);
-        virtual void apply(const CityDataPtr& pCityData);
-        virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-
-        virtual void debug(std::ostream& os) const;
-
-    private:        
-        BuildingTypes buildingType_;
-        int count_;
-    };
-
-    class ReligiousDependency : public IDependentTactic
-    {
-    public:
-        ReligiousDependency(ReligionTypes religionType, UnitTypes unitType);
-        virtual void apply(const CityDataPtr& pCityData);
-        virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-
-        virtual void debug(std::ostream& os) const;
-
-    private:        
-        ReligionTypes religionType_;
-        UnitTypes unitType_;
-    };
-
-    class CityBuildingTactic : public ICityBuildingTactics, public boost::enable_shared_from_this<CityBuildingTactic>
-    {
-    public:
-        CityBuildingTactic(BuildingTypes buildingType, IDInfo city);
-
-        virtual IDInfo getCity() const;
-        virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
-        virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
-        virtual std::vector<IDependentTacticPtr> getDependencies() const;
-        virtual void update(const Player& player, const CityDataPtr& pCityData);
-        virtual void updateDependencies(const Player& player, const CvCity* pCity);
-        virtual void apply(TacticSelectionData& selectionData);
-
-        virtual BuildingTypes getBuildingType() const;
-        virtual ProjectionLadder getProjection() const;
-
-        virtual void debug(std::ostream& os) const;
-
-    private:
-        std::vector<IDependentTacticPtr> dependentTactics_;
-        std::list<ICityBuildingTacticPtr> buildingTactics_;
-        ProjectionLadder projection_;
-        BuildingTypes buildingType_;
-        IDInfo city_;
+        static const int ID = 0;
     };
 
     class FoodBuildingTactic : public ICityBuildingTactic
@@ -99,7 +22,11 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
-    private:
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 1;
     };
 
     class HappyBuildingTactic : public ICityBuildingTactic
@@ -107,7 +34,11 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
-    private:
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 2;
     };
 
     class HealthBuildingTactic : public ICityBuildingTactic
@@ -115,7 +46,11 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
-    private:
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 3;
     };
 
     class ScienceBuildingTactic : public ICityBuildingTactic
@@ -123,7 +58,11 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
-    private:
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 4;
     };
 
     class GoldBuildingTactic : public ICityBuildingTactic
@@ -131,7 +70,11 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
-    private:
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 5;
     };
 
     class CultureBuildingTactic : public ICityBuildingTactic
@@ -139,7 +82,11 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
-    private:
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 6;
     };
 
     class EspionageBuildingTactic : public ICityBuildingTactic
@@ -147,7 +94,11 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
-    private:
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 7;
     };
 
     class SpecialistBuildingTactic : public ICityBuildingTactic
@@ -155,58 +106,51 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
-    private:
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 8;
     };
 
-    // world wonders
-    class GlobalBuildingTactic : public IGlobalBuildingTactics
+    class GovCenterTactic : public ICityBuildingTactic
     {
     public:
-        explicit GlobalBuildingTactic(BuildingTypes buildingType);
-
-        virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
-        virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
-        virtual void update(const Player& player);
-        virtual void updateDependencies(const Player& player);
-        virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
-        virtual std::list<ICityBuildingTacticsPtr> getCityTactics(IDInfo city) const;
-        virtual void apply(TacticSelectionData& selectionData);
-        virtual void removeCityTactics(IDInfo city);
-        virtual bool empty() const;
-
-        virtual BuildingTypes getBuildingType() const;
-
+        GovCenterTactic() : isNewCenter_(false) {}
+        explicit GovCenterTactic(bool isNewCenter);
         virtual void debug(std::ostream& os) const;
+        virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 9;
 
     private:
-        BuildingTypes buildingType_;
-        typedef std::map<IDInfo, std::list<ICityBuildingTacticsPtr> > CityTacticsMap;
-        CityTacticsMap cityTactics_;
+        bool isNewCenter_;
     };
 
-    //national wonders
-    class NationalBuildingTactic : public IGlobalBuildingTactics
+    class UnitExperienceTactic : public ICityBuildingTactic
     {
     public:
-        explicit NationalBuildingTactic(BuildingTypes buildingType);
-
-        virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
-        virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
-        virtual void update(const Player& player);
-        virtual void updateDependencies(const Player& player);
-        virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
-        virtual std::list<ICityBuildingTacticsPtr> getCityTactics(IDInfo city) const;
-        virtual void apply(TacticSelectionData& selectionData);
-        virtual void removeCityTactics(IDInfo city);
-        virtual bool empty() const;
-
-        virtual BuildingTypes getBuildingType() const;
+        UnitExperienceTactic() {}
+        UnitExperienceTactic(int freeExperience_, int globalFreeExperience_, 
+            const std::vector<std::pair<DomainTypes, int> >& domainFreeExperience_,
+            const std::vector<std::pair<UnitCombatTypes, int> >& combatTypeFreeExperience_,
+            PromotionTypes freePromotion_);
 
         virtual void debug(std::ostream& os) const;
+        virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 10;
 
     private:
-        BuildingTypes buildingType_;
-        typedef std::map<IDInfo, std::list<ICityBuildingTacticsPtr> > CityTacticsMap;
-        CityTacticsMap cityTactics_;
+        int freeExperience, globalFreeExperience;
+        std::map<DomainTypes, int> domainFreeExperience;
+        std::map<UnitCombatTypes, int> combatTypeFreeExperience;
+        PromotionTypes freePromotion;
     };
 }

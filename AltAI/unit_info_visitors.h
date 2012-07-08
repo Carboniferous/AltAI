@@ -18,7 +18,7 @@ namespace AltAI
     boost::tuple<bool, int, std::set<PromotionTypes> > canGainPromotion(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo, PromotionTypes promotionType, 
         const std::set<PromotionTypes>& existingPromotions);
 
-    bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo);
+    bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources);
 
     Promotions getFreePromotions(const boost::shared_ptr<UnitInfo>& pUnitInfo);
 }

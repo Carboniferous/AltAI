@@ -164,6 +164,7 @@ namespace AltAI
             bool noUnhealthinessFromBuildings, noUnhealthinessFromPopulation, startsGoldenAge;
             bool makesCityCapital, isGovernmentCenter;
             BuildingTypes freeBuildingType;
+            std::vector<CivicTypes> civicTypes;
         };
 
         typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, YieldNode, CommerceNode, TradeNode, BonusNode, FreeBonusNode, 

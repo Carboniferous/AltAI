@@ -516,6 +516,15 @@ namespace AltAI
         }
     }
 
+    void CityData::pushProcess(ProcessTypes processType)
+    {
+        if (processType != NO_PROCESS)
+        {
+            buildQueue_.push(std::make_pair(ProcessItem, processType));
+        }
+        requiredProduction_ = -1;
+    }
+
     void CityData::hurry(const HurryData& hurryData)
     {
         if (hurryData.hurryPopulation > 0)
@@ -774,6 +783,29 @@ namespace AltAI
         totalOutput[OUTPUT_ESPIONAGE] = (totalOutput[OUTPUT_ESPIONAGE] * commerceModifier[COMMERCE_ESPIONAGE]) / 100;
 
         return totalOutput;
+    }
+
+    TotalOutput CityData::getProcessOutput() const
+    {
+        TotalOutput processOutput;
+
+        if (!buildQueue_.empty() && buildQueue_.top().first == ProcessItem)
+        {
+            TotalOutput output = getOutput();
+            int currentProduction = getCurrentProduction_(output);
+
+            const CvProcessInfo& processInfo = gGlobals.getProcessInfo((ProcessTypes)buildQueue_.top().second);
+            for (int i = 0; i < NUM_COMMERCE_TYPES; ++i)
+            {
+                int modifier = processInfo.getProductionToCommerceModifier(i);
+                if (modifier > 0)
+                {
+                    processOutput[NUM_YIELD_TYPES - 1 + i] = (currentProduction * modifier) / 100 + output[NUM_YIELD_TYPES - 1 + i];
+                }
+            }
+        }
+
+        return processOutput;
     }
 
     // account for lost and consumed food

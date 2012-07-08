@@ -111,13 +111,21 @@ namespace AltAI
             bool canFoundCity, betterHutResults;
         };
 
+        struct CorporationNode
+        {
+            CorporationNode() : prereqCorporation(NO_CORPORATION) {}
+            CorporationTypes prereqCorporation;
+            std::vector<std::pair<CorporationTypes, int> > corporationSpreads;
+        };
+
         typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, UpgradeNode, CombatNode, 
             CollateralNode, CityCombatNode, AirCombatNode, CombatBonusNode, CargoNode, PromotionsNode,
-            BuildNode, ReligionNode, MiscAbilityNode> UnitInfoNode;
+            BuildNode, ReligionNode, CorporationNode, MiscAbilityNode> UnitInfoNode;
 
         struct BaseNode
         {
-            explicit BaseNode(UnitTypes unitType_) : unitType(unitType_), domainType(NO_DOMAIN), cost(0), minAreaSize(-1), prereqBuildingType(NO_BUILDING) {}
+            explicit BaseNode(UnitTypes unitType_)
+                : unitType(unitType_), domainType(NO_DOMAIN), cost(0), minAreaSize(-1), prereqBuildingType(NO_BUILDING), specialUnitType(NO_SPECIALUNIT) {}
 
             UnitTypes unitType;
             DomainTypes domainType;
@@ -126,6 +134,7 @@ namespace AltAI
             std::vector<BonusTypes> andBonusTypes, orBonusTypes;
             std::vector<TechTypes> techTypes;
             BuildingTypes prereqBuildingType;
+            SpecialUnitTypes specialUnitType;
             std::vector<UnitInfoNode> nodes;
         };
 

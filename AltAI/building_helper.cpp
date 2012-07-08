@@ -1,5 +1,6 @@
 #include "./building_helper.h"
 #include "./religion_helper.h"
+#include "./modifiers_helper.h"
 #include "./bonus_helper.h"
 #include "./city_data.h"
 #include "./civ_log.h"
@@ -227,7 +228,8 @@ namespace AltAI
 			        {
 				        if (buildingReligionType != NO_RELIGION && buildingReligionType == stateReligion)  // todo ? make isStateReligionBuilding() fn in ReligionHelper?
 					    {
-                            commerce += CvPlayerAI::getPlayer(owner_).getStateReligionBuildingCommerce((CommerceTypes)commerceType) * activeBuildingCount;
+                            //commerce += CvPlayerAI::getPlayer(owner_).getStateReligionBuildingCommerce((CommerceTypes)commerceType) * activeBuildingCount;
+                            commerce += data.getModifiersHelper()->getStateReligionBuildingCommerce()[commerceType] * activeBuildingCount;
 					    }
 				    }
 

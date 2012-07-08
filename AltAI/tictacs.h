@@ -39,6 +39,7 @@ namespace AltAI
         void updateCityReligionBuildingTactics(ReligionTypes religionType);
 
         void addNewCityBuildingTactics(IDInfo city);
+        void addNewCityUnitTactics(IDInfo city);
 
         void updateCityBuildingTacticsDependencies();
 
@@ -48,6 +49,9 @@ namespace AltAI
         void updateGlobalBuildingTacticsDependencies();
         void eraseLimitedBuildingTactics(BuildingTypes buildingType);
 
+        void updateCityUnitTactics(TechTypes techType);
+        void updateCityUnitTactics(IDInfo city);
+
         void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
 
         ConstructItem getBuildItem(const City& city);
@@ -55,6 +59,7 @@ namespace AltAI
         void selectCityTactics();
 
         std::map<IDInfo, std::vector<BuildingTypes> > getBuildingsCityCanAssistWith(IDInfo city) const;
+        std::map<BuildingTypes, std::vector<BuildingTypes> > getPossibleDependentBuildings(IDInfo city) const;
 
         void debugTactics();
 
@@ -68,6 +73,10 @@ namespace AltAI
         typedef std::map<IDInfo, CityBuildingTacticsList> CityBuildingTacticsMap;
         CityBuildingTacticsMap cityBuildingTacticsMap_;
 
+        // process tactics
+        typedef std::map<ProcessTypes, IProcessTacticsPtr> ProcessTacticsMap;
+        ProcessTacticsMap processTacticsMap_;
+
         // world wonders
         typedef std::map<BuildingTypes, ILimitedBuildingTacticsPtr> LimitedBuildingsTacticsMap;
         LimitedBuildingsTacticsMap nationalBuildingsTacticsMap_, globalBuildingsTacticsMap_;
@@ -77,6 +86,10 @@ namespace AltAI
         typedef std::map<IDInfo, CityImprovementTacticsList> CityImprovementTacticsMap;
         CityImprovementTacticsMap cityImprovementTacticsMap_;
 
+        // unit tactics
+        typedef std::map<UnitTypes, IUnitTacticsPtr> UnitTacticsMap;
+        UnitTacticsMap unitTacticsMap_;
+
         Player& player;
 
         // save/load functions
@@ -85,5 +98,6 @@ namespace AltAI
 
     private:
         void addBuildingTactics_(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, CvCity* pCity);
+        void addUnitTactics_(const boost::shared_ptr<UnitInfo>& pUnitInfo, CvCity* pCity);
     };
 }

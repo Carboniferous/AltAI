@@ -28,4 +28,8 @@ namespace AltAI
 
     std::vector<BuildingTypes> getPossibleBuildings(const boost::shared_ptr<TechInfo>& pTechInfo);
     std::vector<BuildingTypes> getObsoletedBuildings(const boost::shared_ptr<TechInfo>& pTechInfo);
+
+    std::vector<ProcessTypes> getPossibleProcesses(const boost::shared_ptr<TechInfo>& pTechInfo);
+
+    std::vector<UnitTypes> getPossibleUnits(const boost::shared_ptr<TechInfo>& pTechInfo);
 }

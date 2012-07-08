@@ -226,34 +226,6 @@ namespace AltAI
                 techSelectionData.erase(ignoreTechType);
             }
 
-            void processEconomicTech(TechSelectionHelper& techSelectionHelper)
-            {
-                CityIter cityIter(*player.getCvPlayer());
-
-                boost::shared_ptr<CivHelper> pCivHelper(new CivHelper(player));
-                pCivHelper->init();
-
-                while (CvCity* pCity = cityIter())
-                {
-                    const City& city = player.getCity(pCity->getID());
-
-                    CityDataPtr cityData(new CityData(pCity));
-                    cityData->getCivHelper() = pCivHelper;
-
-                    CitySimulation simulation(pCity, cityData, city.getConstructItem());
-                    simulation.optimisePlots();
-                    TotalOutput baseOutput = cityData->getActualOutput();
-#ifdef ALTAI_DEBUG
-                    civLog << "\nbase output = " << baseOutput << ", no. trade routes = " << cityData->getTradeRouteHelper()->getNumRoutes();
-#endif
-                    updateRequestData(pCity, *cityData, player.getAnalysis()->getTechInfo(techSelectionHelper.researchTech.techType));
-#ifdef ALTAI_DEBUG
-                    civLog << ", no. routes = " << cityData->getTradeRouteHelper()->getNumRoutes() << ", delta output = " << simulation.getCityData()->getActualOutput() - baseOutput;
-#endif
-                    pCivHelper->removeTech(techSelectionHelper.researchTech.techType);
-                }
-            }
-
             void processFreeTechTech(TechSelectionHelper& techSelectionHelper)
             {
                 const std::list<ResearchTech>& researchTechs = playerTactics.selectedTechTactics_;
@@ -392,9 +364,19 @@ namespace AltAI
                         civLog << " for city: " << narrow(getCity(*cityIter)->getName());
                         streamEconomicFlags(civLog, techSelectionHelper.researchTech.economicFlags);
 #endif
-                        TotalOutput projectedOutput = getProjectedEconomicImpact(player, player.getCity(cityIter->iID), pBuildingInfo, techSelectionHelper.researchTech.economicFlags);
+                        TotalOutput base = player.getCity(cityIter->iID).getCurrentOutputProjection().getOutput();
+                        
+                        CityDataPtr pCityData = player.getCity(cityIter->iID).getCityData()->clone();
+                        std::vector<IProjectionEventPtr> events;
+                        pCityData->pushBuilding(buildingsIter->first);
+                        events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCityData->getCity(), player.getAnalysis()->getBuildingInfo(buildingsIter->first))));
+                        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
-                        techSelectionHelper.possibleBuildingOutputs[buildingsIter->first] += projectedOutput;
+                        ProjectionLadder buildingLadder = getProjectedOutput(player, pCityData, 50, events);
+
+                        //TotalOutput projectedOutput = getProjectedEconomicImpact(player, player.getCity(cityIter->iID), pBuildingInfo, techSelectionHelper.researchTech.economicFlags);
+
+                        techSelectionHelper.possibleBuildingOutputs[buildingsIter->first] += buildingLadder.getOutput() - base;
                     }
                 }
             }
@@ -478,7 +460,7 @@ namespace AltAI
 
                 for (ConstructListConstIter itemIter(unitTactics.begin()), itemEndIter(unitTactics.end()); itemIter != itemEndIter; ++itemIter)
                 {
-                    if (!itemIter->requiredTechs.empty() && itemIter->unitType != NO_UNIT) // && couldConstructUnit(player, 2, player.getAnalysis()->getUnitInfo(itemIter->unitType))
+                    if (!itemIter->requiredTechs.empty() && itemIter->unitType != NO_UNIT) // && couldConstructUnit(player, 2, player.getAnalysis()->getUnitInfo(itemIter->unitType), false)
                     {
                         for (size_t i = 0, count = itemIter->requiredTechs.size(); i < count; ++i)
                         {
@@ -565,11 +547,6 @@ namespace AltAI
                     if (ci->techFlags & WorkerFlags::Better_Improvements || !ci->possibleImprovements.empty() || !ci->possibleBonuses.empty() || !ci->possibleRemovableFeatures.empty())
                     {
                         processWorkerTech(techSelectionHelper);    
-                    }
-
-                    if (ci->economicFlags)
-                    {
-                        processEconomicTech(techSelectionHelper);
                     }
 
                     if (ci->techFlags & TechFlags::Found_Religion)

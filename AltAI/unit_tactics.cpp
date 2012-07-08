@@ -109,7 +109,7 @@ namespace AltAI
         ConstructItem selectedConstructItem(NO_UNIT);
 
         // todo - need to include units which we also need resources for
-        if (couldConstructUnit(player, 2, player.getAnalysis()->getUnitInfo(constructItem.unitType)))
+        if (couldConstructUnit(player, 2, player.getAnalysis()->getUnitInfo(constructItem.unitType), false))
         {
             if (player.getMaxResearchRate() > 40 && !player.getSettlerManager()->getBestCitySites(140, 1).empty() ||
                 player.getMaxResearchRate() > 60 && !player.getSettlerManager()->getBestCitySites(80, 1).empty())

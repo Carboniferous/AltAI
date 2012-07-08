@@ -42,6 +42,12 @@ struct DllExport IDInfo
         return eOwner == other.eOwner ? iID < other.iID : eOwner < other.eOwner;
     }
 
+    // AltAI
+    bool operator != (const IDInfo& info) const
+    {
+        return !(*this == info);
+    }
+
 	void reset()
 	{
 		eOwner = NO_PLAYER;

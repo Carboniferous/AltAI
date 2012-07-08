@@ -16,5 +16,6 @@ namespace AltAI
     std::ostream& operator << (std::ostream& os, const UnitInfo::PromotionsNode& node);
     std::ostream& operator << (std::ostream& os, const UnitInfo::BuildNode& node);
     std::ostream& operator << (std::ostream& os, const UnitInfo::ReligionNode& node);
+    std::ostream& operator << (std::ostream& os, const UnitInfo::CorporationNode& node);
     std::ostream& operator << (std::ostream& os, const UnitInfo::MiscAbilityNode& node);
 }

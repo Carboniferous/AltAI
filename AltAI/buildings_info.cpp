@@ -324,9 +324,23 @@ namespace AltAI
                 node.freeBuildingType = getPlayerVersion(requestData.playerType, freeBuildingClass);
             }
 
+            CivicOptionTypes civicOptionType = (CivicOptionTypes)buildingInfo.getCivicOption();
+            if (civicOptionType != NO_CIVICOPTION)
+            {
+                for (int i = 0, count = gGlobals.getNumCivicInfos(); i < count; ++i)
+                {
+                    const CvCivicInfo& civicInfo = gGlobals.getCivicInfo((CivicTypes)i);
+                    if ((CivicOptionTypes)civicInfo.getCivicOptionType() == civicOptionType)
+                    {
+                        node.civicTypes.push_back((CivicTypes)i);
+                    }
+                }
+            }
+
             if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 ||
                 node.globalPopChange != 0 || node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation ||
-                node.makesCityCapital || node.isGovernmentCenter || node.startsGoldenAge || node.freeBuildingType != NO_BUILDING)
+                node.makesCityCapital || node.isGovernmentCenter || node.startsGoldenAge || 
+                node.freeBuildingType != NO_BUILDING || !node.civicTypes.empty())
             {
                 baseNode.nodes.push_back(node);
             }
@@ -390,6 +404,17 @@ namespace AltAI
                 }
             }
 
+            SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)buildingInfo.getSpecialBuildingType();
+
+            if (specialBuildingType != NO_SPECIALBUILDING)
+	        {
+                TechTypes prereqTech = (TechTypes)gGlobals.getSpecialBuildingInfo(specialBuildingType).getTechPrereq();
+                if (prereqTech != NO_TECH)
+                {
+                    node.techs.push_back(prereqTech);
+                }
+            }
+
             int minimumAreaSize = buildingInfo.getMinAreaSize();
 
             if (buildingInfo.isWater())
@@ -428,6 +453,9 @@ namespace AltAI
                 int requiredCount = buildingInfo.getPrereqNumOfBuildingClass(i);
                 if (requiredCount > 0)
                 {
+                    requiredCount *= std::max<int>(0, (gGlobals.getWorldInfo(gGlobals.getMap().getWorldSize()).getBuildingClassPrereqModifier() + 100));
+	                requiredCount /= 100;
+
                     requiredBuildings.buildingCounts.push_back(std::make_pair(getPlayerVersion(requestData.playerType, (BuildingClassTypes)i), requiredCount));
                 }
             }

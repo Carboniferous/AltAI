@@ -1,11 +1,14 @@
 #include "./city_projections.h"
 #include "./building_info_visitors.h"
+#include "./civic_info_visitors.h"
+#include "./game.h"
 #include "./player.h"
 #include "./city.h"
 #include "./maintenance_helper.h"
 #include "./building_helper.h"
 #include "./modifiers_helper.h"
 #include "./buildings_info.h"
+#include "./civic_info.h"
 #include "./unit_info.h"
 #include "./civ_log.h"
 
@@ -22,13 +25,18 @@ namespace AltAI
         };
     }
 
-    ProjectionBuildingEvent::ProjectionBuildingEvent(const CityDataPtr& pCityData, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
-        : pCity_(pCityData->getCity()), pCityData_(pCityData), pBuildingInfo_(pBuildingInfo)
+    ProjectionBuildingEvent::ProjectionBuildingEvent(const CvCity* pCity, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+        : pBuildingInfo_(pBuildingInfo)
     {
-        requiredProduction_ = 100 * pCity_->getProductionNeeded(pBuildingInfo_->getBuildingType());
+        requiredProduction_ = 100 * pCity->getProductionNeeded(pBuildingInfo_->getBuildingType());
         accumulatedTurns_ = 0;
     }
     
+    void ProjectionBuildingEvent::init(const CityDataPtr& pCityData)
+    {
+        pCityData_ = pCityData;
+    }
+
     void ProjectionBuildingEvent::debug(std::ostream& os) const
     {
         os << "\nProjectionBuildingEvent event: " << " reqd prod = " << requiredProduction_ << " accumulated turns = " << accumulatedTurns_;
@@ -83,14 +91,19 @@ namespace AltAI
         }
     }
 
-    ProjectionUnitEvent::ProjectionUnitEvent(const CityDataPtr& pCityData, const boost::shared_ptr<UnitInfo>& pUnitInfo)
-        : pCity_(pCityData->getCity()), pCityData_(pCityData), pUnitInfo_(pUnitInfo)
+    ProjectionUnitEvent::ProjectionUnitEvent(const CvCity* pCity, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+        : pUnitInfo_(pUnitInfo)
     {
         isFoodProduction_ = gGlobals.getUnitInfo(pUnitInfo->getUnitType()).isFoodProduction();
-        requiredProduction_ = 100 * pCity_->getProductionNeeded(pUnitInfo_->getUnitType());
+        requiredProduction_ = 100 * pCity->getProductionNeeded(pUnitInfo_->getUnitType());
         accumulatedTurns_ = 0;
     }
     
+    void ProjectionUnitEvent::init(const CityDataPtr& pCityData)
+    {
+        pCityData_ = pCityData;
+    }
+
     void ProjectionUnitEvent::debug(std::ostream& os) const
     {
         os << "\nProjectionUnitEvent event: " << " reqd prod = " << requiredProduction_ << " accumulated turns = " << accumulatedTurns_;
@@ -133,9 +146,14 @@ namespace AltAI
         }
     }
 
-    ProjectionGlobalBuildingEvent::ProjectionGlobalBuildingEvent(const CityDataPtr& pCityData, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int turnBuilt, const CvCity* pBuiltInCity)
-        : pCityData_(pCityData), pBuildingInfo_(pBuildingInfo), remainingTurns_(turnBuilt), pCity_(pCityData->getCity()), pBuiltInCity_(pBuiltInCity)
+    ProjectionGlobalBuildingEvent::ProjectionGlobalBuildingEvent(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int turnBuilt, const CvCity* pBuiltInCity)
+        : pBuildingInfo_(pBuildingInfo), remainingTurns_(turnBuilt), pBuiltInCity_(pBuiltInCity)
     {
+    }
+
+    void ProjectionGlobalBuildingEvent::init(const CityDataPtr& pCityData)
+    {
+        pCityData_ = pCityData;
     }
 
     void ProjectionGlobalBuildingEvent::debug(std::ostream& os) const
@@ -162,9 +180,9 @@ namespace AltAI
         }
     }
 
-    ProjectionPopulationEvent::ProjectionPopulationEvent(const CityDataPtr& pCityData)
-        : pCityData_(pCityData)
+    void ProjectionPopulationEvent::init(const CityDataPtr& pCityData)
     {
+        pCityData_ = pCityData;
     }
 
     void ProjectionPopulationEvent::debug(std::ostream& os) const
@@ -201,11 +219,52 @@ namespace AltAI
         return shared_from_this();
     }
 
+    ProjectionChangeCivicEvent::ProjectionChangeCivicEvent(const boost::shared_ptr<CivicInfo>& pCivicInfo, int turnsToChange)
+        : pCivicInfo_(pCivicInfo), turnsToChange_(turnsToChange)
+    {
+    }
+
+    void ProjectionChangeCivicEvent::init(const CityDataPtr& pCityData)
+    {
+        pCityData_ = pCityData;
+    }
+
+    void ProjectionChangeCivicEvent::debug(std::ostream& os) const
+    {
+        os << "\nProjectionChangeCivicEvent event: " << " remaining turns = " << turnsToChange_ << " for civic: "
+           << gGlobals.getCivicInfo(pCivicInfo_->getCivicType()).getType();
+    }
+
+    int ProjectionChangeCivicEvent::getTurnsToEvent() const
+    {
+        return turnsToChange_;
+    }
+
+    IProjectionEventPtr ProjectionChangeCivicEvent::update(int nTurns, ProjectionLadder& ladder)
+    {
+        if (turnsToChange_ <= nTurns)
+        {
+            boost::shared_ptr<PlayerAnalysis> pAnalysis = gGlobals.getGame().getAltAI()->getPlayer(pCityData_->getCity()->getOwner())->getAnalysis();
+            updateRequestData(pCityData_->getCity(), *pCityData_, pAnalysis, pCivicInfo_->getCivicType());
+            return IProjectionEventPtr();
+        }
+        else 
+        {
+            turnsToChange_ -= nTurns;
+            return shared_from_this();
+        }
+    }
+
     ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns, std::vector<IProjectionEventPtr>& events)
     {
 //#ifdef ALTAI_DEBUG
 //        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
 //#endif
+        for (size_t i = 0, count = events.size(); i < count; ++i)
+        {
+            events[i]->init(pCityData);
+        }
+
         CityOptimiser cityOptimiser(pCityData);
 
         std::vector<OutputTypes> outputTypes = boost::assign::list_of(OUTPUT_PRODUCTION)(OUTPUT_RESEARCH);
@@ -221,7 +280,7 @@ namespace AltAI
             std::sort(events.begin(), events.end(), EventTimeOrderF());
 
             int turnsToFirstEvent = MAX_INT, population = pCityData->getPopulation(), maintenance = pCityData->getMaintenanceHelper()->getMaintenance();
-            TotalOutput output = pCityData->getOutput();
+            TotalOutput output = pCityData->getOutput(), processOutput = pCityData->getProcessOutput();
             output[OUTPUT_FOOD] -= pCityData->getLostFood();
 
             std::vector<IProjectionEventPtr> newEvents;
@@ -242,7 +301,7 @@ namespace AltAI
                 }
             }
 
-            ladder.entries.push_back(ProjectionLadder::Entry(population, std::min<int>(nTurns, turnsToFirstEvent), output, maintenance, pCityData->getGPP()));
+            ladder.entries.push_back(ProjectionLadder::Entry(population, std::min<int>(nTurns, turnsToFirstEvent), output, processOutput, maintenance, pCityData->getGPP()));
 
             if (turnsToFirstEvent <= nTurns)
             {

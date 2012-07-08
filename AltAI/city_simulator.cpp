@@ -65,36 +65,36 @@ namespace AltAI
         return results;
     }
 
-    void CitySimulator::evaluateBuilding(BuildingTypes buildingType, int turns, BuildingSimulationResults& results, bool doBaseLine)
-    {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
-#endif
-        // simulate baseline
-        CitySimulation simulation(pCity_, CityDataPtr(new CityData(pCity_)));
-
-        if (doBaseLine)
-        {
-#ifdef ALTAI_DEBUG
-            os << "\nDoing baseline simulation ";
-#endif
-            results.noBuildingBaseline = simulation.simulateAsIs(turns, OUTPUT_PRODUCTION);
-        }
-
-#ifdef ALTAI_DEBUG
-        os << "\nCity: " << narrow(pCity_->getName()) << " can construct = " << pCity_->canConstruct(buildingType)
-           << " first building order = " << pCity_->getFirstBuildingOrder(buildingType);
-#endif
-        if (pCity_->canConstruct(buildingType) || pCity_->getFirstBuildingOrder(buildingType) != -1)
-        {
-#ifdef ALTAI_DEBUG
-            os << "\nDoing building: " << gGlobals.getBuildingInfo(buildingType).getType() << " simulation";
-#endif
-            CityDataPtr pCityData = CityDataPtr(new CityData(pCity_));
-            CitySimulation simulation(pCity_, pCityData, ConstructItem(buildingType));
-            simulation.simulate(results, turns);
-        }
-    }
+//    void CitySimulator::evaluateBuilding(BuildingTypes buildingType, int turns, BuildingSimulationResults& results, bool doBaseLine)
+//    {
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
+//#endif
+//        // simulate baseline
+//        CitySimulation simulation(pCity_, CityDataPtr(new CityData(pCity_)));
+//
+//        if (doBaseLine)
+//        {
+//#ifdef ALTAI_DEBUG
+//            os << "\nDoing baseline simulation ";
+//#endif
+//            results.noBuildingBaseline = simulation.simulateAsIs(turns, OUTPUT_PRODUCTION);
+//        }
+//
+//#ifdef ALTAI_DEBUG
+//        os << "\nCity: " << narrow(pCity_->getName()) << " can construct = " << pCity_->canConstruct(buildingType)
+//           << " first building order = " << pCity_->getFirstBuildingOrder(buildingType);
+//#endif
+//        if (pCity_->canConstruct(buildingType) || pCity_->getFirstBuildingOrder(buildingType) != -1)
+//        {
+//#ifdef ALTAI_DEBUG
+//            os << "\nDoing building: " << gGlobals.getBuildingInfo(buildingType).getType() << " simulation";
+//#endif
+//            CityDataPtr pCityData = CityDataPtr(new CityData(pCity_));
+//            CitySimulation simulation(pCity_, pCityData, ConstructItem(buildingType));
+//            simulation.simulate(results, turns);
+//        }
+//    }
 
     BuildingSimulationResults CitySimulator::evaluateHurryBuilding(BuildingTypes buildingType, int nTurns)
     {
@@ -284,7 +284,7 @@ namespace AltAI
 
         CityDataPtr pSimulationCityData(pCityData->clone());
         std::vector<IProjectionEventPtr> events;
-        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
         ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
 
@@ -334,7 +334,7 @@ namespace AltAI
                         simulatedPlotIter = pSimulationCityData->findPlot(plotIter->coords);
                         updateCityOutputData(*pSimulationCityData, *simulatedPlotIter, improvementsIter->second[j].first, plotIter->routeType, improvementsIter->second[j].second);
                         events.clear();
-                        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+                        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
                         ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
 #ifdef ALTAI_DEBUG
@@ -398,7 +398,7 @@ namespace AltAI
 
         CityDataPtr pSimulationCityData(pCityData->clone());
         std::vector<IProjectionEventPtr> events;
-        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
         ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
 
@@ -421,7 +421,7 @@ namespace AltAI
                         updateCityOutputData(*pSimulationCityData, *simulatedPlotIter, improvementsIter->second[j].first, plotIter->routeType, improvementsIter->second[j].second);
 
                         events.clear();
-                        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+                        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
                         ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
                         plotResults.push_back(boost::make_tuple(improvementsIter->second[j].first, improvementsIter->second[j].second, ladder));

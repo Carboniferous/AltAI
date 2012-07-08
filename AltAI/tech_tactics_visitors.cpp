@@ -7,6 +7,7 @@
 #include "./tactic_actions.h"
 #include "./tactic_streams.h"
 #include "./building_tactics_items.h"
+#include "./building_tactics_deps.h"
 #include "./tech_tactics_items.h"
 #include "./player.h"
 #include "./player_analysis.h"
@@ -572,7 +573,7 @@ namespace AltAI
 
         CityDataPtr pSimulationCityData(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
         std::vector<IProjectionEventPtr> events;
-        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
         ProjectionLadder base = getProjectedOutput(player, pSimulationCityData, 50, events);
 
@@ -605,7 +606,7 @@ namespace AltAI
 
         pSimulationCityData = CityDataPtr(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
         events.clear();
-        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pSimulationCityData)));
+        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
         ProjectionLadder ladder = getProjectedOutput(player, pSimulationCityData, 50, events);
 

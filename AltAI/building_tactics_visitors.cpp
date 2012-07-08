@@ -1,6 +1,8 @@
 #include "./building_tactics_visitors.h"
 #include "./building_info_visitors.h"
 #include "./building_tactics_items.h"
+#include "./city_building_tactics.h"
+#include "./building_tactics_deps.h"
 #include "./buildings_info.h"
 #include "./building_helper.h"
 #include "./maintenance_helper.h"
@@ -291,78 +293,6 @@ namespace AltAI
         ConstructItem constructItem_;
     };
 
-    class ProjectedEconomicImpactVisitor : public boost::static_visitor<>
-    {
-    public:
-        ProjectedEconomicImpactVisitor(const Player& player, const City& city, const CityDataPtr& pCityData, int selectedEconomicFlags)
-            : player_(player), city_(city), pCityData_(pCityData),
-              improvementManager_(player.getAnalysis()->getMapAnalysis()->getImprovementManager(city.getCvCity()->getIDInfo())),
-              selectedEconomicFlags_(selectedEconomicFlags),
-              civLog_(CivLog::getLog(*player.getCvPlayer())->getStream())
-        {
-        }
-
-        TotalOutput getOutputDelta() const
-        {
-            return totalOutputDelta_;
-        }
-
-        template <typename T>
-            void operator() (const T&)
-        {
-        }
-
-        void operator() (const BuildingInfo::BaseNode& node)
-        {
-            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
-            {
-                boost::apply_visitor(*this, node.nodes[i]);
-            }
-        }
-
-        void operator() (const BuildingInfo::MiscEffectNode& node)
-        {
-            //if (node.foodKeptPercent > 0 && (selectedEconomicFlags_ & EconomicFlags::Output_Food))
-            //{
-            //    const bool canHurryPop = CvPlayerAI::getPlayer(player_.getPlayerID()).canPopRush();
-
-            //    const int requiredFood = 100 * pCityData_->getPopulation() * gGlobals.getFOOD_CONSUMPTION_PER_POPULATION() + pCityData_->getLostFood();
-
-            //    const int foodDelta = city_.getMaxOutputs()[YIELD_FOOD] - requiredFood;
-
-            //    const int size = std::max<int>(pCityData_->getPopulation(), pCityData_->getPopulation() + pCityData_->happyCap);
-            //    PlotYield projectedCityYield = improvementManager_.getProjectedYield(size);
-            //    TotalOutput projectedCityOutput = makeOutput(projectedCityYield, pCityData_->getYieldModifier(), pCityData_->getCommerceModifier(), pCityData_->getCommercePercent());
-
-            //    //civLog_ << "\nProjectedEconomicImpactVisitor(): misc : " << canHurryPop << ", " <<  requiredFood << ", " << foodDelta << ", " << size << ", " << projectedCityYield << ", " << projectedCityOutput;
-
-            //    if (foodDelta > 0)
-            //    {
-            //        int multiplier = (foodDelta * node.foodKeptPercent) / 10000;
-            //        TotalOutput value = projectedCityOutput * multiplier;
-
-            //        if (canHurryPop)
-            //        {
-            //            value *= (100 + node.foodKeptPercent);
-            //            value /= 100;
-            //        }
-            //        totalOutputDelta_ += value;
-            //        //civLog_ << ", " << multiplier << ", " << value;
-            //    }
-            //}
-        }
-
-    private:
-        const Player& player_;
-        const City& city_;
-        CityDataPtr pCityData_;
-        CityImprovementManager& improvementManager_;
-        int selectedEconomicFlags_;
-        TotalOutput totalOutputDelta_;
-
-        std::ostream& civLog_;
-    };
-
     class MakeMilitaryBuildingConditionsVisitor : public boost::static_visitor<>
     {
     public:
@@ -464,8 +394,8 @@ namespace AltAI
     class MakeBuildingTacticsDependenciesVisitor : public boost::static_visitor<>
     {
     public:
-        MakeBuildingTacticsDependenciesVisitor(const Player& player, const City& city)
-            : player_(player), city_(city)
+        MakeBuildingTacticsDependenciesVisitor(const Player& player, const City& city, BuildingTypes buildingType)
+            : player_(player), city_(city), thisBuildingType_(buildingType)
         {
         }
 
@@ -486,22 +416,18 @@ namespace AltAI
 
             for (size_t i = 0, count = node.buildingCounts.size(); i < count; ++i)
             {
-                int buildingCount = 0;
+                int buildingCount = 0, thisBuildingCount = 0;
                 CityIter iter(*player_.getCvPlayer());
                 while (CvCity* pCity = iter())
                 {
                     buildingCount += pCity->getNumBuilding(node.buildingCounts[i].first);
-
-                    if (buildingCount >= node.buildingCounts[i].second)
-                    {
-                        break;
-                    }
+                    thisBuildingCount += pCity->getNumBuilding(thisBuildingType_);
                 }
 
-                if (buildingCount < node.buildingCounts[i].second)
+                if (buildingCount - thisBuildingCount * node.buildingCounts[i].second < node.buildingCounts[i].second)
                 {
                     dependentTactics_.push_back(IDependentTacticPtr(
-                        new CivBuildingDependency(node.buildingCounts[i].first, node.buildingCounts[i].second - buildingCount)));
+                        new CivBuildingDependency(node.buildingCounts[i].first, node.buildingCounts[i].second - buildingCount, thisBuildingType_)));
                 }
             }
         }
@@ -514,6 +440,7 @@ namespace AltAI
     private:
         const Player& player_;
         const City& city_;
+        BuildingTypes thisBuildingType_;
         std::vector<IDependentTacticPtr> dependentTactics_;
     };
 
@@ -521,7 +448,7 @@ namespace AltAI
     {
     public:
         MakeBuildingTacticsVisitor(const Player& player, const City& city, BuildingTypes buildingType)
-            : player_(player), city_(city), buildingType_(buildingType)
+            : player_(player), city_(city), buildingType_(buildingType), isEconomic_(false)
         {
         }
 
@@ -534,7 +461,7 @@ namespace AltAI
         {
             pTactic_ = ICityBuildingTacticsPtr(new CityBuildingTactic(buildingType_, city_.getCvCity()->getIDInfo()));
 
-            MakeBuildingTacticsDependenciesVisitor dependentTacticsVisitor(player_, city_);
+            MakeBuildingTacticsDependenciesVisitor dependentTacticsVisitor(player_, city_, buildingType_);
             for (size_t i = 0, count = node.buildConditions.size(); i < count; ++i)
             {
                 boost::apply_visitor(dependentTacticsVisitor, node.buildConditions[i]);
@@ -554,11 +481,18 @@ namespace AltAI
             if (node.happy > 0)
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new HappyBuildingTactic()));
+                isEconomic_ = true;
             }
 
             if (node.health > 0)
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new HealthBuildingTactic()));
+                isEconomic_ = true;
+            }
+
+            if (isEconomic_)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new EconomicBuildingTactic()));
             }
 
             for (size_t i = 0, count = node.techs.size(); i < count; ++i)
@@ -576,16 +510,22 @@ namespace AltAI
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new FoodBuildingTactic()));
             }
+            if (!isEmpty(node.modifier) || !isEmpty(node.yield))
+            {
+                isEconomic_ = true;
+            }
         }
 
         void operator() (const BuildingInfo::CommerceNode& node)
         {
             if (node.modifier[COMMERCE_RESEARCH] > 0 || node.obsoleteSafeCommerce[COMMERCE_RESEARCH] > 0 || node.commerce[COMMERCE_RESEARCH] > 0)
             {
+                isEconomic_ = true;
                 pTactic_->addTactic(ICityBuildingTacticPtr(new ScienceBuildingTactic()));
             }
             if (node.modifier[COMMERCE_GOLD] > 0 || node.obsoleteSafeCommerce[COMMERCE_GOLD] > 0 || node.commerce[COMMERCE_GOLD] > 0)
             {
+                isEconomic_ = true;
                 pTactic_->addTactic(ICityBuildingTacticPtr(new GoldBuildingTactic()));
             }
             if (node.modifier[COMMERCE_ESPIONAGE] > 0 || node.obsoleteSafeCommerce[COMMERCE_ESPIONAGE] > 0 || node.commerce[COMMERCE_ESPIONAGE] > 0)
@@ -595,7 +535,7 @@ namespace AltAI
             if (node.modifier[COMMERCE_CULTURE] > 0 || node.obsoleteSafeCommerce[COMMERCE_CULTURE] > 0 || node.commerce[COMMERCE_CULTURE] > 0)
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new CultureBuildingTactic()));
-            }
+            }            
         }
 
         void operator() (const BuildingInfo::SpecialistSlotNode& node)
@@ -604,6 +544,46 @@ namespace AltAI
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new SpecialistBuildingTactic()));
             }
+            isEconomic_ = true;
+        }
+
+        void operator() (const BuildingInfo::SpecialistNode& node)
+        {
+            isEconomic_ = true;
+        }
+
+        void operator() (const BuildingInfo::TradeNode& node)
+        {
+            isEconomic_ = true;
+        }
+
+        void operator() (const BuildingInfo::PowerNode& node)
+        {
+            isEconomic_ = true;
+        }
+
+        void operator() (const BuildingInfo::FreeBonusNode& node)
+        {
+            isEconomic_ = true;
+        }
+
+        void operator() (const BuildingInfo::AreaEffectNode& node)
+        {
+            isEconomic_ = true;
+        }
+
+        void operator() (const BuildingInfo::UnitExpNode& node)
+        {
+            //int freeExperience, globalFreeExperience;
+            //std::vector<std::pair<DomainTypes, int> > domainFreeExperience;
+            //std::vector<std::pair<UnitCombatTypes, int> > combatTypeFreeExperience;
+            //PromotionTypes freePromotion;
+            if (node.freeExperience != 0 || node.globalFreeExperience != 0 || !node.domainFreeExperience.empty() ||
+                !node.combatTypeFreeExperience.empty() || node.freePromotion != NO_PROMOTION)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(
+                    new UnitExperienceTactic(node.freeExperience, node.globalFreeExperience, node.domainFreeExperience, node.combatTypeFreeExperience, node.freePromotion)));
+            }
         }
 
         void operator() (const BuildingInfo::MiscEffectNode& node)
@@ -611,6 +591,22 @@ namespace AltAI
             if (node.foodKeptPercent > 0)
             {
                 pTactic_->addTactic(ICityBuildingTacticPtr(new FoodBuildingTactic()));
+                isEconomic_ = true;
+            }
+
+            if (node.isGovernmentCenter)
+            {
+                pTactic_->addTactic(ICityBuildingTacticPtr(new GovCenterTactic(!node.makesCityCapital)));
+                if (!node.makesCityCapital)
+                {
+                    isEconomic_ = true;
+                }
+            }
+
+            if (node.cityMaintenanceModifierChange || node.freeBuildingType != NO_BUILDING || node.globalPopChange > 0 || node.noUnhealthinessFromBuildings ||
+                node.noUnhealthinessFromPopulation || node.startsGoldenAge)
+            {
+                isEconomic_ = true;
             }
         }
 
@@ -640,7 +636,7 @@ namespace AltAI
         const Player& player_;
         const City& city_;
         ICityBuildingTacticsPtr pTactic_;
-
+        bool isEconomic_;
     };
 
     ConstructItem getEconomicBuildingTactics(const Player& player, BuildingTypes buildingType, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
@@ -657,59 +653,6 @@ namespace AltAI
         boost::apply_visitor(visitor, pBuildingInfo->getInfo());
 
         return visitor.getConstructItem();
-    }
-
-    TotalOutput getProjectedEconomicImpact(const Player& player, const City& city, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int selectedEconomicFlags)
-    {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-#endif
-        CityDataPtr pCityData = city.getCityData()->clone();
-        CitySimulation simulation(city.getCvCity(), pCityData, city.getConstructItem());
-
-        simulation.optimisePlots();
-        //simulation.getCityOptimiser()->debug(os, false);
-        
-        TotalOutput baseOutput = pCityData->getActualOutput();
-        baseOutput[OUTPUT_GOLD] -= pCityData->getMaintenanceHelper()->getMaintenance();
-#ifdef ALTAI_DEBUG
-        os << "\nbaseOutput = " << baseOutput << " city output = " << pCityData->getCityPlotOutput().actualOutput << " maintenance = " << pCityData->getMaintenanceHelper()->getMaintenance();
-#endif
-        updateRequestData(*pCityData, pBuildingInfo);
-        pCityData->getBuildingsHelper()->changeNumRealBuildings(pBuildingInfo->getBuildingType());
-        pCityData->recalcOutputs();
-
-        simulation.optimisePlots();
-        //simulation.getCityOptimiser()->debug(os, false);
-        TotalOutput newOutput = pCityData->getActualOutput();
-        newOutput[OUTPUT_GOLD] -= pCityData->getMaintenanceHelper()->getMaintenance();
-#ifdef ALTAI_DEBUG        
-        os << "\nnew baseOutput = " << newOutput << " city output = " << pCityData->getCityPlotOutput().actualOutput << " maintenance = " << pCityData->getMaintenanceHelper()->getMaintenance();
-
-        os << "\nDelta output = " << newOutput - baseOutput;
-#endif
-        const int cost = player.getCvPlayer()->getProductionNeeded(pBuildingInfo->getBuildingType());
-        // TODO - use correct yield modifiers for trait specific speedups (e.g. libs for creative)
-        const int approxBuildTurns = std::max<int>(1, 100 * cost / std::max<int>(1, city.getMaxOutputs()[OUTPUT_PRODUCTION]));
-
-#ifdef ALTAI_DEBUG
-        os << "\nCost = " << cost << ", approx build T = " << approxBuildTurns;
-#endif
-        ProjectedEconomicImpactVisitor visitor(player, city, pCityData, selectedEconomicFlags);
-        boost::apply_visitor(visitor, pBuildingInfo->getInfo());
-
-        TotalOutput projectedOutput = visitor.getOutputDelta() + newOutput - baseOutput;
-
-#ifdef ALTAI_DEBUG
-        os << "\nprojectedOutput = " << projectedOutput;
-#endif
-        // TODO - use t-horizon logic here
-        projectedOutput = std::max<int>(0, 50 - approxBuildTurns) * projectedOutput;
-
-#ifdef ALTAI_DEBUG
-        os << " scaled = " << projectedOutput;
-#endif
-        return projectedOutput;
     }
 
     ICityBuildingTacticsPtr makeCityBuildingTactics(const Player& player, const City& city, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
@@ -759,6 +702,27 @@ namespace AltAI
                         << " Adding tactic for building: " << gGlobals.getBuildingInfo(pBuildingInfo->getBuildingType()).getType();
 #endif
                     pTactic->addCityTactic(pCity->getIDInfo(), makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo));
+                }
+            }
+        }
+
+        return pTactic;
+    }
+
+    IProcessTacticsPtr makeProcessTactics(const Player& player, ProcessTypes processType)
+    {
+        IProcessTacticsPtr pTactic = IProcessTacticsPtr(new ProcessTactic(processType));
+        const CvProcessInfo& processInfo = gGlobals.getProcessInfo(processType);
+        TechTypes techType = (TechTypes)processInfo.getTechPrereq();
+        if (player.getTechResearchDepth(techType) > 0)
+        {
+            pTactic->addDependency(IDependentTacticPtr(new ResearchTechDependency(techType)));
+
+            for (int i = 0; i < NUM_COMMERCE_TYPES; ++i)
+            {
+                if (processInfo.getProductionToCommerceModifier(i) > 0)
+                {
+                    // todo - add tactics
                 }
             }
         }

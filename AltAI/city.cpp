@@ -239,11 +239,10 @@ namespace AltAI
         {
             const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
 
-            CityDataPtr pCityData = pCityData_->clone();
             std::vector<IProjectionEventPtr> events;
-            events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pCityData)));
+            events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
-            currentOutputProjection_ = getProjectedOutput(*player, pCityData, 50, events);
+            currentOutputProjection_ = getProjectedOutput(*player, pCityData_->clone(), 50, events);
         }
 
 #ifdef ALTAI_DEBUG
@@ -351,24 +350,12 @@ namespace AltAI
         {
             constructItem_ = player->getAnalysis()->getPlayerTactics()->getBuildItem(*this);
 #ifdef ALTAI_DEBUG
-            os << "\n" << narrow(pCity_->getName()) << " calculated build: " << constructItem_;
+            os << "\n" << narrow(pCity_->getName()) << " calculated build: " << constructItem_ << ", turn = " << gGlobals.getGame().getGameTurn();
 #endif
         }
 
         if (constructItem_.buildingType != NO_BUILDING)
         {
-            /*CityDataPtr pCityData = pCityData_->clone();
-            std::vector<IProjectionEventPtr> events;
-            pCityData->pushBuilding(constructItem_.buildingType);
-            events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCityData, player->getAnalysis()->getBuildingInfo(constructItem_.buildingType))));
-            events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent(pCityData)));
-
-            ProjectionLadder buildingLadder = getProjectedOutput(*player, pCityData, 50, events);
-#ifdef ALTAI_DEBUG
-            os << "\n" << narrow(pCity_->getName()) << " projection2: ";
-            buildingLadder.debug(os);
-            os << ", delta = " << buildingLadder.getOutput() - currentOutputProjection_.getOutput();
-#endif*/
             return boost::make_tuple(NO_UNIT, constructItem_.buildingType, NO_PROCESS, NO_PROJECT);
         }
         else if (constructItem_.unitType != NO_UNIT)

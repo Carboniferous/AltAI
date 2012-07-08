@@ -1,3 +1,5 @@
+#pragma once
+
 #include "./utils.h"
 #include "./tactic_actions.h"
 

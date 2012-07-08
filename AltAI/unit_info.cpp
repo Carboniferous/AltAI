@@ -239,6 +239,27 @@ namespace AltAI
             }
         }
 
+        void getCorporationNode(UnitInfo::BaseNode& baseNode, const CvUnitInfo& unitInfo, const UnitInfoRequestData& requestData)
+        {
+            UnitInfo::CorporationNode node;
+
+            node.prereqCorporation = (CorporationTypes)unitInfo.getPrereqCorporation();
+
+            for (int i = 0, count = gGlobals.getNumCorporationInfos(); i < count; ++i)
+            {
+                int prob = unitInfo.getCorporationSpreads(i);
+                if (prob > 0)
+                {
+                    node.corporationSpreads.push_back(std::make_pair((CorporationTypes)i, prob));
+                }
+            }
+
+            if (node.prereqCorporation != NO_CORPORATION || !node.corporationSpreads.empty())
+            {
+                baseNode.nodes.push_back(node);
+            }
+        }
+
         void getMiscNode(UnitInfo::BaseNode& baseNode, const CvUnitInfo& unitInfo, const UnitInfoRequestData& requestData)
         {
             UnitInfo::MiscAbilityNode node;
@@ -417,6 +438,8 @@ namespace AltAI
 
             node.prereqBuildingType = (BuildingTypes)unitInfo.getPrereqBuilding();
 
+            node.specialUnitType = (SpecialUnitTypes)unitInfo.getSpecialUnitType();
+
             getPromotionsNode(node, unitInfo, requestData);
             getCombatNode(node, unitInfo, requestData);
             getCollateralNode(node, unitInfo, requestData);
@@ -427,6 +450,7 @@ namespace AltAI
             getCargoNode(node, unitInfo, requestData);
             getBuildNode(node, unitInfo, requestData);
             getReligionNode(node, unitInfo, requestData);
+            getCorporationNode(node, unitInfo, requestData);
             getMiscNode(node, unitInfo, requestData);
 
             return node;
