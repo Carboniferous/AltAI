@@ -229,6 +229,12 @@ namespace AltAI
         case 4:
             pCityUnitTactic = ICityUnitTacticPtr(new FieldAttackUnitTactic());
             break;
+        case 5:
+            pCityUnitTactic = ICityUnitTacticPtr(new BuildCityUnitTactic());
+            break;
+        case 6:
+            pCityUnitTactic = ICityUnitTacticPtr(new BuildImprovementsUnitTactic());
+            break;
         default:
             break;
         }

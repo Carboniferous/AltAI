@@ -1,5 +1,8 @@
 #include "./tech_tactics_items.h"
+#include "./gamedata_analysis.h"
+#include "./city_tactics.h"
 #include "./city_data.h"
+#include "./building_tactics_deps.h"
 
 namespace AltAI
 {
@@ -13,7 +16,7 @@ namespace AltAI
         buildTactics_.push_back(pBuildTactic);
     }
 
-    void CityImprovementTactics::addDependency(const IDependentTacticPtr& pDependentTactic)
+    void CityImprovementTactics::addDependency(const ResearchTechDependencyPtr& pDependentTactic)
     {
         dependentTactics_.push_back(pDependentTactic);
     }
@@ -34,6 +37,34 @@ namespace AltAI
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {
             dependentTactics_[i]->remove(pCityData);
+        }
+    }
+
+    void CityImprovementTactics::apply(const ICityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& tacticSelectionData)
+    {
+        std::map<UnitTypes, WorkerUnitValue>::iterator iter = tacticSelectionData.workerUnits.find(pCityUnitTactics->getUnitType());
+
+        if (iter != tacticSelectionData.workerUnits.end())
+        {
+            const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(pCityUnitTactics->getUnitType());
+
+            for (size_t i = 0, count = plotData_.size(); i < count; ++i)
+            {
+                if (boost::get<5>(plotData_[i]) == CityImprovementManager::Not_Built)
+                {
+                    BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(boost::get<2>(plotData_[i]));
+
+                    if (unitInfo.getBuilds(buildType))
+                    {
+                        std::vector<TechTypes> techs;
+                        for (size_t j = 0, prereqCount = dependentTactics_.size(); j < prereqCount; ++j)
+                        {
+                            techs.push_back(dependentTactics_[j]->getResearchTech());
+                        }
+                        iter->second.addBuild(buildType, boost::make_tuple(boost::get<0>(plotData_[i]), boost::get<4>(plotData_[i]), techs));
+                    }
+                }
+            }
         }
     }
 
@@ -90,7 +121,13 @@ namespace AltAI
         pStream->Read(&depCount);
         for (size_t i = 0; i < depCount; ++i)
         {
-            dependentTactics_.push_back(IDependentTactic::factoryRead(pStream));
+            ResearchTechDependencyPtr pDependentTactic(new ResearchTechDependency());
+
+            int ID;
+            pStream->Read(&ID);  // this should always be 0
+
+            pDependentTactic->read(pStream);
+            dependentTactics_.push_back(pDependentTactic);
         }
 
         size_t buildTacticCount;

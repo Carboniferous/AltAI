@@ -40,6 +40,7 @@ namespace AltAI
 
         void addNewCityBuildingTactics(IDInfo city);
         void addNewCityUnitTactics(IDInfo city);
+        void addNewCityImprovementTactics(IDInfo city);
 
         void updateCityBuildingTacticsDependencies();
 
@@ -50,6 +51,7 @@ namespace AltAI
         void eraseLimitedBuildingTactics(BuildingTypes buildingType);
 
         void updateCityUnitTactics(TechTypes techType);
+        void updateCityUnitTacticsExperience(IDInfo city);
         void updateCityUnitTactics(IDInfo city);
 
         void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);

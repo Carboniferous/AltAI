@@ -18,6 +18,7 @@
 #include "./building_info_visitors.h"
 #include "./player.h"
 #include "./player_analysis.h"
+#include "./unit_analysis.h"
 #include "./map_analysis.h"
 #include "./city.h"
 #include "./city_simulator.h"
@@ -382,6 +383,25 @@ namespace AltAI
         }
     }
 
+    void PlayerTactics::addNewCityImprovementTactics(IDInfo city)
+    {
+        for (int i = 0, count = gGlobals.getNumTechInfos(); i < count; ++i)
+        {
+            const int depth = player.getTechResearchDepth((TechTypes)i);
+
+            if (depth > 0 && depth < 3)
+            {
+                const boost::shared_ptr<TechInfo>& pTechInfo = player.getAnalysis()->getTechInfo((TechTypes)i);
+                if (techAffectsImprovements(pTechInfo))
+                {
+                    const CvCity* pCity = getCity(city);
+                    std::list<ICityImprovementTacticsPtr> cityImprovementTactics = makeCityBuildTactics(player, player.getCity(pCity->getID()), pTechInfo);
+                    std::copy(cityImprovementTactics.begin(), cityImprovementTactics.end(), std::back_inserter(cityImprovementTacticsMap_[pCity->getIDInfo()]));
+                }
+            }
+        }
+    }
+
     void PlayerTactics::updateCityBuildingTacticsDependencies()
     {
         for (CityBuildingTacticsMap::iterator iter(cityBuildingTacticsMap_.begin()), endIter(cityBuildingTacticsMap_.end()); iter != endIter; ++iter)
@@ -469,6 +489,22 @@ namespace AltAI
                     {
                         iter->second->updateDependencies(player);
                     }
+                }
+            }
+        }
+    }
+
+    void PlayerTactics::updateCityUnitTacticsExperience(IDInfo city)
+    {
+        for (UnitTacticsMap::iterator iter(unitTacticsMap_.begin()), endIter(unitTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(iter->first);
+
+            if (pUnitInfo)
+            {
+                if (iter->second)
+                {
+                    iter->second->addCityTactic(city, makeCityUnitTactics(player, player.getCity(city.iID), pUnitInfo));
                 }
             }
         }
@@ -912,23 +948,9 @@ namespace AltAI
             {
                 for (CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
                 {
-                    const std::vector<IDependentTacticPtr>& dependentTactics = li->second->getDependencies();
-                    if (!dependentTactics.empty())
+                    if (li->second->areDependenciesSatisfied())
                     {
-                        bool conditionsAllMet = true;
-                        for (size_t i = 0, count = dependentTactics.size(); i < count; ++i)
-                        {
-                            if (dependentTactics[i]->required(pCity))
-                            {
-                                conditionsAllMet = false;
-                                break;
-                            }
-                        }
-
-                        if (conditionsAllMet)
-                        {
-                            buildingsCityCanAssistWith[ci->first].push_back(li->first);
-                        }
+                        buildingsCityCanAssistWith[ci->first].push_back(li->first);
                     }
                 }
             }
@@ -1225,15 +1247,34 @@ namespace AltAI
         }
 
         os << "\nUnit tactics:\n";
+        std::vector<UnitTypes> combatUnits, possibleCombatUnits;
         for (UnitTacticsMap::const_iterator ci(unitTacticsMap_.begin()), ciEnd(unitTacticsMap_.end()); ci != ciEnd; ++ci)
         {
             if (ci->first != NO_UNIT)
             {
-                os << "\nUnit: " << gGlobals.getUnitInfo(ci->first).getType();
+                os << "\nUnit: " << gGlobals.getUnitInfo(ci->first).getType() << " is obsolete = " << isUnitObsolete(player, player.getAnalysis()->getUnitInfo(ci->first));
                 if (ci->second)
                 {
                     ci->second->update(player);
                     ci->second->debug(os);
+                }
+
+                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(ci->first);
+                if (unitInfo.getProductionCost() >= 0 && unitInfo.getCombat() > 0 && ci->second)
+                {
+                    if (!isUnitObsolete(player, player.getAnalysis()->getUnitInfo(ci->first)))
+                    {
+                        // TODO - redundant double check?
+                        if (ci->second->areDependenciesSatisfied() && couldConstructUnit(player, 0, player.getAnalysis()->getUnitInfo(ci->first), false))
+                        {
+                            combatUnits.push_back(ci->first);
+                            possibleCombatUnits.push_back(ci->first);
+                        }
+                        else if (couldConstructUnit(player, 1, player.getAnalysis()->getUnitInfo(ci->first), true))
+                        {
+                            possibleCombatUnits.push_back(ci->first);
+                        }
+                    }
                 }
             }
             else
@@ -1241,6 +1282,57 @@ namespace AltAI
                 os << "\nUnit: NO_UNIT";
             }
         }
+
+        os << "\nPossible units: ";
+        for (size_t i = 0, count = possibleCombatUnits.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            os << gGlobals.getUnitInfo(possibleCombatUnits[i]).getType();
+        }
+
+        std::vector<UnitTypes> bestCityAttackers(combatUnits.size(), NO_UNIT), bestCityDefenders(combatUnits.size(), NO_UNIT);
+        std::vector<int> bestCityAttackersOdds(combatUnits.size(), 0), bestCityDefendersOdds(combatUnits.size(), 0);
+
+        const int usefulOddsThreshold = 650;
+        for (size_t i = 0, count = combatUnits.size(); i < count; ++i)
+        {
+            std::vector<int> odds = player.getAnalysis()->getUnitAnalysis()->getOdds(combatUnits[i], possibleCombatUnits, 1, 1, UnitData::CityAttack, true);
+            os << "\n" << gGlobals.getUnitInfo(combatUnits[i]).getType() << ", cost = " << gGlobals.getUnitInfo(combatUnits[i]).getProductionCost();
+            for (size_t j = 0, oddsCounter = odds.size(); j < oddsCounter; ++j)
+            {
+                /*if (odds[j] > bestCityAttackersOdds[j])
+                {
+                    bestCityAttackersOdds[j] = odds[j];
+                    bestCityAttackers[j] = combatUnits[i];
+                }*/
+                os << "\n\t" << gGlobals.getUnitInfo(possibleCombatUnits[j]).getType() << " : " << odds[j];
+            }
+        }
+
+        for (size_t i = 0, count = combatUnits.size(); i < count; ++i)
+        {
+            std::vector<int> odds = player.getAnalysis()->getUnitAnalysis()->getOdds(combatUnits[i], possibleCombatUnits, 1, 1, UnitData::CityAttack, false);
+            os << "\n" << gGlobals.getUnitInfo(combatUnits[i]).getType() << ", cost = " << gGlobals.getUnitInfo(combatUnits[i]).getProductionCost();
+            for (size_t j = 0, oddsCounter = odds.size(); j < oddsCounter; ++j)
+            {
+                /*if (odds[j] > bestCityDefendersOdds[j])
+                {
+                    bestCityDefendersOdds[j] = odds[j];
+                    bestCityDefenders[j] = combatUnits[i];
+                }*/
+                os << "\n\t" << gGlobals.getUnitInfo(possibleCombatUnits[j]).getType() << " : " << odds[j];
+            }
+        }
+
+        /*for (size_t i = 0, count = combatUnits.size(); i < count; ++i)
+        {
+            os << "\nBest city attacker v. " << gGlobals.getUnitInfo(combatUnits[i]).getType() << " = "
+               << (bestCityAttackers[i] == NO_UNIT ? "NO_UNIT" : gGlobals.getUnitInfo(bestCityAttackers[i]).getType())
+               << " odds = " << bestCityAttackersOdds[i];
+            os << "\nBest city defender v. " << gGlobals.getUnitInfo(combatUnits[i]).getType() << " = "
+               << (bestCityDefenders[i] == NO_UNIT ? "NO_UNIT" : gGlobals.getUnitInfo(bestCityDefenders[i]).getType())
+               << " odds = " << bestCityDefendersOdds[i];
+        }*/
 
         os << "\nProcess tactics:";
         for (ProcessTacticsMap::const_iterator ci(processTacticsMap_.begin()), ciEnd(processTacticsMap_.end()); ci != ciEnd; ++ci)

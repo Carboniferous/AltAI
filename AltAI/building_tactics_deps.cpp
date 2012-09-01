@@ -35,6 +35,11 @@ namespace AltAI
         return !CvTeamAI::getTeam(player.getTeamID()).isHasTech(techType_);
     }
 
+    bool ResearchTechDependency::removeable() const
+    {
+        return true;
+    }
+
     std::pair<BuildQueueTypes, int> ResearchTechDependency::getBuildItem() const
     {
         return std::make_pair(NoItem, -1);
@@ -88,6 +93,11 @@ namespace AltAI
             buildingCount += pCity->getNumBuilding(buildingType_);
         }
         return buildingCount == 0;
+    }
+
+    bool CityBuildingDependency::removeable() const
+    {
+        return true;
     }
 
     std::pair<BuildQueueTypes, int> CityBuildingDependency::getBuildItem() const
@@ -147,6 +157,11 @@ namespace AltAI
         return player.getCvPlayer()->getBuildingClassCount(buildingClassType) < (1 + player.getCvPlayer()->getBuildingClassCountPlusMaking(sourceBuildingClassType)) * count_;
     }
 
+    bool CivBuildingDependency::removeable() const
+    {
+        return false;  // todo - possible to remove for limited buildings?
+    }
+
     std::pair<BuildQueueTypes, int> CivBuildingDependency::getBuildItem() const
     {
         return std::make_pair(BuildingItem, buildingType_);
@@ -198,6 +213,11 @@ namespace AltAI
     bool ReligiousDependency::required(const Player& player) const
     {
         return player.getCvPlayer()->getHasReligionCount(religionType_) == 0;
+    }
+
+    bool ReligiousDependency::removeable() const
+    {
+        return true;
     }
 
     std::pair<BuildQueueTypes, int> ReligiousDependency::getBuildItem() const
@@ -286,6 +306,11 @@ namespace AltAI
         }
 
         return !(isOr_ && foundAny);
+    }
+
+    bool CityBonusDependency::removeable() const
+    {
+        return false;
     }
 
     std::pair<BuildQueueTypes, int> CityBonusDependency::getBuildItem() const

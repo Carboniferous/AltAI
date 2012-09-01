@@ -101,6 +101,10 @@ namespace AltAI
                 if (iter != cities_.end())
                 {
                     iter->second.init();
+                    const CvCity* pCity = iter->second.getCvCity();
+                    pPlayerAnalysis_->getPlayerTactics()->addNewCityBuildingTactics(pCity->getIDInfo());
+                    pPlayerAnalysis_->getPlayerTactics()->addNewCityUnitTactics(pCity->getIDInfo());
+                    pPlayerAnalysis_->getPlayerTactics()->addNewCityImprovementTactics(pCity->getIDInfo());
                 }
             }
             citiesToInit_.clear();
@@ -147,11 +151,9 @@ namespace AltAI
         citiesToInit_.insert(pCity->getID());
 
         // updates shared plot data (if not init yet - init() above will call MapAnalysis)
-        if (gGlobals.getGame().getAltAI()->isInit())
+        if (gGlobals.getGame().getAltAI()->isInit() && pPlayer_->isUsingAltAI())
         {
-            pPlayerAnalysis_->getMapAnalysis()->addCity(pCity);
-            pPlayerAnalysis_->getPlayerTactics()->addNewCityBuildingTactics(pCity->getIDInfo());
-            pPlayerAnalysis_->getPlayerTactics()->addNewCityUnitTactics(pCity->getIDInfo());
+            pPlayerAnalysis_->getMapAnalysis()->addCity(pCity);            
         }
     }
 

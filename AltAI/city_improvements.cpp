@@ -202,7 +202,7 @@ namespace AltAI
                 os << " yieldTypes[" << i << "] = " << yieldTypes[i];
             }
         }
-        dotMapItem.debugOutputs(CityLog::getLog(pCity)->getStream());
+        //dotMapItem.debugOutputs(CityLog::getLog(pCity)->getStream());
 #endif
 
         improvements_.clear();

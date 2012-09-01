@@ -34,6 +34,7 @@
 #include "city.h"
 #include "iters.h"
 #include "hurry_helper.h"
+#include "player_analysis.h"
 
 // Public Functions...
 
@@ -6813,6 +6814,12 @@ void CvCity::changeFreeExperience(int iChange)
 {
 	m_iFreeExperience = (m_iFreeExperience + iChange);
 	FAssert(getFreeExperience() >= 0);
+
+    if (iChange != 0 && GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        // AltAI
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getAnalysis()->getPlayerTactics()->updateCityUnitTacticsExperience(getIDInfo());
+    }
 }
 
 
@@ -8581,6 +8588,12 @@ void CvCity::changeDomainFreeExperience(DomainTypes eIndex, int iChange)
 	FAssertMsg(eIndex < NUM_DOMAIN_TYPES, "eIndex expected to be < NUM_DOMAIN_TYPES");
 	m_aiDomainFreeExperience[eIndex] = (m_aiDomainFreeExperience[eIndex] + iChange);
 	FAssert(getDomainFreeExperience(eIndex) >= 0);
+
+    if (iChange != 0 && GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        // AltAI
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getAnalysis()->getPlayerTactics()->updateCityUnitTacticsExperience(getIDInfo());
+    }
 }
 
 

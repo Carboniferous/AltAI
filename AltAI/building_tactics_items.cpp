@@ -16,7 +16,7 @@ namespace AltAI
 
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
-        if (pCityBuildingTactics->getDependencies().empty() && pCity->canConstruct(pCityBuildingTactics->getBuildingType(), true) && !ladder.buildings.empty())
+        if (pCityBuildingTactics->areDependenciesSatisfied() && pCity->canConstruct(pCityBuildingTactics->getBuildingType(), true) && !ladder.buildings.empty())
         {
             EconomicBuildingValue economicValue;
 
@@ -158,7 +158,7 @@ namespace AltAI
 
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
-        if (pCityBuildingTactics->getDependencies().empty() && pCity->canConstruct(pCityBuildingTactics->getBuildingType(), true) && !ladder.buildings.empty())
+        if (pCityBuildingTactics->areDependenciesSatisfied() && pCity->canConstruct(pCityBuildingTactics->getBuildingType(), true) && !ladder.buildings.empty())
         {
             CultureBuildingValue cultureValue;
 
@@ -166,7 +166,17 @@ namespace AltAI
             cultureValue.output = ladder.getOutput() - city.getCurrentOutputProjection().getOutput();
             cultureValue.nTurns = ladder.buildings[0].first;
 
-            selectionData.smallCultureBuildings.insert(cultureValue);
+            bool needCulture = pCity->getCultureLevel() == 1 && pCity->getCommerceRate(COMMERCE_CULTURE) == 0;
+            bool culturePressure = city.getCityData()->getNumUncontrolledPlots(true) > 0;
+
+            if (needCulture || culturePressure)
+            {
+                selectionData.smallCultureBuildings.insert(cultureValue);
+            }
+            else
+            {
+                selectionData.largeCultureBuildings.insert(cultureValue);
+            }
         }
     }
 
@@ -284,7 +294,7 @@ namespace AltAI
 
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
-        if (pCityBuildingTactics->getDependencies().empty() && !ladder.buildings.empty())
+        if (pCityBuildingTactics->areDependenciesSatisfied() && !ladder.buildings.empty())
         {
             MilitaryBuildingValue buildingValue;
             buildingValue.freeExperience = freeExperience;

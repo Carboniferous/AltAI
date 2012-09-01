@@ -323,4 +323,25 @@ namespace AltAI
     {
         return NO_UNIT;
     }
+
+    std::vector<UnitTypes> getPossibleCombatUnits(const Player& player, DomainTypes domainType)
+    {
+        std::vector<UnitTypes> combatUnits;
+
+        boost::shared_ptr<PlayerTactics> pTactics = player.getAnalysis()->getPlayerTactics();
+
+        for (PlayerTactics::UnitTacticsMap::const_iterator ci(pTactics->unitTacticsMap_.begin()), ciEnd(pTactics->unitTacticsMap_.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->first != NO_UNIT)
+            {
+                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(ci->first);
+                if (unitInfo.getDomainType() == domainType && unitInfo.getProductionCost() >= 0 && unitInfo.getCombat() > 0 && ci->second && ci->second->areDependenciesSatisfied())
+                {
+                    combatUnits.push_back(ci->first);
+                }
+            }
+        }
+
+        return combatUnits;
+    }
 }

@@ -17,6 +17,7 @@ namespace AltAI
         virtual std::vector<IDependentTacticPtr> getDependencies() const;
         virtual void update(const Player& player, const CityDataPtr& pCityData);
         virtual void updateDependencies(const Player& player, const CvCity* pCity);
+        virtual bool areDependenciesSatisfied() const;
         virtual void apply(TacticSelectionData& selectionData);
 
         virtual BuildingTypes getBuildingType() const;

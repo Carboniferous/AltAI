@@ -49,6 +49,19 @@ namespace AltAI
         dependentTactics_.erase(iter, dependentTactics_.end());
     }
 
+    bool CityBuildingTactic::areDependenciesSatisfied() const
+    {
+        for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
+        {
+            CvCity* pCity = ::getCity(city_);
+            if (pCity && dependentTactics_[i]->required(pCity))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     void CityBuildingTactic::apply(TacticSelectionData& selectionData)
     {
         for (std::list<ICityBuildingTacticPtr>::iterator iter(buildingTactics_.begin()), endIter(buildingTactics_.end()); iter != endIter; ++iter)

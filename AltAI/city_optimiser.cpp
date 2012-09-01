@@ -1396,8 +1396,8 @@ namespace AltAI
                 {
                     const int removeCount = std::min<int>(goodImprovements[i].size() - fewestGoodImprovementsInfo.second, fewestGoodImprovementsInfo.second);
 #ifdef ALTAI_DEBUG
-                    os << "\nRemoving: " << removeCount << " improvements for type: " << gGlobals.getYieldInfo(yieldTypes[i]).getType()
-                       << " and keeping type: " << gGlobals.getYieldInfo(yieldTypes[worstYieldTypeindex]).getType();
+                    //os << "\nRemoving: " << removeCount << " improvements for type: " << gGlobals.getYieldInfo(yieldTypes[i]).getType()
+                    //   << " and keeping type: " << gGlobals.getYieldInfo(yieldTypes[worstYieldTypeindex]).getType();
 #endif
                     int removedCount = 0;
                     std::list<DotMapItem::SelectedImprovement>::iterator iter(bestImprovementSelections[i].begin()), iterEnd(bestImprovementSelections[i].end());

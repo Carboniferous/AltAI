@@ -124,9 +124,9 @@ namespace AltAI
                 maxResearchRateWithProcesses = player.getMaxResearchRateWithProcesses();
                 rankAndMaxProduction = player.getCityRank(city.getCvCity()->getIDInfo(), OUTPUT_PRODUCTION);
 
-                bestEconomicBuilding = bestSmallCultureBuilding = bestMilitaryBuilding = bestEconomicWonder = bestEconomicNationalWonder = NO_BUILDING;
+                bestEconomicBuilding = bestSmallCultureBuilding = bestLargeCultureBuilding = bestMilitaryBuilding = bestEconomicWonder = bestEconomicNationalWonder = NO_BUILDING;
 
-                bestCollateralUnit = bestCityDefenceUnit = bestScoutUnit = bestCombatUnit = bestSeaDefenceUnit = bestSeaTransportUnit = bestSeaScoutUnit = NO_UNIT;
+                bestCollateralUnit = bestCityDefenceUnit = bestScoutUnit = bestCombatUnit = bestSeaDefenceUnit = bestSeaTransportUnit = bestSeaScoutUnit = bestWorkerUnit = NO_UNIT;
                 bestDependentTacticUnit = NO_UNIT;
 
                 bestEconomicProcess = bestResearchProcess = bestCultureProcess = NO_PROCESS;
@@ -407,6 +407,10 @@ namespace AltAI
                 {
                     os << "\nbestSmallCultureBuilding = " << gGlobals.getBuildingInfo(bestSmallCultureBuilding).getType();
                 }
+                if (bestLargeCultureBuilding != NO_BUILDING)
+                {
+                    os << "\nbestLargeCultureBuilding = " << gGlobals.getBuildingInfo(bestLargeCultureBuilding).getType();
+                }
                 if (bestEconomicBuilding != NO_BUILDING)
                 {
                     os << "\nbestEconomicBuilding = " << gGlobals.getBuildingInfo(bestEconomicBuilding).getType();
@@ -582,54 +586,18 @@ namespace AltAI
                 boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
                 std::ostream& os = pCivLog->getStream();
 #endif
-//                if (economicFlagsUnion & EconomicFlags::Output_Culture)
-//                {
-//#ifdef ALTAI_DEBUG
-//                    os << "\n(getConstructItem): Turn = " << gGlobals.getGame().getGameTurn();
-//#endif
-//                    bestSmallCultureBuilding = NO_BUILDING;
-//                    int bestValue = MAX_INT;
-//                    for (std::map<BuildingTypes, BuildingSelectionHelper>::const_iterator ci(buildingSelectionData.begin()), ciEnd(buildingSelectionData.end()); ci != ciEnd; ++ci)
-//                    {
-//                        if (ci->second.constructItem.buildingFlags & (BuildingFlags::Building_World_Wonder & BuildingFlags::Building_National_Wonder))
-//                        {
-//#ifdef ALTAI_DEBUG
-//                            os << "\n(calculateSmallCultureBuilding) skipping building as is wonder: " << gGlobals.getBuildingInfo(ci->first).getType();
-//#endif
-//                            continue;
-//                        }
-//#ifdef ALTAI_DEBUG
-//                        os << "\n(calculateSmallCultureBuilding) checking building: " << gGlobals.getBuildingInfo(ci->first).getType();
-//#endif
-//                        std::map<int, int>::const_iterator iter = ci->second.simulationValuesMap.find(EconomicFlags::Output_Culture);
-//                        if (iter != ci->second.simulationValuesMap.end())
-//                        {
-//                            //int thisValue = iter->second;
-//                            int requiredProduction = city.getCvCity()->getProductionNeeded(ci->first) - city.getCvCity()->getBuildingProduction(ci->first);
-//                            //thisValue /= requiredProduction;
-//#ifdef ALTAI_DEBUG
-//                            os << " required production = " << requiredProduction << " value = " << iter->second;
-//#endif
-//                            if (requiredProduction < bestValue)
-//                            {
-//                                bestValue = requiredProduction;
-//                                bestSmallCultureBuilding = ci->second.constructItem.buildingType;
-//                            }
-//                        }
-//                    }
-//                }
 
+#ifdef ALTAI_DEBUG
                 TotalOutput base = city.getCurrentOutputProjection().getOutput();
                 for (std::set<CultureBuildingValue>::const_iterator ci(tacticSelectionData.smallCultureBuildings.begin()), ciEnd(tacticSelectionData.smallCultureBuildings.end()); ci != ciEnd; ++ci)
                 {
-#ifdef ALTAI_DEBUG
                     TotalOutputWeights weights = makeOutputW(1, 1, 1, 1, 20, 1);
                     TotalOutputValueFunctor valueF(weights);
 
                     os << "\n(Small Culture Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType()
                        << " turns = " << ci->nTurns << ", delta = " << ci->output << " value = " << valueF(ci->output) / std::max<int>(1, ci->nTurns);
-#endif
                 }
+#endif
 
                 if (!tacticSelectionData.smallCultureBuildings.empty())
                 {
@@ -640,6 +608,40 @@ namespace AltAI
                     if (valueF(ci->output) / std::max<int>(1, ci->nTurns) > 0)
                     {
                         bestSmallCultureBuilding = ci->buildingType;
+                    }
+                }
+            }
+
+            void calculateLargeCultureBuilding()
+            {
+#ifdef ALTAI_DEBUG
+                // debug
+                boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
+                std::ostream& os = pCivLog->getStream();
+#endif
+
+#ifdef ALTAI_DEBUG
+                TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                for (std::set<CultureBuildingValue>::const_iterator ci(tacticSelectionData.largeCultureBuildings.begin()), ciEnd(tacticSelectionData.largeCultureBuildings.end()); ci != ciEnd; ++ci)
+                {
+
+                    TotalOutputWeights weights = makeOutputW(1, 1, 1, 1, 20, 1);
+                    TotalOutputValueFunctor valueF(weights);
+
+                    os << "\n(Large Culture Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType()
+                       << " turns = " << ci->nTurns << ", delta = " << ci->output << " value = " << valueF(ci->output) / std::max<int>(1, ci->nTurns);
+                }
+#endif
+
+                if (!tacticSelectionData.largeCultureBuildings.empty())
+                {
+                    TotalOutputWeights weights = makeOutputW(1, 1, 1, 1, 10, 1);
+                    TotalOutputValueFunctor valueF(weights);
+
+                    std::set<CultureBuildingValue>::const_iterator ci(tacticSelectionData.largeCultureBuildings.begin());
+                    if (valueF(ci->output) / std::max<int>(1, ci->nTurns) > 0)
+                    {
+                        bestLargeCultureBuilding = ci->buildingType;
                     }
                 }
             }
@@ -1133,6 +1135,15 @@ namespace AltAI
                     cityAttackUnits.push_back(valueIter->second);
                     ++valueIter;
                 }
+
+                for (std::set<UnitTacticValue>::const_iterator ci(tacticSelectionData.cityAttackUnits.begin()), ciEnd(tacticSelectionData.cityAttackUnits.end()); ci != ciEnd; ++ci)
+                {
+#ifdef ALTAI_DEBUG
+                    std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+                    os << "\n(City Attack Unit): " << gGlobals.getUnitInfo(ci->unitType).getType()
+                       << " turns = " << ci->nTurns << ", value = " << ci->unitAnalysisValue;
+#endif
+                }
             }
 
             void calculateBestScoutUnit()
@@ -1221,7 +1232,7 @@ namespace AltAI
                     bestCityDefenceUnit = bestCombatUnit;
                 }
 
-                for (std::set<CityDefenceUnitValue>::const_iterator ci(tacticSelectionData.cityDefenceUnits.begin()), ciEnd(tacticSelectionData.cityDefenceUnits.end()); ci != ciEnd; ++ci)
+                for (std::set<UnitTacticValue>::const_iterator ci(tacticSelectionData.cityDefenceUnits.begin()), ciEnd(tacticSelectionData.cityDefenceUnits.end()); ci != ciEnd; ++ci)
                 {
 #ifdef ALTAI_DEBUG
                     std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
@@ -1499,6 +1510,55 @@ namespace AltAI
                     }
                 }
                 return false;
+            }
+
+            void calculateBestWorkerUnits()
+            {
+                for (std::map<UnitTypes, WorkerUnitValue>::const_iterator ci(tacticSelectionData.workerUnits.begin()), ciEnd(tacticSelectionData.workerUnits.end()); ci != ciEnd; ++ci)
+                {
+#ifdef ALTAI_DEBUG
+                    std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+                    os << "\n(Worker Unit): " << gGlobals.getUnitInfo(ci->first).getType();
+                    for (WorkerUnitValue::BuildsMap::const_iterator buildsIter(ci->second.buildsMap.begin()), endBuildsIter(ci->second.buildsMap.end());
+                         buildsIter != endBuildsIter; ++buildsIter)
+                    {
+                        os << "\n\t build: " << gGlobals.getBuildInfo(buildsIter->first).getType() << ", values = ";
+                        for (size_t i = 0, count = buildsIter->second.size(); i < count; ++i)
+                        {
+                            if (i > 0) os << ", ";
+                            os << boost::get<0>(buildsIter->second[i]) << " = " << boost::get<1>(buildsIter->second[i]);
+                            for (size_t j = 0, techCount = boost::get<2>(buildsIter->second[i]).size(); j < techCount; ++j)
+                            {
+                                if (j == 0) os << " techs = ";
+                                else os << ", ";
+                                os << gGlobals.getTechInfo(boost::get<2>(buildsIter->second[i])[j]).getType();
+                            }
+                        }
+                    }
+                    for (WorkerUnitValue::BuildsMap::const_iterator buildsIter(ci->second.consumedBuildsMap.begin()), endBuildsIter(ci->second.consumedBuildsMap.end());
+                        buildsIter != endBuildsIter; ++buildsIter)
+                    {
+                        os << "\n\t consumed build: " << gGlobals.getBuildInfo(buildsIter->first).getType() << ", values = ";
+                        for (size_t i = 0, count = buildsIter->second.size(); i < count; ++i)
+                        {
+                            if (i > 0) os << ", ";
+                            os << boost::get<0>(buildsIter->second[i]) << " = " << boost::get<1>(buildsIter->second[i]);
+                            for (size_t j = 0, techCount = boost::get<2>(buildsIter->second[i]).size(); j < techCount; ++j)
+                            {
+                                if (j == 0) os << " techs = ";
+                                else os << ", ";
+                                os << gGlobals.getTechInfo(boost::get<2>(buildsIter->second[i])[j]).getType();
+                            }
+                        }
+                    }
+                    os << "\n\t turns = " << ci->second.nTurns << ", build value = " << ci->second.getBuildValue() << " highest consumed build value = " << ci->second.getHighestConsumedBuildValue();
+#endif
+                }
+
+                if (!tacticSelectionData.workerUnits.empty())
+                {
+                    bestWorkerUnit = tacticSelectionData.workerUnits.begin()->first;
+                }
             }
 
             UnitTypes getBestWorker(bool isConsumed) const
@@ -2154,12 +2214,12 @@ namespace AltAI
             std::pair<int, int> rankAndMaxProduction;
             int unworkedGoodImprovementCount;
 
-            BuildingTypes bestSmallCultureBuilding, bestEconomicBuilding, bestMilitaryBuilding, bestEconomicWonder, bestEconomicNationalWonder;
+            BuildingTypes bestSmallCultureBuilding, bestLargeCultureBuilding, bestEconomicBuilding, bestMilitaryBuilding, bestEconomicWonder, bestEconomicNationalWonder;
 
             std::pair<BuildQueueTypes, int> bestDependentBuild;
 
             // todo - move unit data into separate unit manager
-            UnitTypes bestCombatUnit, bestScoutUnit, bestCityDefenceUnit, bestCollateralUnit, bestSeaDefenceUnit, bestSeaTransportUnit, bestSeaScoutUnit;
+            UnitTypes bestCombatUnit, bestScoutUnit, bestCityDefenceUnit, bestCollateralUnit, bestSeaDefenceUnit, bestSeaTransportUnit, bestSeaScoutUnit, bestWorkerUnit;
             UnitTypes bestDependentTacticUnit;
             std::vector<UnitTypes> combatUnits, cityAttackUnits, cityDefenceUnits, seaDefenceUnits, seaTransportUnits, collateralUnits;
             std::map<UnitCombatTypes, std::vector<UnitTypes> > counterUnits;
@@ -2283,9 +2343,93 @@ namespace AltAI
         return freePromotion != NO_PROMOTION && other.freePromotion == NO_PROMOTION;
     }
 
-    bool CityDefenceUnitValue::operator < (const CityDefenceUnitValue& other) const
+    bool UnitTacticValue::operator < (const UnitTacticValue& other) const
     {
         return unitAnalysisValue / std::max<int>(1, nTurns) > other.unitAnalysisValue / std::max<int>(1, other.nTurns);
+    }
+
+    int WorkerUnitValue::getBuildValue() const
+    {
+        TotalOutputWeights weights = makeOutputW(4, 3, 2, 2, 1, 1);
+        TotalOutputValueFunctor valueF(weights);
+
+        int totalBuildValue = 0;
+        for (WorkerUnitValue::BuildsMap::const_iterator ci(buildsMap.begin()), ciEnd(buildsMap.end()); ci != ciEnd; ++ci)
+        {
+            for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+            {
+                totalBuildValue += valueF(boost::get<1>(ci->second[i]));
+            }
+        }
+        return totalBuildValue;
+    }
+
+    int WorkerUnitValue::getHighestConsumedBuildValue() const
+    {
+        TotalOutputWeights weights = makeOutputW(4, 3, 2, 2, 1, 1);
+        TotalOutputValueFunctor valueF(weights);
+
+        int highestConsumedBuildValue = 0;
+        for (WorkerUnitValue::BuildsMap::const_iterator ci(consumedBuildsMap.begin()), ciEnd(consumedBuildsMap.end()); ci != ciEnd; ++ci)
+        {
+            for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+            {
+                int thisBuildValue = valueF(boost::get<1>(ci->second[i]));
+                if (thisBuildValue > highestConsumedBuildValue)
+                {
+                    highestConsumedBuildValue = thisBuildValue;
+                }
+            }
+        }
+        return highestConsumedBuildValue;
+    }
+
+    void WorkerUnitValue::addBuild(BuildTypes buildType, WorkerUnitValue::BuildData buildData)
+    {
+        const bool isConsumed = gGlobals.getBuildInfo(buildType).isKill();
+
+        if (isConsumed)
+        {
+            addBuild_(consumedBuildsMap, buildType, buildData);
+        }
+        else
+        {
+            addBuild_(buildsMap, buildType, buildData);
+        }
+    }
+
+    void WorkerUnitValue::addBuild_(WorkerUnitValue::BuildsMap& buildsMap_, BuildTypes buildType, WorkerUnitValue::BuildData buildData)
+    {
+        BuildsMap::iterator iter = buildsMap_.find(buildType);
+        bool found = false;
+
+        if (iter == buildsMap_.end())
+        {
+            found = false;  // new build type                
+        }
+        else
+        {
+            // do we already have an entry for this build type - no point in replacing it
+            // eventually may be worth storing all outputs, and picking the best according to the value functor being used
+            for (size_t i = 0, count = iter->second.size(); i < count; ++i)
+            {
+                if (boost::get<0>(iter->second[i]) == boost::get<0>(buildData))
+                {
+                    found = true;  
+                    break;
+                }
+            }
+        }
+
+        if (!found)
+        {
+            buildsMap_[buildType].push_back(buildData);
+        }
+    }
+
+    bool WorkerUnitValue::operator < (const WorkerUnitValue& other) const
+    {
+        return getBuildValue() + getHighestConsumedBuildValue() < other.getBuildValue() + other.getHighestConsumedBuildValue();
     }
 
     TotalOutput TacticSelectionData::getEconomicBuildingOutput(BuildingTypes buildingType, IDInfo city) const
@@ -2400,6 +2544,7 @@ namespace AltAI
         selectionData.processProjects();
 
         selectionData.calculateSmallCultureBuilding();
+        selectionData.calculateLargeCultureBuilding();
         selectionData.calculateBestEconomicBuilding();
         selectionData.calculateBestEconomicWonder();
         selectionData.calculateBestEconomicNationalWonder();
@@ -2407,6 +2552,8 @@ namespace AltAI
         selectionData.calculateBestLocalEconomicDependentTactic();
         selectionData.calculateBestMilitaryBuilding();
         selectionData.calculateBestProcesses();
+
+        selectionData.calculateBestWorkerUnits();
 
         selectionData.calculateBestCombatUnits();
         selectionData.calculateBestCityAttackUnits();

@@ -132,7 +132,7 @@ namespace AltAI
         {
             constructItem_.militaryFlags |= MilitaryFlags::Output_Collateral;
             constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Collateral,
-                std::make_pair(pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType), -1)));
+                std::make_pair(pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType, 1), -1)));
             // TODO: add another entry for field collateral?
         }
 
@@ -151,7 +151,7 @@ namespace AltAI
                 constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Defence, std::make_pair(defenceValue, -1)));
             }
 
-            int cityAttackValue = pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType);
+            int cityAttackValue = pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType, 1);
             if (cityAttackValue > 0)
             {
                 constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_City_Attack, std::make_pair(cityAttackValue, -1)));
@@ -322,9 +322,7 @@ namespace AltAI
             for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
             {
                 boost::apply_visitor(*this, node.nodes[i]);
-            }
-
-            
+            }            
         }
 
         void operator() (const UnitInfo::CityCombatNode& node)
@@ -341,10 +339,15 @@ namespace AltAI
         
         void operator() (const UnitInfo::MiscAbilityNode& node)
         {
+            if (node.canFoundCity)
+            {
+                pTactic_->addTactic(ICityUnitTacticPtr(new BuildCityUnitTactic()));
+            }
         }
 
         void operator() (const UnitInfo::BuildNode& node)
         {
+            pTactic_->addTactic(ICityUnitTacticPtr(new BuildImprovementsUnitTactic(node.buildTypes)));
         }
 
         void operator() (const UnitInfo::PromotionsNode& node)
@@ -413,8 +416,14 @@ namespace AltAI
             requiredExperience += 2 * ++maxPromotionLevel + 1;
         }
        
+        if (!unitInfo.isOnlyDefensive())
         {
             UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
+
+            if (levelsAndPromotions.second.empty())
+			{
+				levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+			}
 
             UnitData unitData(unitInfo);
             for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
@@ -422,14 +431,16 @@ namespace AltAI
 			    unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
 		    }
 
-            if (unitData.cityAttackPercent > 0)
-            {
-                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityAttackUnitTactic()));
-            }
+            pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityAttackUnitTactic(levelsAndPromotions.second)));
         }
 
         {
             UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityDefencePromotions(unitType, maxPromotionLevel);
+
+            if (levelsAndPromotions.second.empty())
+			{
+				levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+			}
 
             UnitData unitData(unitInfo);
             for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
@@ -439,7 +450,23 @@ namespace AltAI
 
             if (unitData.cityDefencePercent > 0)
             {
-                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityDefenceUnitTactic()));
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityDefenceUnitTactic(levelsAndPromotions.second)));
+            }
+        }
+
+        if (!unitInfo.isOnlyDefensive())
+        {
+            UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+
+            UnitData unitData(unitInfo);
+            for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		    {
+			    unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		    }
+
+            if (unitData.combat > 0)
+            {
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldAttackUnitTactic(levelsAndPromotions.second)));
             }
         }
 

@@ -814,7 +814,7 @@ namespace AltAI
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\n(addPlotInfo_): Adding plot info for key value = " << key << ", plot: " << XYCoords(pPlot->getX(), pPlot->getY()) << "\n" << plotInfo.getInfo();
+//        os << "\n(addPlotInfo_): Adding plot info for key value = " << key << ", plot: " << XYCoords(pPlot->getX(), pPlot->getY()) << "\n" << plotInfo.getInfo();
 #endif
 
         PlotInfoMap::iterator iter = plotInfoMap_.find(key);
@@ -837,9 +837,9 @@ namespace AltAI
 
     std::pair<int, MapAnalysis::PlotInfoMap::iterator> MapAnalysis::updatePlotInfo_(const CvPlot* pPlot)
     {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-#endif
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+//#endif
         const XYCoords coords(pPlot->getX(), pPlot->getY());
 
         PlotInfo plotInfo(pPlot, player_.getPlayerID());
@@ -852,19 +852,19 @@ namespace AltAI
         {
             iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;
 
-#ifdef ALTAI_DEBUG
-            os << "\n(updatePlotInfo_): Adding plot info: " << key << ", for coords = " << XYCoords(pPlot->getX(), pPlot->getY())
-               << "\n" << plotInfo.getInfo();
-#endif
+//#ifdef ALTAI_DEBUG
+//            os << "\n(updatePlotInfo_): Adding plot info: " << key << ", for coords = " << XYCoords(pPlot->getX(), pPlot->getY())
+//               << "\n" << plotInfo.getInfo();
+//#endif
         }
         else
         {
             iter->second = plotInfo.getInfo();
 
-#ifdef ALTAI_DEBUG
-            os << "\n(updatePlotInfo_): Updating plot info: " << key << ", for coords = " << XYCoords(pPlot->getX(), pPlot->getY())
-               << "\n" << plotInfo.getInfo();
-#endif
+//#ifdef ALTAI_DEBUG
+//            os << "\n(updatePlotInfo_): Updating plot info: " << key << ", for coords = " << XYCoords(pPlot->getX(), pPlot->getY())
+//               << "\n" << plotInfo.getInfo();
+//#endif
         }
 
         return std::make_pair(key, iter);
@@ -872,9 +872,9 @@ namespace AltAI
 
     void MapAnalysis::addDotMapPlot_(const CvPlot* pPlot, const PlotInfo::PlotInfoNode& plotInfo)
     {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();       
-#endif
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();       
+//#endif
         const XYCoords coords(pPlot->getX(), pPlot->getY());
         const int key = keyInfoMap_[coords];
         const TeamTypes teamType = player_.getTeamID();
@@ -891,10 +891,10 @@ namespace AltAI
                     {
                         if (couldFoundAtPlot(pLoopPlot, player_))
                         {
-#ifdef ALTAI_DEBUG
-                            os << "\nAdding plot: " << coords << " with key = " << key << " to plot value map for sub area: " << pLoopPlot->getSubArea()
-                               << " for potential city: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
-#endif
+//#ifdef ALTAI_DEBUG
+//                            os << "\nAdding plot: " << coords << " with key = " << key << " to plot value map for sub area: " << pLoopPlot->getSubArea()
+//                               << " for potential city: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
+//#endif
                             plotValues_.plotValueMap[pLoopPlot->getSubArea()][XYCoords(pLoopPlot->getX(), pLoopPlot->getY())][key].insert(coords);
                         }
                     }
@@ -921,10 +921,10 @@ namespace AltAI
 
                             if (hasPossibleYield(thisNode, player_.getPlayerID()))
                             {
-#ifdef ALTAI_DEBUG
-                                os << "\nAdding plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY()) << " with key = " << thisKey << " to plot value map for sub area: " << pPlot->getSubArea()
-                                   << " for potential city: " << XYCoords(pPlot->getX(), pPlot->getY());
-#endif
+//#ifdef ALTAI_DEBUG
+//                                os << "\nAdding plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY()) << " with key = " << thisKey << " to plot value map for sub area: " << pPlot->getSubArea()
+//                                   << " for potential city: " << XYCoords(pPlot->getX(), pPlot->getY());
+//#endif
                                 plotValues_.plotValueMap[pPlot->getSubArea()][XYCoords(pPlot->getX(), pPlot->getY())][thisKey].insert(XYCoords(pLoopPlot->getX(), pLoopPlot->getY()));
                             }
                         }
@@ -936,10 +936,10 @@ namespace AltAI
 
     void MapAnalysis::updatePlotValueKey_(const CvPlot* pPlot, int oldKey, int newKey)
     {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nUpdating plot keys for plot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " from: " << oldKey << " to: " << newKey;
-#endif
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+//        os << "\nUpdating plot keys for plot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " from: " << oldKey << " to: " << newKey;
+//#endif
         const TeamTypes teamType = player_.getTeamID();
         const PlayerTypes playerType = player_.getPlayerID();
         const XYCoords coords(pPlot->getX(), pPlot->getY());
@@ -966,9 +966,9 @@ namespace AltAI
                                 PlotValues::PlotKeyCoordsMap::iterator plotKeyIter = plotIter->second.find(oldKey);
                                 if (plotKeyIter != plotIter->second.end())
                                 {
-#ifdef ALTAI_DEBUG
-                                    os << "\nErasing entry for plot key for potential city plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
-#endif
+//#ifdef ALTAI_DEBUG
+//                                    os << "\nErasing entry for plot key for potential city plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
+//#endif
                                     // erase entry for bonus plot with old plot key
                                     plotKeyIter->second.erase(coords);
 
@@ -977,9 +977,9 @@ namespace AltAI
                                         plotIter->second.erase(plotKeyIter);
                                     }
                                 }
-#ifdef ALTAI_DEBUG
-                                os << "\nAdding entry for plot key for potential city plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
-#endif
+//#ifdef ALTAI_DEBUG
+//                                os << "\nAdding entry for plot key for potential city plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
+//#endif
                                 // insert new key - only add if had existing entry (new entries are added separately and should automatically get the correct key)
                                 subAreaIter->second[XYCoords(pLoopPlot->getX(), pLoopPlot->getY())][newKey].insert(coords);
                             }

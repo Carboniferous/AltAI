@@ -13,7 +13,7 @@ namespace AltAI
     {
         enum Flags
         {
-            None = 0, CityAttack = (1 << 0)
+            None = 0, CityAttack = (1 << 0), FortifyDefender = (1 << 1)
         };
 
         explicit UnitData(const CvUnitInfo& unitInfo_);
@@ -24,7 +24,7 @@ namespace AltAI
         int calculateStrength(const UnitData& other, int flags = 0) const;
 
         // calculate our strength as attacker
-        int calculateStrength(int flags) const;
+        int calculateStrength(int flags = 0) const;
 
         const CvUnitInfo& unitInfo;
 
@@ -43,7 +43,7 @@ namespace AltAI
         void debug();
 
         int getCurrentUnitValue(UnitTypes unitType) const;
-        int getCityAttackUnitValue(UnitTypes unitType) const;
+        int getCityAttackUnitValue(UnitTypes unitType, int level) const;
         int getCityDefenceUnitValue(UnitTypes unitType) const;
         int getAttackUnitValue(UnitTypes unitType) const;
         int getDefenceUnitValue(UnitTypes unitType) const;
@@ -65,6 +65,8 @@ namespace AltAI
         RemainingLevelsAndPromotions getCombatPromotions(UnitTypes unitType, int level) const;
         RemainingLevelsAndPromotions getCombatCounterPromotions(UnitTypes unitType, UnitCombatTypes unitCombatType, int level) const;
 
+        std::vector<int> getOdds(UnitTypes unitType, const std::vector<UnitTypes>& units, int ourLevel, int theirLevel, int flags, bool isAttacker) const;
+
     private:
 
         static const int maxPromotionSearchDepth_ = 5;
@@ -78,6 +80,7 @@ namespace AltAI
 					ValueF valueF, int level, const Promotions& existingPromotions = Promotions()) const;
 
 		void analyseAsCityAttackUnit_(UnitTypes unitType);
+        void analyseAsCityDefenceUnit_(UnitTypes unitType);
         void analyseAsCombatUnit_(UnitTypes unitType);
         void analyseAsCounterUnit_(UnitTypes unitType);
 

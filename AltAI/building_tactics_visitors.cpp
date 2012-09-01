@@ -416,19 +416,9 @@ namespace AltAI
 
             for (size_t i = 0, count = node.buildingCounts.size(); i < count; ++i)
             {
-                int buildingCount = 0, thisBuildingCount = 0;
-                CityIter iter(*player_.getCvPlayer());
-                while (CvCity* pCity = iter())
-                {
-                    buildingCount += pCity->getNumBuilding(node.buildingCounts[i].first);
-                    thisBuildingCount += pCity->getNumBuilding(thisBuildingType_);
-                }
-
-                if (buildingCount - thisBuildingCount * node.buildingCounts[i].second < node.buildingCounts[i].second)
-                {
-                    dependentTactics_.push_back(IDependentTacticPtr(
-                        new CivBuildingDependency(node.buildingCounts[i].first, node.buildingCounts[i].second - buildingCount, thisBuildingType_)));
-                }
+                // always add this, even if currently have enough buildings, as this can change (except for limited wonders)
+                dependentTactics_.push_back(IDependentTacticPtr(
+                    new CivBuildingDependency(node.buildingCounts[i].first, node.buildingCounts[i].second, thisBuildingType_)));
             }
         }
 

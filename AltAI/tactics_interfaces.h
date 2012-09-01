@@ -15,6 +15,9 @@ namespace AltAI
     class IDependentTactic;
     typedef boost::shared_ptr<IDependentTactic> IDependentTacticPtr;
 
+    class ResearchTechDependency;
+    typedef boost::shared_ptr<ResearchTechDependency> ResearchTechDependencyPtr;
+
     class IDependentTactic
     {
     public:
@@ -23,6 +26,7 @@ namespace AltAI
         virtual void remove(const CityDataPtr&) = 0;
         virtual bool required(const CvCity*) const = 0;
         virtual bool required(const Player&) const = 0;
+        virtual bool removeable() const = 0;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const = 0;
 
         virtual void debug(std::ostream&) const = 0;
@@ -104,6 +108,7 @@ namespace AltAI
         virtual std::vector<IDependentTacticPtr> getDependencies() const = 0;
         virtual void update(const Player&, const CityDataPtr&) = 0;
         virtual void updateDependencies(const Player&, const CvCity*) = 0;
+        virtual bool areDependenciesSatisfied() const = 0;
         virtual void apply(TacticSelectionData&) = 0;
 
         virtual BuildingTypes getBuildingType() const = 0;
@@ -152,8 +157,9 @@ namespace AltAI
     public:
         virtual ~ICityImprovementTactics() = 0 {}
         virtual void addTactic(const IWorkerBuildTacticPtr&) = 0;
-        virtual void addDependency(const IDependentTacticPtr&) = 0;
+        virtual void addDependency(const ResearchTechDependencyPtr&) = 0;
         virtual void update(const Player&, const CityDataPtr&) = 0;
+        virtual void apply(const ICityUnitTacticsPtr&, TacticSelectionData&) = 0;
 
         virtual ProjectionLadder getProjection() const = 0;
         virtual void debug(std::ostream&) const = 0;
@@ -198,6 +204,7 @@ namespace AltAI
         virtual void updateDependencies(const Player&) = 0;
         virtual void addCityTactic(IDInfo, const ICityUnitTacticsPtr&) = 0;
         virtual ICityUnitTacticsPtr getCityTactics(IDInfo) const = 0;
+        virtual bool areDependenciesSatisfied() const = 0;
         virtual void apply(TacticSelectionData&) = 0;
         virtual void removeCityTactics(IDInfo) = 0;
         virtual bool empty() const = 0;
@@ -223,6 +230,7 @@ namespace AltAI
         virtual std::vector<IDependentTacticPtr> getDependencies() const = 0;
         virtual void update(const Player&, const CityDataPtr&) = 0;
         virtual void updateDependencies(const Player&, const CvCity*) = 0;
+        virtual bool areDependenciesSatisfied() const = 0;
         virtual void apply(TacticSelectionData&) = 0;
 
         virtual UnitTypes getUnitType() const = 0;
@@ -245,7 +253,7 @@ namespace AltAI
 
         bool operator() (const IDependentTacticPtr& pDependentTactic) const
         {
-            return pCity ? !pDependentTactic->required(pCity) : !pDependentTactic->required(player);
+            return pDependentTactic->removeable() && (pCity ? !pDependentTactic->required(pCity) : !pDependentTactic->required(player));
         }
 
         const Player& player;

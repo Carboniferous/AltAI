@@ -15,4 +15,6 @@ namespace AltAI
     ConstructItem selectExpansionUnitTactics(const Player& player, const ConstructItem& constructItem);
 
     UnitTypes getConstructItem(const PlayerTactics& playerTactics);
+
+    std::vector<UnitTypes> getPossibleCombatUnits(const Player& player, DomainTypes domainType);
 }

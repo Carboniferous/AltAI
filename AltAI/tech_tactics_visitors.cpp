@@ -559,10 +559,10 @@ namespace AltAI
     std::list<ICityImprovementTacticsPtr> makeCityBuildTactics(const Player& player, const City& city, const boost::shared_ptr<TechInfo>& pTechInfo)
     {
 #ifdef ALTAI_DEBUG
-#endif
+
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
         os << "\nmakeCityBuildTactics: checking tech: " << gGlobals.getTechInfo(pTechInfo->getTechType()).getType();
-
+#endif
         std::list<ICityImprovementTacticsPtr> cityBuildTactics;
 
         CityImprovementManager improvementManager(city.getCvCity()->getIDInfo(), true);
@@ -580,10 +580,11 @@ namespace AltAI
         std::list<TechTypes> prereqTechs = pushTechAndPrereqs(pTechInfo->getTechType(), player);
         for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
         {
+#ifdef ALTAI_DEBUG
             os << "\nmakeCityBuildTactics: adding prereq tech: " << gGlobals.getTechInfo(*ci).getType();
+#endif
             player.getCivHelper()->addTech(*ci);
         }
-        player.getCivHelper()->addTech(pTechInfo->getTechType());
 
         TotalOutput baseCityOutput = improvementManager.simulateImprovements(outputWeights, __FUNCTION__);
 
@@ -598,8 +599,9 @@ namespace AltAI
             {
                 if (*ci != pTechInfo->getTechType())
                 {
-                    pTactic->addDependency(IDependentTacticPtr(new ResearchTechDependency(*ci)));
+                    pTactic->addDependency(ResearchTechDependencyPtr(new ResearchTechDependency(*ci)));
                 }
+                pTactic->addDependency(ResearchTechDependencyPtr(new ResearchTechDependency(pTechInfo->getTechType())));
             }
             cityBuildTactics.push_back(pTactic);
         }
@@ -609,11 +611,11 @@ namespace AltAI
         events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
         ProjectionLadder ladder = getProjectedOutput(player, pSimulationCityData, 50, events);
-
+#ifdef ALTAI_DEBUG
         base.debug(os);
         ladder.debug(os);
         os << "\nImprovement delta = " << ladder.getOutput() - base.getOutput();
-
+#endif
         for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
         {
             player.getCivHelper()->removeTech(*ci);

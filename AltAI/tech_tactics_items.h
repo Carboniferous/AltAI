@@ -14,8 +14,9 @@ namespace AltAI
         explicit CityImprovementTactics(const std::vector<CityImprovementManager::PlotImprovementData>& plotData);
 
         virtual void addTactic(const IWorkerBuildTacticPtr& pBuildTactic);
-        virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
+        virtual void addDependency(const ResearchTechDependencyPtr& pDependentTactic);
         virtual void update(const Player& player, const CityDataPtr& pCityData);
+        virtual void apply(const ICityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& tacticSelectionData);
 
         virtual ProjectionLadder getProjection() const;
         virtual void debug(std::ostream& os) const;
@@ -26,7 +27,7 @@ namespace AltAI
         static const int ID = 0;
 
     private:
-        std::vector<IDependentTacticPtr> dependentTactics_;
+        std::vector<ResearchTechDependencyPtr> dependentTactics_;
         std::list<IWorkerBuildTacticPtr> buildTactics_;
         std::vector<CityImprovementManager::PlotImprovementData> plotData_;
         ProjectionLadder projection_;

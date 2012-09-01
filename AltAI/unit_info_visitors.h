@@ -20,5 +20,7 @@ namespace AltAI
 
     bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources);
 
+    bool isUnitObsolete(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo);
+
     Promotions getFreePromotions(const boost::shared_ptr<UnitInfo>& pUnitInfo);
 }

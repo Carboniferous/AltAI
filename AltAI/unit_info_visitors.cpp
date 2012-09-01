@@ -6,6 +6,7 @@
 #include "./player_analysis.h"
 #include "./city.h"
 #include "./iters.h"
+#include "./helper_fns.h"
 #include "./civ_log.h"
 
 namespace AltAI
@@ -498,5 +499,59 @@ namespace AltAI
         boost::apply_visitor(visitor, pUnitInfo->getInfo());
 
         return visitor.getFreePromotions();
+    }
+
+    class UpgradeVisitor : public boost::static_visitor<bool>
+    {
+    public:
+        explicit UpgradeVisitor(const Player& player) : player_(player)
+        {
+        }
+
+        template <typename T>
+            bool operator() (const T&) const
+        {
+            return false;
+        }
+
+        bool operator() (const UnitInfo::BaseNode& node) const
+        {
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                if (boost::apply_visitor(*this, node.nodes[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        bool operator() (const UnitInfo::UpgradeNode& node) const
+        {
+            for (size_t i = 0, count = node.upgrades.size(); i < count; ++i)
+            {
+                UnitTypes upgradeUnit = getPlayerVersion(player_.getPlayerID(), node.upgrades[i]);
+                if (upgradeUnit == NO_UNIT)  // can't upgrade
+                {
+                    return false;
+                }
+
+                if (!couldConstructUnit(player_, 0, player_.getAnalysis()->getUnitInfo(upgradeUnit), false))
+                {
+                    return false;
+                }
+            }
+            return !node.upgrades.empty();  // can construct all upgrades, and there are some
+        }
+
+    private:
+        const Player& player_;
+    };
+
+    bool isUnitObsolete(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    {
+        UpgradeVisitor visitor(player);
+        return boost::apply_visitor(visitor, pUnitInfo->getInfo());
     }
 }

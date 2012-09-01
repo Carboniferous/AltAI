@@ -56,28 +56,52 @@ namespace AltAI
         bool operator < (const MilitaryBuildingValue& other) const;
     };
 
-    struct CityDefenceUnitValue
+    struct UnitTacticValue
     {
-        CityDefenceUnitValue() : unitType(NO_UNIT), nTurns(0), unitAnalysisValue(0)
+        UnitTacticValue() : unitType(NO_UNIT), nTurns(0), unitAnalysisValue(0)
         {
         }
 
         UnitTypes unitType;
         int nTurns, unitAnalysisValue;
 
-        bool operator < (const CityDefenceUnitValue& other) const;
+        bool operator < (const UnitTacticValue& other) const;
+    };
+
+    struct WorkerUnitValue
+    {
+        WorkerUnitValue()
+        {
+        }
+
+        UnitTypes unitType;
+        int nTurns;
+        typedef boost::tuple<XYCoords, TotalOutput, std::vector<TechTypes> > BuildData;
+        typedef std::map<BuildTypes, std::vector<BuildData> > BuildsMap;
+        BuildsMap buildsMap, consumedBuildsMap;
+
+        void addBuild(BuildTypes buildType, BuildData buildData);
+
+        bool operator < (const WorkerUnitValue& other) const;
+        int getBuildValue() const;
+        int getHighestConsumedBuildValue() const;
+
+    private:
+        void addBuild_(BuildsMap& buildsMap_, BuildTypes buildType, BuildData buildData);
     };
 
     struct TacticSelectionData
     {
-        std::set<CultureBuildingValue> smallCultureBuildings;
+        std::set<CultureBuildingValue> smallCultureBuildings, largeCultureBuildings;
         std::set<EconomicBuildingValue> economicBuildings;
         std::map<IDInfo, std::vector<BuildingTypes> > buildingsCityCanAssistWith;
         std::map<BuildingTypes, std::vector<BuildingTypes> > dependentBuildings;
         std::map<BuildingTypes, EconomicWonderValue> economicWonders, nationalWonders;
         std::set<MilitaryBuildingValue> militaryBuildings;
 
-        std::set<CityDefenceUnitValue> cityDefenceUnits;
+        std::set<UnitTacticValue> cityDefenceUnits, cityAttackUnits;
+
+        std::map<UnitTypes, WorkerUnitValue> workerUnits;
 
         std::set<BuildingTypes> exclusions;
 

@@ -14,6 +14,7 @@ namespace AltAI
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
         virtual bool required(const Player& player) const;
+        virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;
@@ -23,6 +24,8 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
 
         static const int ID = 0;
+
+        TechTypes getResearchTech() const { return techType_; }
 
     private:
         TechTypes techType_;
@@ -37,6 +40,7 @@ namespace AltAI
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
         virtual bool required(const Player& player) const;
+        virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;
@@ -59,6 +63,7 @@ namespace AltAI
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
         virtual bool required(const Player& player) const;
+        virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;
@@ -82,6 +87,7 @@ namespace AltAI
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
         virtual bool required(const Player& player) const;
+        virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;
@@ -106,6 +112,7 @@ namespace AltAI
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity) const;
         virtual bool required(const Player& player) const;
+        virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
 
         virtual void debug(std::ostream& os) const;

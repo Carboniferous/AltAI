@@ -48,6 +48,19 @@ namespace AltAI
         dependentTactics_.erase(iter, dependentTactics_.end());
     }
 
+    bool CityUnitTactic::areDependenciesSatisfied() const
+    {
+        for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
+        {
+            const CvCity* pCity = ::getCity(city_);
+            if (pCity && dependentTactics_[i]->required(pCity))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     void CityUnitTactic::apply(TacticSelectionData& selectionData)
     {
         for (std::list<ICityUnitTacticPtr>::iterator iter(unitTactics_.begin()), endIter(unitTactics_.end()); iter != endIter; ++iter)
@@ -69,7 +82,7 @@ namespace AltAI
     void CityUnitTactic::debug(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
-        os << "\nCity unit: " << gGlobals.getUnitInfo(unitType_).getType(); // << " projection: ";
+        os << "\n\t\tCity unit: " << gGlobals.getUnitInfo(unitType_).getType(); // << " projection: ";
         //projection_.debug(os);
         for (std::list<ICityUnitTacticPtr>::const_iterator ci(unitTactics_.begin()), ciEnd(unitTactics_.end()); ci != ciEnd; ++ci)
         {
@@ -186,6 +199,19 @@ namespace AltAI
         return ICityUnitTacticsPtr();
     }
 
+    bool UnitTactic::areDependenciesSatisfied() const
+    {
+        for (CityTacticsMap::const_iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
+        {
+            if (iter->second->areDependenciesSatisfied())
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void UnitTactic::apply(TacticSelectionData& selectionData)
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
@@ -217,7 +243,7 @@ namespace AltAI
             const CvCity* pCity = getCity(iter->first);
             if (pCity)
             {
-                os << "\nCity: " << narrow(pCity->getName());
+                os << "\n\tCity: " << narrow(pCity->getName());
                 iter->second->debug(os);
             }
         }

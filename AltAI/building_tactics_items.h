@@ -133,7 +133,7 @@ namespace AltAI
     class UnitExperienceTactic : public ICityBuildingTactic
     {
     public:
-        UnitExperienceTactic() {}
+        UnitExperienceTactic() : freeExperience(0), globalFreeExperience(0), freePromotion(NO_PROMOTION) {}
         UnitExperienceTactic(int freeExperience_, int globalFreeExperience_, 
             const std::vector<std::pair<DomainTypes, int> >& domainFreeExperience_,
             const std::vector<std::pair<UnitCombatTypes, int> >& combatTypeFreeExperience_,
