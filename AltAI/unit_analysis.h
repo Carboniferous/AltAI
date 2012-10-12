@@ -63,6 +63,7 @@ namespace AltAI
 		RemainingLevelsAndPromotions getCityAttackPromotions(UnitTypes unitType, int level) const;
 		RemainingLevelsAndPromotions getCityDefencePromotions(UnitTypes unitType, int level) const;
         RemainingLevelsAndPromotions getCombatPromotions(UnitTypes unitType, int level) const;
+        RemainingLevelsAndPromotions getCollateralPromotions(UnitTypes unitType, int level) const;
         RemainingLevelsAndPromotions getCombatCounterPromotions(UnitTypes unitType, UnitCombatTypes unitCombatType, int level) const;
 
         std::vector<int> getOdds(UnitTypes unitType, const std::vector<UnitTypes>& units, int ourLevel, int theirLevel, int flags, bool isAttacker) const;
@@ -99,16 +100,17 @@ namespace AltAI
         const Player& player_;
         CombatDataMap combatDataMap_;
 
-        PromotionsMap cityAttackPromotions_, cityDefencePromotions_, combatPromotions_, firstStrikePromotions_, movementPromotions_;
+        PromotionsMap cityAttackPromotions_, cityDefencePromotions_, combatPromotions_, firstStrikePromotions_, movementPromotions_, collateralPromotions_;
         std::map<UnitCombatTypes, PromotionsMap> unitCounterPromotionsMap_;
         
-        UnitLevels cityAttackUnits_, cityDefenceUnits_, combatUnits_, firstStrikeUnits_, fastUnits_;
+        UnitLevels cityAttackUnits_, cityDefenceUnits_, combatUnits_, firstStrikeUnits_, fastUnits_, collateralUnits_;
         std::map<UnitCombatTypes, UnitLevels> unitCounterUnits_;
 
 		typedef std::map<UnitAITypes, std::pair<int, int> > UnitAITypesCombatOddsMap;
 		typedef std::map<UnitTypes, UnitAITypesCombatOddsMap> UnitCombatOddsMap;
 		typedef std::map<int, UnitCombatOddsMap> UnitCombatLevelsMap;
 		typedef std::map<UnitTypes, UnitCombatLevelsMap> UnitCombatInfoMap;
+
         UnitCombatInfoMap attackUnitValues_, defenceUnitValues_;
         UnitCombatInfoMap attackUnitCounterValues_, defenceUnitCounterValues_;
 		UnitCombatInfoMap cityAttackUnitValues_, cityDefenceUnitValues_;

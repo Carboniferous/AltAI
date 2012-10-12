@@ -280,11 +280,11 @@ namespace AltAI
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
-            TacticSelectionData thisCityData;
+            TacticSelectionData thisCityData(iter->second->getCity());
             iter->second->apply(thisCityData);
             if (!thisCityData.economicBuildings.empty())
             {
-                selectionData.economicWonders[buildingType_].buildCityValues.push_back(std::make_pair((iter->second)->getCity(), *thisCityData.economicBuildings.begin()));
+                selectionData.economicWonders[buildingType_].buildCityValues.push_back(std::make_pair(iter->second->getCity(), *thisCityData.economicBuildings.begin()));
             }
         }
     }
@@ -393,7 +393,7 @@ namespace AltAI
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
-            TacticSelectionData thisCityData;
+            TacticSelectionData thisCityData(iter->second->getCity());
             iter->second->apply(thisCityData);
             if (!thisCityData.economicBuildings.empty())
             {

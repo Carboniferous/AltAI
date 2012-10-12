@@ -205,8 +205,8 @@ namespace AltAI
     class MakeUnitTacticsDependenciesVisitor : public boost::static_visitor<>
     {
     public:
-        MakeUnitTacticsDependenciesVisitor(const Player& player, const City& city)
-            : player_(player), city_(city)
+        MakeUnitTacticsDependenciesVisitor(const Player& player, const CvCity* pCity)
+            : player_(player), pCity_(pCity)
         {
         }
 
@@ -217,46 +217,22 @@ namespace AltAI
 
         void operator() (const UnitInfo::BaseNode& node)
         {
-            if (!(node.andBonusTypes.empty() && node.orBonusTypes.empty()))
+            // always add bonus requirements, as cities' access can vary
+            if (!node.andBonusTypes.empty())
             {
-                std::vector<BonusTypes> missingAndBonuses, missingOrBonuses;
-                for (size_t i = 0, count = node.andBonusTypes.size(); i < count; ++i)
-                {
-                    if (!city_.getCvCity()->hasBonus(node.andBonusTypes[i]))
-                    {
-                        missingAndBonuses.push_back(node.andBonusTypes[i]);
-                    }
-                }
+                dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(node.andBonusTypes, node.unitType, false)));
+            }
 
-                for (size_t i = 0, count = node.orBonusTypes.size(); i < count; ++i)
-                {
-                    if (city_.getCvCity()->hasBonus(node.orBonusTypes[i]))
-                    {
-                        missingOrBonuses.clear();
-                        break;
-                    }
-                    else
-                    {
-                        missingOrBonuses.push_back(node.orBonusTypes[i]);
-                    }
-                }
-
-                if (!missingAndBonuses.empty())
-                {
-                    dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(missingAndBonuses, node.unitType, false)));
-                }
-
-                if (!missingOrBonuses.empty())
-                {
-                    dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(missingOrBonuses, node.unitType, true)));
-                }
+            if (!node.orBonusTypes.empty())
+            {
+                dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(node.orBonusTypes, node.unitType, true)));
             }
 
             for (size_t i = 0, count = node.techTypes.size(); i < count; ++i)
             {
                 if (player_.getTechResearchDepth(node.techTypes[i]) > 0)
                 {
-                    dependentTactics_.push_back(IDependentTacticPtr(new ResearchTechDependency(node.techTypes[i])));
+                    techDependencies_.push_back(ResearchTechDependencyPtr(new ResearchTechDependency(node.techTypes[i])));
                 }
             }
 
@@ -270,9 +246,9 @@ namespace AltAI
                 }
             }
 
-            if (!passedBuildingCheck)
+            if (!passedBuildingCheck && pCity_)
             {
-                passedBuildingCheck = city_.getCvCity()->getNumBuilding(node.prereqBuildingType) > 0;
+                passedBuildingCheck = pCity_->getNumBuilding(node.prereqBuildingType) > 0;
             }
 
             if (!passedBuildingCheck)
@@ -286,10 +262,16 @@ namespace AltAI
             return dependentTactics_;
         }
 
+        const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const
+        {
+            return techDependencies_;
+        }
+
     private:
         const Player& player_;
-        const City& city_;
+        const CvCity* pCity_;
         std::vector<IDependentTacticPtr> dependentTactics_;
+        std::vector<ResearchTechDependencyPtr> techDependencies_;
     };
 
     class MakeUnitTacticsVisitor : public boost::static_visitor<>
@@ -310,14 +292,14 @@ namespace AltAI
         {
             pTactic_ = ICityUnitTacticsPtr(new CityUnitTactic(unitType_, city_.getCvCity()->getIDInfo()));
 
-            MakeUnitTacticsDependenciesVisitor dependentTacticsVisitor(player_, city_);
+            MakeUnitTacticsDependenciesVisitor dependentTacticsVisitor(player_, city_.getCvCity());
             dependentTacticsVisitor(node);
 
             const std::vector<IDependentTacticPtr>& dependentTactics = dependentTacticsVisitor.getDependentTactics();
             for (size_t i = 0, count = dependentTactics.size(); i < count; ++i)
             {
                 pTactic_->addDependency(dependentTactics[i]);
-            }
+            }            
 
             for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
             {
@@ -415,58 +397,111 @@ namespace AltAI
             // TODO - handle charismatic
             requiredExperience += 2 * ++maxPromotionLevel + 1;
         }
-       
-        if (!unitInfo.isOnlyDefensive())
+
+        if (unitInfo.getDomainType() == DOMAIN_LAND && unitInfo.getCombat() > 0)
         {
-            UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
-
-            if (levelsAndPromotions.second.empty())
-			{
-				levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
-			}
-
-            UnitData unitData(unitInfo);
-            for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		    {
-			    unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		    }
-
-            pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityAttackUnitTactic(levelsAndPromotions.second)));
-        }
-
-        {
-            UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityDefencePromotions(unitType, maxPromotionLevel);
-
-            if (levelsAndPromotions.second.empty())
-			{
-				levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
-			}
-
-            UnitData unitData(unitInfo);
-            for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		    {
-			    unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		    }
-
-            if (unitData.cityDefencePercent > 0)
+            if (!unitInfo.isOnlyDefensive())
             {
+                {
+                    UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
+
+                    if (levelsAndPromotions.second.empty())
+			        {
+				        levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+			        }
+
+                    UnitData unitData(unitInfo);
+                    for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		            {
+			            unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		            }
+
+                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityAttackUnitTactic(levelsAndPromotions.second)));
+                }
+
+                if (unitInfo.getCombatLimit() == 100)
+                {
+                    UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+
+                    UnitData unitData(unitInfo);
+                    for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		            {
+			            unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		            }
+
+                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldAttackUnitTactic(levelsAndPromotions.second)));
+                }
+
+                // todo - refine this check
+                if (unitInfo.getCollateralDamage() > 0)
+                {
+                    UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
+
+                    if (levelsAndPromotions.second.empty())
+			        {
+                        levelsAndPromotions = pUnitAnalysis->getCollateralPromotions(unitType, maxPromotionLevel);
+			        }
+
+                    UnitData unitData(unitInfo);
+                    for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		            {
+			            unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		            }
+
+                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CollateralUnitTactic(levelsAndPromotions.second)));
+                }
+            }
+
+            {
+                UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityDefencePromotions(unitType, maxPromotionLevel);
+
+                if (levelsAndPromotions.second.empty())
+			    {
+				    levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+			    }
+
+                UnitData unitData(unitInfo);
+                for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		        {
+			        unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		        }
+
                 pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityDefenceUnitTactic(levelsAndPromotions.second)));
             }
-        }
 
-        if (!unitInfo.isOnlyDefensive())
-        {
-            UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
-
-            UnitData unitData(unitInfo);
-            for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		    {
-			    unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		    }
-
-            if (unitData.combat > 0)
             {
-                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldAttackUnitTactic(levelsAndPromotions.second)));
+                UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+
+                UnitData unitData(unitInfo);
+                for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		        {
+			        unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		        }
+
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldDefenceUnitTactic(levelsAndPromotions.second)));
+            }
+        }
+        else if (unitInfo.getDomainType() == DOMAIN_SEA)
+        {
+            if (unitInfo.getCombat() > 0 && !unitInfo.isOnlyDefensive())
+            {
+                UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+
+                UnitData unitData(unitInfo);
+                for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
+		        {
+			        unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
+		        }
+
+                if (unitData.combat > 0)
+                {
+                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new SeaAttackUnitTactic(levelsAndPromotions.second)));
+                }
+            }
+
+            if (unitInfo.getCargoSpace() > 0)
+            {
+                // todo
             }
         }
 
@@ -492,6 +527,15 @@ namespace AltAI
 #endif
                 
                 pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, player.getCity(pCity->getID()), pUnitInfo));               
+            }
+
+            MakeUnitTacticsDependenciesVisitor dependentTacticsVisitor(player, NULL);
+            boost::apply_visitor(dependentTacticsVisitor, pUnitInfo->getInfo());
+
+            const std::vector<ResearchTechDependencyPtr>& dependentTechs = dependentTacticsVisitor.getTechDependencies();
+            for (size_t i = 0, count = dependentTechs.size(); i < count; ++i)
+            {
+                pTactic->addTechDependency(dependentTechs[i]);
             }
 
             return pTactic;

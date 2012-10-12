@@ -1,4 +1,5 @@
 #include "./building_tactics_deps.h"
+#include "./game.h"
 #include "./player.h"
 #include "./city.h"
 #include "./city_data.h"
@@ -8,6 +9,7 @@
 #include "./bonus_helper.h"
 #include "./iters.h"
 #include "./save_utils.h"
+#include "./civ_log.h"
 
 namespace AltAI
 {
@@ -274,38 +276,60 @@ namespace AltAI
 
     bool CityBonusDependency::required(const CvCity* pCity) const
     {
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity->getOwner()))->getStream();
+//        os << "\nChecking CityBonusDependency for city: " << narrow(pCity->getName());
+//        debug(os);
+//#endif
         bool foundAny = false;
         for (size_t i = 0, count = bonusTypes_.size(); i < count; ++i)
         {
-            if (pCity->getNumBonuses(bonusTypes_[i]) == 0 && !isOr_)
-            {
-                return true;
-            }
-            else
+            const int bonusCount = pCity->getNumBonuses(bonusTypes_[i]);
+            if (bonusCount > 0)
             {
                 foundAny = true;
             }
+            else if (!isOr_)
+            {
+//#ifdef ALTAI_DEBUG
+//                os << " return = " << true;
+//#endif
+                return true;
+            }
         }
-
-        return !(isOr_ && foundAny);
+//#ifdef ALTAI_DEBUG
+//        os << " return = " << (isOr_ ? !foundAny : false);
+//#endif
+        return isOr_ ? !foundAny : false;
     }
 
     bool CityBonusDependency::required(const Player& player) const
     {
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+//        os << "\nChecking CityBonusDependency: (player) ";
+//        debug(os);
+//#endif
         bool foundAny = false;
         for (size_t i = 0, count = bonusTypes_.size(); i < count; ++i)
         {
-            if ((player.getCvPlayer()->getNumAvailableBonuses(bonusTypes_[i]) == 0) && !isOr_)
-            {
-                return true;
-            }
-            else
+            const int bonusCount = player.getCvPlayer()->getNumAvailableBonuses(bonusTypes_[i]);
+            if (bonusCount > 0)
             {
                 foundAny = true;
             }
+            else if (!isOr_)
+            {
+//#ifdef ALTAI_DEBUG
+//                os << " return = " << true;
+//#endif
+                return true;
+            }
         }
-
-        return !(isOr_ && foundAny);
+//#ifdef ALTAI_DEBUG
+//        os << " return = " << (isOr_ ? !foundAny : false);
+//#endif
+        return isOr_ ? !foundAny : false;
     }
 
     bool CityBonusDependency::removeable() const
@@ -324,7 +348,19 @@ namespace AltAI
         os << "\nDependent on resources: ";
         for (size_t i = 0, count = bonusTypes_.size(); i < count; ++i)
         {
-             os << gGlobals.getBonusInfo(bonusTypes_[i]).getType() << ", ";
+             if (i > 0)
+             {
+                 if (isOr_)
+                 {
+                     os << " or ";
+                 }
+                 else
+                 {
+                     os << " and ";
+                 }
+             }
+             os << gGlobals.getBonusInfo(bonusTypes_[i]).getType();
+             
         }
 #endif
     }

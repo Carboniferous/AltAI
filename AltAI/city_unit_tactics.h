@@ -47,11 +47,13 @@ namespace AltAI
 
         virtual void addTactic(const ICityUnitTacticPtr& pBuildingTactic);
         virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
+        virtual void addTechDependency(const ResearchTechDependencyPtr& pTechDependency);
         virtual void update(const Player& player);
         virtual void updateDependencies(const Player& player);
         virtual void addCityTactic(IDInfo city, const ICityUnitTacticsPtr& pCityTactic);
         virtual ICityUnitTacticsPtr getCityTactics(IDInfo city) const;
-        virtual bool areDependenciesSatisfied() const;
+        virtual bool areDependenciesSatisfied(const Player& player) const;
+        virtual const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const;
         virtual void apply(TacticSelectionData& selectionData);
         virtual void removeCityTactics(IDInfo city);
         virtual bool empty() const;
@@ -68,6 +70,7 @@ namespace AltAI
     private:
         UnitTypes unitType_;
         typedef std::map<IDInfo, ICityUnitTacticsPtr> CityTacticsMap;
+        std::vector<ResearchTechDependencyPtr> techDependencies_;
         CityTacticsMap cityTactics_;
     };
 }

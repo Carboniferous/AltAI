@@ -4,6 +4,8 @@
 #include "./city.h"
 #include "./player_analysis.h"
 #include "./city_tactics.h"
+#include "./building_tactics_deps.h"
+#include "./save_utils.h"
 
 namespace AltAI
 {
@@ -50,9 +52,10 @@ namespace AltAI
 
     bool CityUnitTactic::areDependenciesSatisfied() const
     {
+        const CvCity* pCity = ::getCity(city_);
+
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
-        {
-            const CvCity* pCity = ::getCity(city_);
+        {            
             if (pCity && dependentTactics_[i]->required(pCity))
             {
                 return false;
@@ -160,6 +163,11 @@ namespace AltAI
         }
     }
 
+    void UnitTactic::addTechDependency(const ResearchTechDependencyPtr& pTechDependency)
+    {
+        techDependencies_.push_back(pTechDependency);
+    }
+
     void UnitTactic::update(const Player& player)
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
@@ -199,8 +207,16 @@ namespace AltAI
         return ICityUnitTacticsPtr();
     }
 
-    bool UnitTactic::areDependenciesSatisfied() const
+    bool UnitTactic::areDependenciesSatisfied(const Player& player) const
     {
+        for (size_t i = 0, count = techDependencies_.size(); i < count; ++i)
+        {
+            if (techDependencies_[i]->required(player))
+            {
+                return false;
+            }
+        }
+
         for (CityTacticsMap::const_iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
             if (iter->second->areDependenciesSatisfied())
@@ -212,11 +228,16 @@ namespace AltAI
         return false;
     }
 
+    const std::vector<ResearchTechDependencyPtr>& UnitTactic::getTechDependencies() const
+    {
+        return techDependencies_;
+    }
+
     void UnitTactic::apply(TacticSelectionData& selectionData)
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
-            TacticSelectionData thisCityData;
+            TacticSelectionData thisCityData(iter->second->getCity());
             iter->second->apply(thisCityData);
         }
     }
@@ -254,6 +275,12 @@ namespace AltAI
         pStream->Write(ID);
         pStream->Write(unitType_);
 
+        pStream->Write(techDependencies_.size());
+        for (size_t i = 0, count = techDependencies_.size(); i < count; ++i)
+        {
+            techDependencies_[i]->write(pStream);
+        }
+
         pStream->Write(cityTactics_.size());
 
         for (CityTacticsMap::const_iterator ci(cityTactics_.begin()), ciEnd(cityTactics_.end()); ci != ciEnd; ++ci)
@@ -266,6 +293,17 @@ namespace AltAI
     void UnitTactic::read(FDataStreamBase* pStream)
     {
         pStream->Read((int*)&unitType_);
+
+        size_t depCount;
+        pStream->Read(&depCount);
+        for (size_t i = 0; i < depCount; ++i)
+        {
+            ResearchTechDependencyPtr pTechDependency(new ResearchTechDependency());
+            int depID;
+            pStream->Read(&depID); // should be 0
+            pTechDependency->read(pStream);
+            techDependencies_.push_back(pTechDependency);
+        }
 
         size_t cityTacticsCount;
         pStream->Read(&cityTacticsCount);

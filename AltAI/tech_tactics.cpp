@@ -3,6 +3,7 @@
 #include "./tactic_streams.h"
 #include "./tech_tactics_visitors.h"
 #include "./building_tactics_visitors.h"
+#include "./building_tactics_deps.h"
 #include "./building_info_visitors.h"
 #include "./unit_info_visitors.h"
 #include "./resource_info_visitors.h"
@@ -268,10 +269,6 @@ namespace AltAI
                         std::vector<CityImprovementManager::PlotImprovementData> baseImprovements = improvementManager.getImprovements();
 
                         std::list<TechTypes> pushedTechs = pushTechAndPrereqs(techSelectionHelper.researchTech.techType, player);
-                        for (std::list<TechTypes>::const_iterator ci(pushedTechs.begin()), ciEnd(pushedTechs.end()); ci != ciEnd; ++ci)
-                        {
-                            civHelper->addTech(*ci);
-                        }
 
                         civHelper->addTech(techSelectionHelper.researchTech.techType);
                         TotalOutput baseCityOutput = improvementManager.simulateImprovements(outputWeights, __FUNCTION__);
@@ -456,6 +453,32 @@ namespace AltAI
 
             void addUnitTechs()
             {
+                for (PlayerTactics::UnitTacticsMap::const_iterator ci(playerTactics.unitTacticsMap_.begin()), ciEnd(playerTactics.unitTacticsMap_.end()); ci != ciEnd; ++ci)
+                {
+                    if (ci->second)
+                    {
+                        const std::vector<ResearchTechDependencyPtr>& unitTechs = ci->second->getTechDependencies();
+                        int maxDepth = 0;
+                        for (size_t i = 0, count = unitTechs.size(); i < count; ++i)
+                        {
+                            maxDepth = std::max<int>(maxDepth, player.getAnalysis()->getTechResearchDepth(unitTechs[i]->getResearchTech()));
+                        }
+
+                        if (maxDepth > 0 && maxDepth < 3)
+                        {
+#ifdef ALTAI_DEBUG
+                            civLog << "\n(addUnitTechs): would consider unit tactic: " << gGlobals.getUnitInfo(ci->first).getType() << " for tech(s): ";
+                            for (size_t i = 0, count = unitTechs.size(); i < count; ++i)
+                            {
+                                if (i > 0) civLog << ", ";
+                                civLog << gGlobals.getTechInfo(unitTechs[i]->getResearchTech()).getType();
+                            }
+                            civLog << " maxDepth = " << maxDepth;
+#endif
+                        }
+                    }
+                }
+
                 const ConstructList& unitTactics = playerTactics.selectedUnitTactics_;
 
                 for (ConstructListConstIter itemIter(unitTactics.begin()), itemEndIter(unitTactics.end()); itemIter != itemEndIter; ++itemIter)
@@ -985,10 +1008,6 @@ namespace AltAI
                     }
 #endif
                     std::list<TechTypes> pushedTechs = pushTechAndPrereqs(researchTech.techType, player);
-                    for (std::list<TechTypes>::const_iterator ci(pushedTechs.begin()), ciEnd(pushedTechs.end()); ci != ciEnd; ++ci)
-                    {
-                        civHelper->addTech(*ci);
-                    }
 #ifdef ALTAI_DEBUG
                     os << "\nPushed techs for " << gGlobals.getTechInfo(researchTech.techType).getType() << " = ";
                     for (std::list<TechTypes>::const_iterator ci(pushedTechs.begin()), ciEnd(pushedTechs.end()); ci != ciEnd; ++ci)

@@ -10,11 +10,23 @@ namespace AltAI
 
     struct PlayerTactics;
 
+    class UnitValueHelper
+    {
+    public:
+        typedef std::pair<int, std::vector<std::pair<UnitTypes, int> > > UnitCostAndOddsData;
+        typedef std::map<UnitTypes, UnitCostAndOddsData> MapT;
+
+        int getValue(const UnitCostAndOddsData& mapEntry) const;
+        void addMapEntry(MapT& unitCombatData, UnitTypes unitType, const std::vector<UnitTypes>& possibleCombatUnits, const std::vector<int>& odds) const;
+
+        void debug(const MapT& unitCombatData, std::ostream& os) const;
+    };
+
     ConstructList makeUnitTactics(Player& player);
 
     ConstructItem selectExpansionUnitTactics(const Player& player, const ConstructItem& constructItem);
 
     UnitTypes getConstructItem(const PlayerTactics& playerTactics);
 
-    std::vector<UnitTypes> getPossibleCombatUnits(const Player& player, DomainTypes domainType);
+    std::pair<std::vector<UnitTypes>, std::vector<UnitTypes> > getActualAndPossibleCombatUnits(const Player& player, const CvCity* pCity, DomainTypes domainType);
 }

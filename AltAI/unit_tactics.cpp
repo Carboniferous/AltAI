@@ -15,6 +15,62 @@
 
 namespace AltAI
 {
+    void UnitValueHelper::debug(const UnitValueHelper::MapT& unitCombatData, std::ostream& os) const
+    {
+        for (MapT::const_iterator ci(unitCombatData.begin()), ciEnd(unitCombatData.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nUnit: " << gGlobals.getUnitInfo(ci->first).getType() << " (cost = " << ci->second.first << ")";
+            for (size_t i = 0, count = ci->second.second.size(); i < count; ++i)
+            {
+                os << "\n\t" << gGlobals.getUnitInfo(ci->second.second[i].first).getType() << " odds = " << ci->second.second[i].second;
+            }
+            os << "\n\t\tvalue = " << getValue(ci->second);
+        }
+    }
+
+    void UnitValueHelper::addMapEntry(MapT& unitCombatData, UnitTypes unitType, const std::vector<UnitTypes>& possibleCombatUnits, const std::vector<int>& odds) const
+    {
+        unitCombatData[unitType].first = gGlobals.getUnitInfo(unitType).getProductionCost();
+
+        for (size_t j = 0, oddsCounter = odds.size(); j < oddsCounter; ++j)
+        {
+            if (odds[j] > 0)
+            {
+                unitCombatData[unitType].second.push_back(std::make_pair(possibleCombatUnits[j], odds[j]));
+            }
+        }
+    }
+
+    int UnitValueHelper::getValue(const std::pair<int, std::vector<std::pair<UnitTypes, int> > >& mapEntry) const
+    {
+        const int maxTries = 3;
+        const double oddsThreshold = 0.65;
+        const int cost = mapEntry.first;
+
+        double value = 0;
+
+        for (size_t i = 0, count = mapEntry.second.size(); i < count; ++i)
+        {
+            int thisCost = cost;
+            const double thisOdds = (double)(mapEntry.second[i].second) * 0.001;
+            double odds = thisOdds;
+            int nTries = 1;
+
+            while (odds < oddsThreshold && nTries++ < maxTries)
+            {
+                odds += (1.0 - odds) * thisOdds;
+                thisCost += cost;
+            }
+
+            if (odds > oddsThreshold)
+            {
+                value += 1000.0 * odds / (double)thisCost;
+            }
+        }
+
+        return (int)value;
+    }
+
     ConstructList makeUnitTactics(Player& player)
     {
         ConstructList unitTactics;
@@ -324,9 +380,12 @@ namespace AltAI
         return NO_UNIT;
     }
 
-    std::vector<UnitTypes> getPossibleCombatUnits(const Player& player, DomainTypes domainType)
+    std::pair<std::vector<UnitTypes>, std::vector<UnitTypes> > getActualAndPossibleCombatUnits(const Player& player, const CvCity* pCity, DomainTypes domainType)
     {
-        std::vector<UnitTypes> combatUnits;
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+//#endif
+        std::vector<UnitTypes> combatUnits, possibleCombatUnits;
 
         boost::shared_ptr<PlayerTactics> pTactics = player.getAnalysis()->getPlayerTactics();
 
@@ -334,14 +393,44 @@ namespace AltAI
         {
             if (ci->first != NO_UNIT)
             {
+//#ifdef ALTAI_DEBUG
+//                os << "\nChecking unit: " << gGlobals.getUnitInfo(ci->first).getType();
+//#endif
                 const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(ci->first);
-                if (unitInfo.getDomainType() == domainType && unitInfo.getProductionCost() >= 0 && unitInfo.getCombat() > 0 && ci->second && ci->second->areDependenciesSatisfied())
+                if (unitInfo.getDomainType() == domainType && unitInfo.getProductionCost() >= 0 && unitInfo.getCombat() > 0)
                 {
-                    combatUnits.push_back(ci->first);
+                    if (ci->second && !isUnitObsolete(player, player.getAnalysis()->getUnitInfo(ci->first)))
+                    {
+                        const boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(ci->first);
+                        bool depsSatisfied = false;
+
+                        if (pCity)
+                        {
+                            ICityUnitTacticsPtr pCityTactics = ci->second->getCityTactics(pCity->getIDInfo());
+                            depsSatisfied = pCityTactics && pCityTactics->areDependenciesSatisfied();
+                        }
+                        else
+                        {
+                            depsSatisfied = ci->second->areDependenciesSatisfied(player);
+                        }
+                        bool couldConstruct = couldConstructUnit(player, 0, pUnitInfo, false);
+//#ifdef ALTAI_DEBUG
+//                        os << " deps = " << depsSatisfied << ", could construct = " << couldConstruct;
+//#endif
+                        if (depsSatisfied)
+                        {
+                            combatUnits.push_back(ci->first);
+                            possibleCombatUnits.push_back(ci->first);
+                        }
+                        else if (couldConstructUnit(player, 1, player.getAnalysis()->getUnitInfo(ci->first), true))
+                        {
+                            possibleCombatUnits.push_back(ci->first);
+                        }
+                    }
                 }
             }
         }
 
-        return combatUnits;
+        return std::make_pair(combatUnits, possibleCombatUnits);
     }
 }

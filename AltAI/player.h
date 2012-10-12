@@ -106,6 +106,9 @@ namespace AltAI
         int getMaxResearchRateWithProcesses() const;
         int getMaxResearchRate(std::pair<int, int> fixedIncomeAndExpenses) const;
 
+        int getMaxGold() const;
+        int getMaxGoldWithProcesses() const;
+
         int getUnitCount(UnitTypes unitType) const;
         int getUnitCount(const std::vector<UnitAITypes>& AITypes, int militaryFlags) const;
         int getCollateralUnitCount(int militaryFlags) const;
@@ -140,5 +143,6 @@ namespace AltAI
 
         std::set<IDInfo> cityFlags_;
         int maxRate_, maxRateWithProcesses_;
+        int maxGold_, maxGoldWithProcesses_;
     };
 }

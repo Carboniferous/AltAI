@@ -818,7 +818,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             os << "\nAnarchy - max research rate = 0";
 #endif
-            maxRate_ = maxRateWithProcesses_ = 0;
+            maxGold_ = maxGoldWithProcesses_ = maxRate_ = maxRateWithProcesses_ = 0;
             return;
         }
 
@@ -858,17 +858,21 @@ namespace AltAI
             }
         }
 
-        int maxRate = 0, maxRateWithProcesses = 0;
+        int maxRate = 0, maxRateWithProcesses = 0, maxGold = 0, maxGoldWithProcesses = 0;
         for (int i = 10; i >= 0; --i)
         {
-            if (outputs[i].first + fixedIncome - fixedExpenses >= 0)
+            const int thisRatesGoldTotal = outputs[i].first + fixedIncome - fixedExpenses;
+            if (thisRatesGoldTotal >= 0)
             {
                 maxRate = 100 - 10 * i;
+                maxGold = std::max<int>(thisRatesGoldTotal, maxGold);
             }
 
+            const int thisRatesGoldTotalInclProcesses = thisRatesGoldTotal + processGold;
             if (outputs[i].first + fixedIncome + processGold - fixedExpenses >= 0)
             {
                 maxRateWithProcesses = 100 - 10 * i;
+                maxGoldWithProcesses = std::max<int>(thisRatesGoldTotalInclProcesses, maxGoldWithProcesses);
             }
         }
 
@@ -879,10 +883,13 @@ namespace AltAI
             os << "\nResearch = " << (100 - 10 * i) << "%, city gold total = " << outputs[i].first << ", research total = " << outputs[i].second;
         }
         os << "\nMax research rate = " << maxRate << "%, max research rate with process = " << maxRateWithProcesses;
+        os << "\nMax gold = " << maxGold << ", with processes = " << maxGoldWithProcesses;
 #endif
 
         maxRate_ = maxRate;
+        maxGold_ = maxGold;
         maxRateWithProcesses_ = maxRateWithProcesses;
+        maxGoldWithProcesses_ = maxGoldWithProcesses;
     }
 
     int Player::getMaxResearchRate() const
@@ -893,6 +900,16 @@ namespace AltAI
     int Player::getMaxResearchRateWithProcesses() const
     {
         return maxRateWithProcesses_;
+    }
+
+    int Player::getMaxGold() const
+    {
+        return maxGold_;
+    }
+
+    int Player::getMaxGoldWithProcesses() const
+    {
+        return maxGoldWithProcesses_;
     }
 
     void Player::logMission(CvSelectionGroup* pGroup, MissionData missionData, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit) const
@@ -1343,6 +1360,8 @@ namespace AltAI
     {
         pStream->Write(maxRate_);
         pStream->Write(maxRateWithProcesses_);
+        pStream->Write(maxGold_);
+        pStream->Write(maxGoldWithProcesses_);
 
         pPlayerAnalysis_->write(pStream);
     }
@@ -1351,6 +1370,8 @@ namespace AltAI
     {
         pStream->Read(&maxRate_);
         pStream->Read(&maxRateWithProcesses_);
+        pStream->Read(&maxGold_);
+        pStream->Read(&maxGoldWithProcesses_);
 
         pPlayerAnalysis_->read(pStream);
     }

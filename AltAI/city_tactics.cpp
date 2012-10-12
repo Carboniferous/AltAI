@@ -101,7 +101,8 @@ namespace AltAI
             CityBuildSelectionData(const PlayerTactics& playerTactics_, const City& city_)
                 : playerTactics(playerTactics_), player(playerTactics_.player), city(city_),
                   improvementManager(playerTactics_.player.getAnalysis()->getMapAnalysis()->getImprovementManager(city_.getCvCity()->getIDInfo())),
-                  selection(NO_BUILDING)
+                  selection(NO_BUILDING),
+                  tacticSelectionData(city_.getCvCity()->getIDInfo())
             {
                 warPlanCount = CvTeamAI::getTeam(player.getTeamID()).getAnyWarPlanCount(true);
                 atWarCount = CvTeamAI::getTeam(player.getTeamID()).getAtWarCount(true);
@@ -148,51 +149,51 @@ namespace AltAI
                         unitEconomicFlagsUnion |= iter->economicFlags;
 
                         // remove any builds we can't yet do (or are close to researching)
-                        checkWorkerBuilds(unitSelectionHelper.constructItem.possibleBuildTypes);
+                        //checkWorkerBuilds(unitSelectionHelper.constructItem.possibleBuildTypes);
 
                         // includes workboats
                         // it is possible to have worker units which can build a mixture of improvements which consume them (e.g. BUILD_FISHING_BOATS) and don't (e.g. BUILD_MINE)
                         // so, a single unit can get added to both sets of worker units 
-                        for (std::map<BuildTypes, int>::const_iterator buildsIter(unitSelectionHelper.constructItem.possibleBuildTypes.begin()),
-                             endBuildsIter(unitSelectionHelper.constructItem.possibleBuildTypes.end()); buildsIter != endBuildsIter; ++buildsIter)
-                        {
-                            const CvBuildInfo& buildInfo = gGlobals.getBuildInfo(buildsIter->first);
-                            if (buildInfo.isKill())
-                            {
-                                if (consumedPossibleWorkers.find(iter->unitType) == consumedPossibleWorkers.end())
-                                {
-                                    consumedPossibleWorkers.insert(iter->unitType);
-                                    existingConsumedWorkersCount += unitSelectionHelper.existingCount;
-                                    for (std::map<BuildTypes, int>::const_iterator buildsInnerIter(unitSelectionHelper.constructItem.possibleBuildTypes.begin()),
-                                        buildsInnerEndIter(unitSelectionHelper.constructItem.possibleBuildTypes.end()); buildsInnerIter != buildsInnerEndIter; ++buildsInnerIter)
-                                    {
-                                        const CvBuildInfo& buildInfo = gGlobals.getBuildInfo(buildsIter->first);
-                                        if (buildInfo.isKill())
-                                        {
-                                            consumedWorkerBuildCount += buildsInnerIter->second;
-                                        }
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                if (possibleWorkers.find(iter->unitType) == possibleWorkers.end())
-                                {
-                                    // first time we've added this unit, so add its build totals to workerBuildCount
-                                    possibleWorkers.insert(iter->unitType);
-                                    existingWorkersCount += unitSelectionHelper.existingCount;
-                                    for (std::map<BuildTypes, int>::const_iterator buildsInnerIter(unitSelectionHelper.constructItem.possibleBuildTypes.begin()),
-                                        buildsInnerEndIter(unitSelectionHelper.constructItem.possibleBuildTypes.end()); buildsInnerIter != buildsInnerEndIter; ++buildsInnerIter)
-                                    {
-                                        const CvBuildInfo& buildInfo = gGlobals.getBuildInfo(buildsIter->first);
-                                        if (!buildInfo.isKill())
-                                        {
-                                            workerBuildCount += buildsInnerIter->second;
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        //for (std::map<BuildTypes, int>::const_iterator buildsIter(unitSelectionHelper.constructItem.possibleBuildTypes.begin()),
+                        //     endBuildsIter(unitSelectionHelper.constructItem.possibleBuildTypes.end()); buildsIter != endBuildsIter; ++buildsIter)
+                        //{
+                        //    const CvBuildInfo& buildInfo = gGlobals.getBuildInfo(buildsIter->first);
+                        //    if (buildInfo.isKill())
+                        //    {
+                        //        if (consumedPossibleWorkers.find(iter->unitType) == consumedPossibleWorkers.end())
+                        //        {
+                        //            consumedPossibleWorkers.insert(iter->unitType);
+                        //            existingConsumedWorkersCount += unitSelectionHelper.existingCount;
+                        //            for (std::map<BuildTypes, int>::const_iterator buildsInnerIter(unitSelectionHelper.constructItem.possibleBuildTypes.begin()),
+                        //                buildsInnerEndIter(unitSelectionHelper.constructItem.possibleBuildTypes.end()); buildsInnerIter != buildsInnerEndIter; ++buildsInnerIter)
+                        //            {
+                        //                const CvBuildInfo& buildInfo = gGlobals.getBuildInfo(buildsIter->first);
+                        //                if (buildInfo.isKill())
+                        //                {
+                        //                    consumedWorkerBuildCount += buildsInnerIter->second;
+                        //                }
+                        //            }
+                        //        }
+                        //    }
+                        //    else
+                        //    {
+                        //        if (possibleWorkers.find(iter->unitType) == possibleWorkers.end())
+                        //        {
+                        //            // first time we've added this unit, so add its build totals to workerBuildCount
+                        //            possibleWorkers.insert(iter->unitType);
+                        //            existingWorkersCount += unitSelectionHelper.existingCount;
+                        //            for (std::map<BuildTypes, int>::const_iterator buildsInnerIter(unitSelectionHelper.constructItem.possibleBuildTypes.begin()),
+                        //                buildsInnerEndIter(unitSelectionHelper.constructItem.possibleBuildTypes.end()); buildsInnerIter != buildsInnerEndIter; ++buildsInnerIter)
+                        //            {
+                        //                const CvBuildInfo& buildInfo = gGlobals.getBuildInfo(buildsIter->first);
+                        //                if (!buildInfo.isKill())
+                        //                {
+                        //                    workerBuildCount += buildsInnerIter->second;
+                        //                }
+                        //            }
+                        //        }
+                        //    }
+                        //}
 
                         if (iter->economicFlags & EconomicFlags::Output_Settler)
                         {
@@ -382,6 +383,11 @@ namespace AltAI
                     ci->second.debug(os);
                 }
 
+                for (std::map<UnitTypes, WorkerUnitValue>::const_iterator ci(tacticSelectionData.workerUnits.begin()), ciEnd(tacticSelectionData.workerUnits.end()); ci != ciEnd; ++ci)
+                {
+                    ci->second.debug(os);
+                }
+
                 os << "\nEconomic flags union:";
                 streamEconomicFlags(os, economicFlagsUnion);
                 os << "\nUnit Economic flags union:";
@@ -393,15 +399,16 @@ namespace AltAI
                 os << "\ncombat unit count = " << combatUnitCount;
                 os << "\nrank and production = " << rankAndMaxProduction.first << ", " << rankAndMaxProduction.second;
 
-                os << " Possible settler = " << !possibleSettlers.empty() << ", possible worker = " << !possibleWorkers.empty() << ", possible consumed worker = " << !consumedPossibleWorkers.empty();
+                os << " Possible settler = " << !possibleSettlers.empty(); // << ", possible worker = " << !possibleWorkers.empty() << ", possible consumed worker = " << !consumedPossibleWorkers.empty();
                 os << " existing settler count = " << existingSettlersCount;
-
-                os << ", workerBuildCount = " << workerBuildCount << ", consumedWorkerBuildCount = " << consumedWorkerBuildCount;
-                os << ", exising worker count = " << existingWorkersCount << ", existing consumed workers count = " << existingConsumedWorkersCount;
-                    
-                os << ", max research rate = " << maxResearchRate;
-
                 os << ", unworkedGoodImprovementCount = " << unworkedGoodImprovementCount;
+
+                /*os << ", workerBuildCount = " << workerBuildCount << ", consumedWorkerBuildCount = " << consumedWorkerBuildCount;
+                os << ", exising worker count = " << existingWorkersCount << ", existing consumed workers count = " << existingConsumedWorkersCount;*/
+                    
+                os << "\n max research rate = " << maxResearchRate;
+
+                
 
                 if (bestSmallCultureBuilding != NO_BUILDING)
                 {
@@ -533,51 +540,51 @@ namespace AltAI
                 }
             }
 
-            void checkWorkerBuilds(std::map<BuildTypes, int>& possibleBuildTypes)
-            {
-#ifdef ALTAI_DEBUG
-                // debug
-                boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
-                std::ostream& os = pCivLog->getStream();
-#endif
-                boost::shared_ptr<CivHelper> pCivHelper = player.getCivHelper();
-
-                std::map<BuildTypes, int>::iterator iter = possibleBuildTypes.begin(), endIter = possibleBuildTypes.end();
-
-                while (iter != endIter)
-                {
-                    if (iter->first == NO_BUILD)
-                    {
-                        possibleBuildTypes.erase(iter++);
-                        continue;
-                    }
-                    TechTypes buildTechType = GameDataAnalysis::getTechTypeForBuildType(iter->first);
-                    if (buildTechType == NO_TECH)
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nskipped checking for build: " << iter->first << " with tech: " << buildTechType;
-#endif
-                        possibleBuildTypes.erase(iter++);
-                        continue;
-                    }
-#ifdef ALTAI_DEBUG
-                    os << "\nchecking for worker tech: " << gGlobals.getTechInfo(buildTechType).getType()
-                       << " has tech = " << pCivHelper->hasTech(buildTechType) << " depth = " << player.getTechResearchDepth(buildTechType);
-#endif
-                    if (buildTechType == NO_TECH || pCivHelper->hasTech(buildTechType) || player.getTechResearchDepth(buildTechType) < 2 ||
-                        player.getCurrentResearchTech().targetTechType == buildTechType)
-                    {
-                        ++iter;
-                    }
-                    else
-                    {
-#ifdef ALTAI_DEBUG
-                        os << " erasing build: " << gGlobals.getBuildInfo(iter->first).getType() << ", ";
-#endif
-                        possibleBuildTypes.erase(iter++);
-                    }
-                }
-            }
+//            void checkWorkerBuilds(std::map<BuildTypes, int>& possibleBuildTypes)
+//            {
+//#ifdef ALTAI_DEBUG
+//                // debug
+//                boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
+//                std::ostream& os = pCivLog->getStream();
+//#endif
+//                boost::shared_ptr<CivHelper> pCivHelper = player.getCivHelper();
+//
+//                std::map<BuildTypes, int>::iterator iter = possibleBuildTypes.begin(), endIter = possibleBuildTypes.end();
+//
+//                while (iter != endIter)
+//                {
+//                    if (iter->first == NO_BUILD)
+//                    {
+//                        possibleBuildTypes.erase(iter++);
+//                        continue;
+//                    }
+//                    TechTypes buildTechType = GameDataAnalysis::getTechTypeForBuildType(iter->first);
+//                    if (buildTechType == NO_TECH)
+//                    {
+//#ifdef ALTAI_DEBUG
+//                        os << "\nskipped checking for build: " << iter->first << " with tech: " << buildTechType;
+//#endif
+//                        possibleBuildTypes.erase(iter++);
+//                        continue;
+//                    }
+//#ifdef ALTAI_DEBUG
+//                    os << "\nchecking for worker tech: " << gGlobals.getTechInfo(buildTechType).getType()
+//                       << " has tech = " << pCivHelper->hasTech(buildTechType) << " depth = " << player.getTechResearchDepth(buildTechType);
+//#endif
+//                    if (buildTechType == NO_TECH || pCivHelper->hasTech(buildTechType) || player.getTechResearchDepth(buildTechType) < 2 ||
+//                        player.getCurrentResearchTech().targetTechType == buildTechType)
+//                    {
+//                        ++iter;
+//                    }
+//                    else
+//                    {
+//#ifdef ALTAI_DEBUG
+//                        os << " erasing build: " << gGlobals.getBuildInfo(iter->first).getType() << ", ";
+//#endif
+//                        possibleBuildTypes.erase(iter++);
+//                    }
+//                }
+//            }
 
             void calculateSmallCultureBuilding()
             {
@@ -1081,7 +1088,7 @@ namespace AltAI
                 typedef std::multimap<int, UnitTypes, std::greater<int> > UnitValuesMap;
                 UnitValuesMap unitValuesMap;
 
-                for (UnitSelectionData::const_iterator ci(unitSelectionData.begin()), ciEnd(unitSelectionData.end()); ci != ciEnd; ++ci)
+                /*for (UnitSelectionData::const_iterator ci(unitSelectionData.begin()), ciEnd(unitSelectionData.end()); ci != ciEnd; ++ci)
                 {
                     if (ci->second.constructItem.militaryFlags & MilitaryFlags::Output_Combat_Unit && gGlobals.getUnitInfo(ci->second.constructItem.unitType).getDomainType() == DOMAIN_LAND)
                     {
@@ -1091,15 +1098,28 @@ namespace AltAI
                             unitValuesMap.insert(std::make_pair(mapIter->second.first, ci->second.constructItem.unitType));
                         }
                     }
+                }*/
+
+                for (std::set<UnitTacticValue>::const_iterator ci(tacticSelectionData.cityAttackUnits.begin()), ciEnd(tacticSelectionData.cityAttackUnits.end()); ci != ciEnd; ++ci)
+                {
+                    unitValuesMap.insert(std::make_pair(ci->unitAnalysisValue, ci->unitType));
+#ifdef ALTAI_DEBUG
+                    std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+                    os << "\n(Combat Unit): " << gGlobals.getUnitInfo(ci->unitType).getType()
+                       << " turns = " << ci->nTurns << ", value = " << ci->unitAnalysisValue;
+#endif
                 }
 
                 int bestValue = 0;
                 combatUnits.clear();
                 UnitValuesMap::const_iterator bestValueIter, valueIter;
                 bestValueIter = valueIter = unitValuesMap.begin();
-                while (valueIter != unitValuesMap.end() && (140 * valueIter->first) / 100 >= bestValueIter->first)
+                while (valueIter != unitValuesMap.end() && (120 * valueIter->first) / 100 >= bestValueIter->first)
                 {
-                    combatUnits.push_back(valueIter->second);
+                    if (gGlobals.getUnitInfo(valueIter->second).getCombatLimit() == 100)
+                    {
+                        combatUnits.push_back(valueIter->second);
+                    }
                     ++valueIter;
                 }
 
@@ -1114,7 +1134,7 @@ namespace AltAI
                 typedef std::multimap<int, UnitTypes, std::greater<int> > UnitValuesMap;
                 UnitValuesMap unitValuesMap;
 
-                for (UnitSelectionData::const_iterator ci(unitSelectionData.begin()), ciEnd(unitSelectionData.end()); ci != ciEnd; ++ci)
+                /*for (UnitSelectionData::const_iterator ci(unitSelectionData.begin()), ciEnd(unitSelectionData.end()); ci != ciEnd; ++ci)
                 {
                     if (ci->second.constructItem.militaryFlags & MilitaryFlags::Output_Combat_Unit && gGlobals.getUnitInfo(ci->second.constructItem.unitType).getDomainType() == DOMAIN_LAND)
                     {
@@ -1124,25 +1144,26 @@ namespace AltAI
                             unitValuesMap.insert(std::make_pair(mapIter->second.first, ci->second.constructItem.unitType));
                         }
                     }
+                }*/                
+
+                for (std::set<UnitTacticValue>::const_iterator ci(tacticSelectionData.cityAttackUnits.begin()), ciEnd(tacticSelectionData.cityAttackUnits.end()); ci != ciEnd; ++ci)
+                {
+                    unitValuesMap.insert(std::make_pair(ci->unitAnalysisValue, ci->unitType));
+#ifdef ALTAI_DEBUG
+                    std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+                    os << "\n(City Attack Unit): " << gGlobals.getUnitInfo(ci->unitType).getType()
+                       << " turns = " << ci->nTurns << ", value = " << ci->unitAnalysisValue;
+#endif
                 }
 
                 int bestValue = 0;
                 cityAttackUnits.clear();
                 UnitValuesMap::const_iterator bestValueIter, valueIter;
                 bestValueIter = valueIter = unitValuesMap.begin();
-                while (valueIter != unitValuesMap.end() && (140 * valueIter->first) / 100 >= bestValueIter->first)
+                while (valueIter != unitValuesMap.end() && (120 * valueIter->first) / 100 >= bestValueIter->first)
                 {
                     cityAttackUnits.push_back(valueIter->second);
                     ++valueIter;
-                }
-
-                for (std::set<UnitTacticValue>::const_iterator ci(tacticSelectionData.cityAttackUnits.begin()), ciEnd(tacticSelectionData.cityAttackUnits.end()); ci != ciEnd; ++ci)
-                {
-#ifdef ALTAI_DEBUG
-                    std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-                    os << "\n(City Attack Unit): " << gGlobals.getUnitInfo(ci->unitType).getType()
-                       << " turns = " << ci->nTurns << ", value = " << ci->unitAnalysisValue;
-#endif
                 }
             }
 
@@ -1198,7 +1219,7 @@ namespace AltAI
 
             void calculateBestCityDefenceUnits()
             {
-                typedef std::multimap<int, UnitTypes, std::greater<int> > UnitValuesMap;
+                /*typedef std::multimap<int, UnitTypes, std::greater<int> > UnitValuesMap;
                 UnitValuesMap unitValuesMap;
 
                 for (UnitSelectionData::const_iterator ci(unitSelectionData.begin()), ciEnd(unitSelectionData.end()); ci != ciEnd; ++ci)
@@ -1221,19 +1242,21 @@ namespace AltAI
                 {
                     cityDefenceUnits.push_back(valueIter->second);
                     ++valueIter;
-                }
+                }*/
 
-                if (!cityDefenceUnits.empty())
+                /*if (!cityDefenceUnits.empty())
                 {
                     bestCityDefenceUnit = cityDefenceUnits[0];
                 }
                 else if (bestCombatUnit != NO_UNIT)
                 {
                     bestCityDefenceUnit = bestCombatUnit;
-                }
+                }*/
 
+                cityDefenceUnits.clear();
                 for (std::set<UnitTacticValue>::const_iterator ci(tacticSelectionData.cityDefenceUnits.begin()), ciEnd(tacticSelectionData.cityDefenceUnits.end()); ci != ciEnd; ++ci)
                 {
+                    cityDefenceUnits.push_back(ci->unitType);
 #ifdef ALTAI_DEBUG
                     std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
                     os << "\n(City Defence Unit): " << gGlobals.getUnitInfo(ci->unitType).getType()
@@ -1390,9 +1413,29 @@ namespace AltAI
                 std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
 #endif
                 UnitTypes combatUnit = chooseUnit(combatUnits), collateralUnit = chooseUnit(collateralUnits), attackUnit = chooseUnit(cityAttackUnits);
-                int combatUnitCount = player.getUnitCount(combatUnit), collateralUnitCount = player.getUnitCount(collateralUnit),
-                    attackUnitCount = player.getUnitCount(attackUnit), cityDefenceUnitCount = player.getUnitCount(bestCityDefenceUnit);
-                int totalCollateralUnitCount = player.getCollateralUnitCount(MilitaryFlags::Output_Collateral);
+                const int combatUnitCount = player.getUnitCount(combatUnit), collateralUnitCount = player.getUnitCount(collateralUnit),
+                          attackUnitCount = player.getUnitCount(attackUnit), cityDefenceUnitCount = player.getUnitCount(bestCityDefenceUnit);
+                const int totalCollateralUnitCount = player.getCollateralUnitCount(MilitaryFlags::Output_Collateral);
+
+                int iFreeUnits, iFreeMilitaryUnits, iPaidUnits, iPaidMilitaryUnits, iMilitaryCost, iBaseUnitCost, iExtraCost;
+                const int supportCost = player.getCvPlayer()->calculateUnitCost(iFreeUnits, iFreeMilitaryUnits, iPaidUnits, iPaidMilitaryUnits, iMilitaryCost, iBaseUnitCost, iExtraCost);
+
+                int maxUnitCount = 0;
+                const int maxResearchRate = player.getMaxResearchRate();
+
+                if (maxResearchRate < 30)
+                {
+                    maxUnitCount = (6 * iFreeUnits)  / 5;
+                }
+                else if (maxResearchRate < 60)
+                {
+                    maxUnitCount = (8 * iFreeUnits)  / 5;
+                }
+                else
+                {
+                    maxUnitCount = 2 * iFreeUnits;
+                }
+
 #ifdef ALTAI_DEBUG
                 os << "\nUnit counts: ";
                 if (combatUnit != NO_UNIT)
@@ -1421,6 +1464,10 @@ namespace AltAI
                     os << "\n(getConstructItem) Returning city defence unit(1): " << gGlobals.getUnitInfo(bestCityDefenceUnit).getType() << selection;
 #endif
                     return true;
+                }
+                else if (player.getCvPlayer()->getNumMilitaryUnits() > maxUnitCount)
+                {
+                    return false;
                 }
                 else if (combatUnitCount < totalCollateralUnitCount / 2 && setConstructItem(combatUnit))
                 {
@@ -1561,7 +1608,7 @@ namespace AltAI
                 }
             }
 
-            UnitTypes getBestWorker(bool isConsumed) const
+            /*UnitTypes getBestWorker(bool isConsumed) const
             {
                 int bestBuildCount = 0; 
                 UnitTypes bestWorkerUnitType = NO_UNIT;
@@ -1593,7 +1640,7 @@ namespace AltAI
                 }
 
                 return bestWorkerUnitType;
-            }
+            }*/
 
             ConstructItem getSelection()
             {
@@ -1645,8 +1692,26 @@ namespace AltAI
                         }
                     }
 
+                    if (bestWorkerUnit != NO_UNIT)
+                    {
+                        bool reusable = true;
+                        std::map<UnitTypes, WorkerUnitValue>::const_iterator ci = tacticSelectionData.workerUnits.find(bestWorkerUnit);
+                        if (ci != tacticSelectionData.workerUnits.end())
+                        {
+                            reusable = ci->second.consumedBuildsMap.empty() && !ci->second.buildsMap.empty();
+                        }
+
+                        if (player.getUnitCount(bestWorkerUnit) == 0 && setConstructItem(bestWorkerUnit))
+                        {
+#ifdef ALTAI_DEBUG
+                            os << "\n(getConstructItem) Returning best " << (reusable ? " reusable " : "") << " worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
+#endif
+                            return selection;
+                        }
+                    }
+
                     // no workers, but could build one
-                    if (existingWorkersCount == 0 && !possibleWorkers.empty())
+                    /*if (existingWorkersCount == 0 && !possibleWorkers.empty())
                     {
                         UnitTypes bestWorkerUnit = getBestWorker(false);
                         if (bestWorkerUnit != NO_UNIT && setConstructItem(bestWorkerUnit))
@@ -1670,13 +1735,13 @@ namespace AltAI
 #endif
                             return selection;
                         }
-                    }
+                    }*/
 
                     // have improvements we could be working, if we grow, and can grow
                     bool keepGrowing = unworkedGoodImprovementCount > 0 && city.getCvCity()->getPopulation() < happyCap;
 
-                    // want to keep growing, or have less than three combat units, and can build more
-                    if ((keepGrowing || combatUnitCount < 1) && bestCombatUnit != NO_UNIT && setConstructItem(bestCombatUnit))
+                    // want to keep growing and have less than three combat units, and can build more
+                    if (bestCombatUnit != NO_UNIT && keepGrowing && combatUnitCount < 3 && setConstructItem(bestCombatUnit))
                     {
 #ifdef ALTAI_DEBUG
                         os << "\n(getConstructItem) Returning best combat unit: " << gGlobals.getUnitInfo(bestCombatUnit).getType() << selection;
@@ -1742,34 +1807,55 @@ namespace AltAI
                     }
 
                     // can build worker units, and no. of plots to improve greater than 6 * no. workers
-                    if (!possibleWorkers.empty() && workerBuildCount - 6 * existingWorkersCount > 0)
+                    if (bestWorkerUnit != NO_UNIT)
                     {
-                        // unconsumed workers (hence count of improvements is useful)
-                        UnitTypes bestWorkerUnit = getBestWorker(false);
-                        if (setConstructItem(bestWorkerUnit))
+                        bool reusable = true;
+                        int buildsCount = 0;
+                        std::map<UnitTypes, WorkerUnitValue>::const_iterator ci = tacticSelectionData.workerUnits.find(bestWorkerUnit);
+                        if (ci != tacticSelectionData.workerUnits.end())
+                        {
+                            reusable = ci->second.consumedBuildsMap.empty() && !ci->second.buildsMap.empty();
+                            buildsCount = ci->second.getBuildsCount();
+                        }
+
+                        if (buildsCount - 3 * player.getUnitCount(bestWorkerUnit) > 0 && setConstructItem(bestWorkerUnit))
                         {
 #ifdef ALTAI_DEBUG
-                            os << "\n(getConstructItem) Returning reusable best worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
+                            os << "\n(getConstructItem) Returning best " << (reusable ? " reusable " : "") << " worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection
+                                << " builds count = " << buildsCount;
 #endif
                             return selection;
                         }
                     }
 
-                    // workboats...
-                    if (!consumedPossibleWorkers.empty() && consumedWorkerBuildCount - existingConsumedWorkersCount > 0)
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nChecking for single-shot worker...";
-#endif
-                        UnitTypes bestWorkerUnit = getBestWorker(true);
-                        if (setConstructItem(bestWorkerUnit))
-                        {
-#ifdef ALTAI_DEBUG
-                            os << "\n(getConstructItem) Returning best single-shot worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
-#endif
-                            return selection;
-                        }
-                    }
+//                    if (!possibleWorkers.empty() && workerBuildCount - 6 * existingWorkersCount > 0)
+//                    {
+//                        // unconsumed workers (hence count of improvements is useful)
+//                        UnitTypes bestWorkerUnit = getBestWorker(false);
+//                        if (setConstructItem(bestWorkerUnit))
+//                        {
+//#ifdef ALTAI_DEBUG
+//                            os << "\n(getConstructItem) Returning reusable best worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
+//#endif
+//                            return selection;
+//                        }
+//                    }
+
+//                    // workboats...
+//                    if (!consumedPossibleWorkers.empty() && consumedWorkerBuildCount - existingConsumedWorkersCount > 0)
+//                    {
+//#ifdef ALTAI_DEBUG
+//                        os << "\nChecking for single-shot worker...";
+//#endif
+//                        UnitTypes bestWorkerUnit = getBestWorker(true);
+//                        if (setConstructItem(bestWorkerUnit))
+//                        {
+//#ifdef ALTAI_DEBUG
+//                            os << "\n(getConstructItem) Returning best single-shot worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
+//#endif
+//                            return selection;
+//                        }
+//                    }
 
                     if (chooseSeaScoutUnit())
                     {
@@ -1833,7 +1919,7 @@ namespace AltAI
 
                         const bool isDanger = player.getCvPlayer()->AI_getPlotDanger(city.getCvCity()->plot(), 3, false);
 
-                        if (combatUnitCount < (1 + popCount / 3) || isDanger && bestCombatUnit != NO_UNIT)
+                        if (combatUnitCount < (1 + (2 * popCount / 5)) || isDanger && bestCombatUnit != NO_UNIT)
                         {
                             if (bestMilitaryBuilding != NO_BUILDING && setConstructItem(bestMilitaryBuilding))
                             {
@@ -1857,34 +1943,56 @@ namespace AltAI
                             }
                         }
 
-                        // can build worker units, and no. of plots to improve greater than 4 * no. workers
-                        if (!possibleWorkers.empty() && workerBuildCount - 4 * existingWorkersCount > 0)
+                        // can build worker units, and no. of plots to improve greater than 3 * no. workers
+                        if (bestWorkerUnit != NO_UNIT)
                         {
-                            UnitTypes bestWorkerUnit = getBestWorker(false);
-                            if (setConstructItem(bestWorkerUnit))
+                            bool reusable = true;
+                            int buildsCount = 0;
+                            std::map<UnitTypes, WorkerUnitValue>::const_iterator ci = tacticSelectionData.workerUnits.find(bestWorkerUnit);
+                            if (ci != tacticSelectionData.workerUnits.end())
+                            {
+                                reusable = ci->second.consumedBuildsMap.empty() && !ci->second.buildsMap.empty();
+                                buildsCount = ci->second.getBuildsCount();
+                            }
+
+                            if (buildsCount - 3 * player.getUnitCount(bestWorkerUnit) > 0 && setConstructItem(bestWorkerUnit))
                             {
 #ifdef ALTAI_DEBUG
-                                os << "\n(getConstructItem) Returning best reusable worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
+                                os << "\n(getConstructItem) Returning best " << (reusable ? " reusable " : "") << " worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection
+                                    << " builds count = " << buildsCount;
 #endif
                                 return selection;
                             }
                         }
 
-                        // workboats...
-                        if (!consumedPossibleWorkers.empty() && consumedWorkerBuildCount - existingConsumedWorkersCount > 0)
-                        {
-#ifdef ALTAI_DEBUG
-                            os << "\nChecking for single-shot worker...";
-#endif
-                            UnitTypes bestWorkerUnit = getBestWorker(true);
-                            if (setConstructItem(bestWorkerUnit))
-                            {
-#ifdef ALTAI_DEBUG
-                                os << "\n(getConstructItem) Returning best single-shot worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
-#endif
-                                return selection;
-                            }
-                        }
+//                        // can build worker units, and no. of plots to improve greater than 4 * no. workers
+//                        if (!possibleWorkers.empty() && workerBuildCount - 4 * existingWorkersCount > 0)
+//                        {
+//                            UnitTypes bestWorkerUnit = getBestWorker(false);
+//                            if (setConstructItem(bestWorkerUnit))
+//                            {
+//#ifdef ALTAI_DEBUG
+//                                os << "\n(getConstructItem) Returning best reusable worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
+//#endif
+//                                return selection;
+//                            }
+//                        }
+
+//                        // workboats...
+//                        if (!consumedPossibleWorkers.empty() && consumedWorkerBuildCount - existingConsumedWorkersCount > 0)
+//                        {
+//#ifdef ALTAI_DEBUG
+//                            os << "\nChecking for single-shot worker...";
+//#endif
+//                            UnitTypes bestWorkerUnit = getBestWorker(true);
+//                            if (setConstructItem(bestWorkerUnit))
+//                            {
+//#ifdef ALTAI_DEBUG
+//                                os << "\n(getConstructItem) Returning best single-shot worker unit: " << gGlobals.getUnitInfo(bestWorkerUnit).getType() << selection;
+//#endif
+//                                return selection;
+//                            }
+//                        }
 
                         if (settlerCount == 0 && !possibleSettlers.empty() && maxResearchRate > 30 && 
                             existingSettlersCount < 1 + (player.getSettlerManager()->getBestCitySites(140, 4).size() / 2) && setConstructItem(*possibleSettlers.begin()))
@@ -1976,7 +2084,7 @@ namespace AltAI
                     }
 
                     // workboats...
-                    if (!consumedPossibleWorkers.empty() && consumedWorkerBuildCount - existingConsumedWorkersCount > 0)
+                    /*if (!consumedPossibleWorkers.empty() && consumedWorkerBuildCount - existingConsumedWorkersCount > 0)
                     {
 #ifdef ALTAI_DEBUG
                         os << "\nChecking for single-shot worker...";
@@ -1989,7 +2097,7 @@ namespace AltAI
 #endif
                             return selection;
                         }
-                    }
+                    }*/
 
                     if ((combatUnitCount < (7 * cityCount) / 2 || combatUnitCount < (1 + 2 * popCount / 3)) && (atWarCount > 0 || warPlanCount > 0))
                     {
@@ -2384,6 +2492,47 @@ namespace AltAI
         return highestConsumedBuildValue;
     }
 
+    int WorkerUnitValue::getBuildsCount() const
+    {
+        int buildCount = 0;
+        for (BuildsMap::const_iterator ci(buildsMap.begin()), ciEnd(buildsMap.end()); ci != ciEnd; ++ci)
+        {
+            buildCount += ci->second.size();
+        }
+        for (BuildsMap::const_iterator ci(consumedBuildsMap.begin()), ciEnd(consumedBuildsMap.end()); ci != ciEnd; ++ci)
+        {
+            buildCount += ci->second.size();
+        }
+        return buildCount;
+    }
+
+    void WorkerUnitValue::debug(std::ostream& os) const
+    {
+        os << "\nWorker unit value data: " << gGlobals.getUnitInfo(unitType).getType() << ", turns = " << nTurns;
+
+        debugBuildsMap_(os, buildsMap);
+        debugBuildsMap_(os, consumedBuildsMap);
+    }
+
+    void WorkerUnitValue::debugBuildsMap_(std::ostream& os, const WorkerUnitValue::BuildsMap& buildsMap_) const
+    {
+        for (BuildsMap::const_iterator ci(buildsMap_.begin()), ciEnd(buildsMap_.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nBuild: " << gGlobals.getBuildInfo(ci->first).getType();
+            for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+            {
+                os << "{" << boost::get<0>(ci->second[i]) << " " << boost::get<1>(ci->second[i]);
+                for (size_t j = 0, count = boost::get<2>(ci->second[i]).size(); j < count; ++j)
+                {
+                    if (j > 0) os << ", ";
+                    else os << " ";
+                    os << gGlobals.getTechInfo(boost::get<2>(ci->second[i])[j]).getType();
+                }
+                os << "}";
+            }
+        }
+    }
+
     void WorkerUnitValue::addBuild(BuildTypes buildType, WorkerUnitValue::BuildData buildData)
     {
         const bool isConsumed = gGlobals.getBuildInfo(buildType).isKill();
@@ -2509,7 +2658,7 @@ namespace AltAI
         for (PlayerTactics::UnitTacticsMap::const_iterator iter(playerTactics.unitTacticsMap_.begin()),
             endIter(playerTactics.unitTacticsMap_.end()); iter != endIter; ++iter)
         {
-            if (iter->second)
+            if (iter->second && iter->second->areDependenciesSatisfied(playerTactics.player))
             {
                 ICityUnitTacticsPtr pCityUnitTacticsPtr = iter->second->getCityTactics(city.getCvCity()->getIDInfo());
                 if (pCityUnitTacticsPtr)
@@ -2570,7 +2719,7 @@ namespace AltAI
         selectionData.calculateBestScoutUnit();
         selectionData.calculateBestUnits();
 
-        //selectionData.debug();
+        selectionData.debug();
 
         ConstructItem selection = selectionData.getSelection();
 

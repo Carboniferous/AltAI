@@ -200,11 +200,13 @@ namespace AltAI
     public:
         virtual ~IUnitTactics() = 0 {}
         virtual void addDependency(const IDependentTacticPtr&) = 0;
+        virtual void addTechDependency(const ResearchTechDependencyPtr&) = 0;
         virtual void update(const Player&) = 0;
         virtual void updateDependencies(const Player&) = 0;
         virtual void addCityTactic(IDInfo, const ICityUnitTacticsPtr&) = 0;
         virtual ICityUnitTacticsPtr getCityTactics(IDInfo) const = 0;
-        virtual bool areDependenciesSatisfied() const = 0;
+        virtual bool areDependenciesSatisfied(const Player& player) const = 0;
+        virtual const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const = 0;
         virtual void apply(TacticSelectionData&) = 0;
         virtual void removeCityTactics(IDInfo) = 0;
         virtual bool empty() const = 0;

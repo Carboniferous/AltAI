@@ -29,6 +29,9 @@ namespace AltAI
         case 3:
             pDependentTactic = IDependentTacticPtr(new ReligiousDependency());
             break;
+        case 4:
+            pDependentTactic = IDependentTacticPtr(new CityBonusDependency());
+            break;
         default:
             break;
         }
@@ -235,6 +238,9 @@ namespace AltAI
         case 6:
             pCityUnitTactic = ICityUnitTacticPtr(new BuildImprovementsUnitTactic());
             break;
+        case 7:
+            pCityUnitTactic = ICityUnitTacticPtr(new SeaAttackUnitTactic());
+            break;
         default:
             break;
         }
@@ -272,6 +278,8 @@ namespace AltAI
 
         switch (ID)
         {
+        case -1:
+            return IUnitTacticsPtr();  // Null tactic - valid for unit tactics if no city can build the unit currently
         case 0:
             pUnitTactics = IUnitTacticsPtr(new UnitTactic());
             break;

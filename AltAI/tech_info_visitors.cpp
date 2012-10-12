@@ -654,6 +654,12 @@ namespace AltAI
                 pCivHelper->clearResearchTechs();
             }
         }
+
+        for (std::list<TechTypes>::const_iterator ci(pushedTechs.begin()), ciEnd(pushedTechs.end()); ci != ciEnd; ++ci)
+        {
+            player.getCivHelper()->addTech(*ci);
+        }
+
         return pushedTechs;
     }
 

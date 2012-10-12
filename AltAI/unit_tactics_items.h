@@ -125,4 +125,21 @@ namespace AltAI
     private:
         std::vector<BuildTypes> buildTypes_;
     };
+
+    class SeaAttackUnitTactic : public ICityUnitTactic
+    {
+    public:
+        SeaAttackUnitTactic() {}
+        explicit SeaAttackUnitTactic(const Promotions& promotions);
+        virtual void debug(std::ostream& os) const;
+        virtual void apply(const ICityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 7;
+
+    private:
+        Promotions promotions_;
+    };
 }

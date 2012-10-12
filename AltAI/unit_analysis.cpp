@@ -699,6 +699,21 @@ namespace AltAI
         return std::make_pair(level, Promotions());
     }
 
+    UnitAnalysis::RemainingLevelsAndPromotions UnitAnalysis::getCollateralPromotions(UnitTypes unitType, int level) const
+    {
+        level = std::max<int>(0, level);
+		level = std::min<int>(level, (int)collateralUnits_.size());
+
+        for (UnitValuesMap::const_iterator ci(collateralUnits_[level].begin()), ciEnd(collateralUnits_[level].end()); ci != ciEnd; ++ci)
+        {
+            if (ci->second.first == unitType)
+            {
+                return ci->second.second;
+            }
+        }
+        return std::make_pair(level, Promotions());
+    }
+
     void UnitAnalysis::analysePromotions_()
     {
         for (int i = 0, count = gGlobals.getNumPromotionInfos(); i < count; ++i)
@@ -731,6 +746,12 @@ namespace AltAI
                 if (nFirstStrikes + nFirstStrikeChances > 0)
                 {
                     firstStrikePromotions_.insert(std::make_pair(2 * nFirstStrikes + nFirstStrikeChances, (PromotionTypes)i));
+                }
+
+                int collateral = promotionInfo.getCollateralDamageChange();
+                if (collateral > 0)
+                {
+                    collateralPromotions_.insert(std::make_pair(collateral, (PromotionTypes)i));
                 }
 
                 for (int j = 0, count = gGlobals.getNumUnitCombatInfos(); j < count; ++j)
@@ -856,6 +877,7 @@ namespace AltAI
         combatUnits_.resize(1 + maxPromotionSearchDepth_, UnitValuesMap());
         firstStrikeUnits_.resize(1 + maxPromotionSearchDepth_, UnitValuesMap());
         fastUnits_.resize(1 + maxPromotionSearchDepth_, UnitValuesMap());
+        collateralUnits_.resize(1 + maxPromotionSearchDepth_, UnitValuesMap());
 
         for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
         {
@@ -888,6 +910,7 @@ namespace AltAI
                         int baseCityAttack = unitInfo.getCityAttackModifier();
                         int baseCityDefence = unitInfo.getCityDefenseModifier();
 
+                        // city attack
                         int bestCityAttack = 0, additionalCityAttack = 0;
 
                         boost::tie(bestCityAttack, requiredPromotions) = calculateBestPromotions_(cityAttackPromotions_, unitInfo.getCityAttackModifier(), 
@@ -912,6 +935,7 @@ namespace AltAI
 						    cityAttackUnits_[j].insert(std::make_pair(bestCityAttack, std::make_pair(unitType, requiredPromotions)));
                         }
 
+                        // city defence
                         int bestCityDefence = 0, additionalCityDefence = 0;
                     
                         boost::tie(bestCityDefence, requiredPromotions) = calculateBestPromotions_(cityDefencePromotions_, unitInfo.getCityDefenseModifier(),
@@ -936,6 +960,7 @@ namespace AltAI
 						    cityDefenceUnits_[j].insert(std::make_pair(bestCityDefence, std::make_pair(unitType, requiredPromotions)));
                         }
 
+                        // combat
                         int bestCombatPercent = 0, additionalCombat = 0;
                     
                         boost::tie(bestCombatPercent, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, pUnitInfo,
@@ -954,6 +979,7 @@ namespace AltAI
 						    combatUnits_[j].insert(std::make_pair(bestCombatPercent, std::make_pair(unitType, requiredPromotions)));
                         }
 
+                        // first strikes
                         int bestFirstStrikes = 0, additionalFSCombat = 0;
                     
                         boost::tie(bestFirstStrikes, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(),
@@ -971,6 +997,26 @@ namespace AltAI
 						    firstStrikeUnits_[j].insert(std::make_pair(bestFirstStrikes, std::make_pair(unitType, requiredPromotions)));
                         }
 
+                        // collateral
+                        int bestCollateral = 0, additionalCollateralCombat = 0;
+
+                        boost::tie(bestCollateral, requiredPromotions) = calculateBestPromotions_(cityAttackPromotions_, unitInfo.getCollateralDamage(), 
+                            pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCollateralDamageChange), j);
+
+					    // still have more promotions available
+					    if (requiredPromotions.first > 0)
+					    {
+						    boost::tie(additionalCollateralCombat, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+					    }
+
+                        if (bestCollateral > 0)
+                        {
+                            combinePromotions(requiredPromotions.second, freePromotions);
+						    collateralUnits_[j].insert(std::make_pair(bestCollateral, std::make_pair(unitType, requiredPromotions)));
+                        }
+
+                        // unit counters
                         for (std::map<UnitCombatTypes, PromotionsMap>::const_iterator ci(unitCounterPromotionsMap_.begin()), ciEnd(unitCounterPromotionsMap_.end()); ci != ciEnd; ++ci)
                         {
                             int baseCounter = unitInfo.getUnitCombatModifier(ci->first);
@@ -999,6 +1045,7 @@ namespace AltAI
                             }
                         }
 
+                        // 'fast' units
                         int mostMoves = 0, extras = 0;
                         boost::tie(mostMoves, requiredPromotions) = calculateBestPromotions_(movementPromotions_, unitInfo.getMoves(), pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getMovesChange), j);
 

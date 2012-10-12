@@ -481,6 +481,7 @@ namespace AltAI
     {
         CvMap& theMap = gGlobals.getMap();
         const CvPlayerAI& player = CvPlayerAI::getPlayer(playerType_);
+        const boost::shared_ptr<Player>& pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
 
         const int MAX_DISTANCE_CITY_MAINTENANCE_ = gGlobals.getDefineINT("MAX_DISTANCE_CITY_MAINTENANCE");
         std::map<XYCoords, int> bestSitesMap;
@@ -530,67 +531,80 @@ namespace AltAI
         //const int fixedExpenses = player.calculateInflatedCosts() + std::min<int>(0, player.getGoldPerTurn());
 
         int i = 0;
-        for (std::map<XYCoords, int>::const_iterator ci(bestSitesMap.begin()), ciEnd(bestSitesMap.end()); ci != ciEnd; ++ci)
+        for (std::map<XYCoords, int>::iterator iter(bestSitesMap.begin()), endIter(bestSitesMap.end()); iter != endIter; ++iter)
         {
-            const int maintenanceDelta = newMaintenanceMap[ci->first] - currentMaintenance;
-            int finalSiteValue = doSiteValueAdjustment_(ci->first, ci->second, maintenanceDelta, plotCountMap, resourcesMap);
-            XYCoords finalSiteCoords(ci->first);
+            const int maintenanceDelta = newMaintenanceMap[iter->first] - currentMaintenance;
+#ifdef ALTAI_DEBUG
+            os << "\nMaintenance delta = " << maintenanceDelta << ", current maintenance = " << currentMaintenance
+               << ", max gold = " << pPlayer->getMaxGold() << ", max gold with processes = " << pPlayer->getMaxGoldWithProcesses();
+#endif
+            if (maintenanceDelta * 3 < pPlayer->getMaxGoldWithProcesses())
+            {
+                int finalSiteValue = doSiteValueAdjustment_(iter->first, iter->second, maintenanceDelta, plotCountMap, resourcesMap);
+                XYCoords finalSiteCoords(iter->first);
 
-            CvPlot* pSitePlot = theMap.plot(ci->first.iX, ci->first.iY);
-            // on a resource - can we move to better site?
-            //if (pSitePlot->getBonusType(player.getTeam()) != NO_BONUS)
-            //{
-            //    os << "\nOn Bonus - need to check neighbours, site = " << ci->first << " with value: " << finalSiteValue;
-                NeighbourPlotIter iter(pSitePlot);
+                CvPlot* pSitePlot = theMap.plot(iter->first.iX, iter->first.iY);
+                // on a resource - can we move to better site?
+                //if (pSitePlot->getBonusType(player.getTeam()) != NO_BONUS)
+                //{
+                //    os << "\nOn Bonus - need to check neighbours, site = " << ci->first << " with value: " << finalSiteValue;
+                    NeighbourPlotIter nIter(pSitePlot);
 
-                int bestBaseValue = pSitePlot->getFoundValue(player.getID());
+                    int bestBaseValue = pSitePlot->getFoundValue(player.getID());
 
-                while (IterPlot pLoopPlot = iter())
-                {
-                    if (pLoopPlot.valid() && pLoopPlot->isRevealed(player.getTeam(), false) && pLoopPlot->getSubArea() == pSitePlot->getSubArea())
+                    while (IterPlot pLoopPlot = nIter())
                     {
-                        int thisBaseValue = pLoopPlot->getFoundValue(player.getID());
-                        if (thisBaseValue < (2 * bestBaseValue) / 3)
+                        if (pLoopPlot.valid() && pLoopPlot->isRevealed(player.getTeam(), false) && pLoopPlot->getSubArea() == pSitePlot->getSubArea())
                         {
-                            continue;
-                        }
+                            int thisBaseValue = pLoopPlot->getFoundValue(player.getID());
+                            if (thisBaseValue < (2 * bestBaseValue) / 3)
+                            {
+                                continue;
+                            }
 
-                        XYCoords thisPlot(pLoopPlot->getX(), pLoopPlot->getY());
+                            XYCoords thisPlot(pLoopPlot->getX(), pLoopPlot->getY());
 
-                        populatePlotCountAndResources_(thisPlot, plotCountMap, resourcesMap);
+                            populatePlotCountAndResources_(thisPlot, plotCountMap, resourcesMap);
 
-                        // use same maintenance delta
-                        int thisPlotFinalValue = doSiteValueAdjustment_(thisPlot, thisBaseValue, maintenanceDelta, plotCountMap, resourcesMap);
+                            // use same maintenance delta
+                            int thisPlotFinalValue = doSiteValueAdjustment_(thisPlot, thisBaseValue, maintenanceDelta, plotCountMap, resourcesMap);
 
-                        if (thisPlotFinalValue > finalSiteValue)
-                        {
-                            finalSiteValue = thisPlotFinalValue;
-                            finalSiteCoords = thisPlot;
+                            if (thisPlotFinalValue > finalSiteValue)
+                            {
+                                finalSiteValue = thisPlotFinalValue;
+                                finalSiteCoords = thisPlot;
 #ifdef ALTAI_DEBUG
-                            os << "\nSelected site: " << thisPlot << " with value: " << thisPlotFinalValue << " over original.";
+                                os << "\nSelected site: " << thisPlot << " with value: " << thisPlotFinalValue << " over original.";
 #endif
-                        }
-                        else
-                        {
+                            }
+                            else
+                            {
 #ifdef ALTAI_DEBUG
-                            //os << "\nSkipping site: " << thisPlot << " with value: " << thisPlotFinalValue;
+                                //os << "\nSkipping site: " << thisPlot << " with value: " << thisPlotFinalValue;
 #endif
+                            }
                         }
                     }
-                }
-            //}
+                //}
 
-            // debug
-            /*DotMap::const_iterator dotMapIter = dotMap_.find(DotMapItem(finalSiteCoords, PlotYield()));
-            if (dotMapIter != dotMap_.end())
-            {
-                dotMapIter->debugOutputs(os);
-            }*/
+                // debug
+                /*DotMap::const_iterator dotMapIter = dotMap_.find(DotMapItem(finalSiteCoords, PlotYield()));
+                if (dotMapIter != dotMap_.end())
+                {
+                    dotMapIter->debugOutputs(os);
+                }*/
 #ifdef ALTAI_DEBUG
-            os << "\nfinal site value = " << finalSiteValue;
+                os << "\nfinal site value = " << finalSiteValue;
 #endif
-            bestSites_.insert(std::make_pair(finalSiteValue, finalSiteCoords));
-            areaTotals[pSitePlot->getArea()] += finalSiteValue;
+                bestSites_.insert(std::make_pair(finalSiteValue, finalSiteCoords));
+                areaTotals[pSitePlot->getArea()] += finalSiteValue;
+            }
+            else
+            {
+#ifdef ALTAI_DEBUG
+                os << "\nskipping site as too expensive: " << iter->first;
+#endif
+            }
         }
 
 #ifdef ALTAI_DEBUG

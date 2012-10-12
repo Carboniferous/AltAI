@@ -70,7 +70,7 @@ namespace AltAI
 
     struct WorkerUnitValue
     {
-        WorkerUnitValue()
+        WorkerUnitValue() : unitType(NO_UNIT), nTurns(0)
         {
         }
 
@@ -85,13 +85,22 @@ namespace AltAI
         bool operator < (const WorkerUnitValue& other) const;
         int getBuildValue() const;
         int getHighestConsumedBuildValue() const;
+        int getBuildsCount() const;
+        void debug(std::ostream& os) const;
 
     private:
         void addBuild_(BuildsMap& buildsMap_, BuildTypes buildType, BuildData buildData);
+        void debugBuildsMap_(std::ostream& os, const BuildsMap& buildsMap_) const;
     };
 
     struct TacticSelectionData
     {
+        TacticSelectionData(IDInfo city_) : city(city_)
+        {
+        }
+
+        IDInfo city;
+
         std::set<CultureBuildingValue> smallCultureBuildings, largeCultureBuildings;
         std::set<EconomicBuildingValue> economicBuildings;
         std::map<IDInfo, std::vector<BuildingTypes> > buildingsCityCanAssistWith;

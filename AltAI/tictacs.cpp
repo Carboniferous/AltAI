@@ -43,7 +43,7 @@ namespace AltAI
             }
 
             TechTypes techType;
-        };
+        };               
     }
 
     void PlayerTactics::init()
@@ -842,6 +842,22 @@ namespace AltAI
                 (*li)->write(pStream);
             }
         }
+        
+        pStream->Write(unitTacticsMap_.size());
+
+        for (UnitTacticsMap::const_iterator ci(unitTacticsMap_.begin()), ciEnd(unitTacticsMap_.end()); ci != ciEnd; ++ci)
+        {       
+            pStream->Write(ci->first);
+
+            if (ci->second)
+            {                
+                ci->second->write(pStream);
+            }
+            else
+            {
+                pStream->Write(-1);
+            }
+        }
     }
 
     void PlayerTactics::read(FDataStreamBase* pStream)
@@ -928,6 +944,16 @@ namespace AltAI
             {
                 cityImprovementTacticsMap_[city].push_back(ICityImprovementTactics::factoryRead(pStream));
             }
+        }
+
+        unitTacticsMap_.clear();
+        size_t unitTacticsMapSize;
+        pStream->Read(&unitTacticsMapSize);
+        for (size_t i = 0; i < unitTacticsMapSize; ++i)
+        {
+            UnitTypes unitType;
+            pStream->Read((int*)&unitType);
+            unitTacticsMap_[unitType] = IUnitTactics::factoryRead(pStream);
         }
     }
 
@@ -1247,41 +1273,17 @@ namespace AltAI
         }
 
         os << "\nUnit tactics:\n";
-        std::vector<UnitTypes> combatUnits, possibleCombatUnits;
         for (UnitTacticsMap::const_iterator ci(unitTacticsMap_.begin()), ciEnd(unitTacticsMap_.end()); ci != ciEnd; ++ci)
         {
-            if (ci->first != NO_UNIT)
+            os << "\nUnit: " << gGlobals.getUnitInfo(ci->first).getType();
+            if (ci->second)
             {
-                os << "\nUnit: " << gGlobals.getUnitInfo(ci->first).getType() << " is obsolete = " << isUnitObsolete(player, player.getAnalysis()->getUnitInfo(ci->first));
-                if (ci->second)
-                {
-                    ci->second->update(player);
-                    ci->second->debug(os);
-                }
-
-                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(ci->first);
-                if (unitInfo.getProductionCost() >= 0 && unitInfo.getCombat() > 0 && ci->second)
-                {
-                    if (!isUnitObsolete(player, player.getAnalysis()->getUnitInfo(ci->first)))
-                    {
-                        // TODO - redundant double check?
-                        if (ci->second->areDependenciesSatisfied() && couldConstructUnit(player, 0, player.getAnalysis()->getUnitInfo(ci->first), false))
-                        {
-                            combatUnits.push_back(ci->first);
-                            possibleCombatUnits.push_back(ci->first);
-                        }
-                        else if (couldConstructUnit(player, 1, player.getAnalysis()->getUnitInfo(ci->first), true))
-                        {
-                            possibleCombatUnits.push_back(ci->first);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                os << "\nUnit: NO_UNIT";
+                ci->second->debug(os);
             }
         }
+
+        std::vector<UnitTypes> combatUnits, possibleCombatUnits;
+        boost::tie(combatUnits, possibleCombatUnits) = getActualAndPossibleCombatUnits(player, NULL, DOMAIN_LAND);
 
         os << "\nPossible units: ";
         for (size_t i = 0, count = possibleCombatUnits.size(); i < count; ++i)
@@ -1290,49 +1292,33 @@ namespace AltAI
             os << gGlobals.getUnitInfo(possibleCombatUnits[i]).getType();
         }
 
-        std::vector<UnitTypes> bestCityAttackers(combatUnits.size(), NO_UNIT), bestCityDefenders(combatUnits.size(), NO_UNIT);
-        std::vector<int> bestCityAttackersOdds(combatUnits.size(), 0), bestCityDefendersOdds(combatUnits.size(), 0);
+        os << "\nActual units: ";
+        for (size_t i = 0, count = combatUnits.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            os << gGlobals.getUnitInfo(combatUnits[i]).getType();
+        }
 
-        const int usefulOddsThreshold = 650;
+        UnitValueHelper unitValueHelper;
+        UnitValueHelper::MapT cityDefenceUnitData, cityAttackUnitData;
+
         for (size_t i = 0, count = combatUnits.size(); i < count; ++i)
         {
             std::vector<int> odds = player.getAnalysis()->getUnitAnalysis()->getOdds(combatUnits[i], possibleCombatUnits, 1, 1, UnitData::CityAttack, true);
-            os << "\n" << gGlobals.getUnitInfo(combatUnits[i]).getType() << ", cost = " << gGlobals.getUnitInfo(combatUnits[i]).getProductionCost();
-            for (size_t j = 0, oddsCounter = odds.size(); j < oddsCounter; ++j)
-            {
-                /*if (odds[j] > bestCityAttackersOdds[j])
-                {
-                    bestCityAttackersOdds[j] = odds[j];
-                    bestCityAttackers[j] = combatUnits[i];
-                }*/
-                os << "\n\t" << gGlobals.getUnitInfo(possibleCombatUnits[j]).getType() << " : " << odds[j];
-            }
+            unitValueHelper.addMapEntry(cityAttackUnitData, combatUnits[i], possibleCombatUnits, odds);
         }
 
         for (size_t i = 0, count = combatUnits.size(); i < count; ++i)
         {
             std::vector<int> odds = player.getAnalysis()->getUnitAnalysis()->getOdds(combatUnits[i], possibleCombatUnits, 1, 1, UnitData::CityAttack, false);
-            os << "\n" << gGlobals.getUnitInfo(combatUnits[i]).getType() << ", cost = " << gGlobals.getUnitInfo(combatUnits[i]).getProductionCost();
-            for (size_t j = 0, oddsCounter = odds.size(); j < oddsCounter; ++j)
-            {
-                /*if (odds[j] > bestCityDefendersOdds[j])
-                {
-                    bestCityDefendersOdds[j] = odds[j];
-                    bestCityDefenders[j] = combatUnits[i];
-                }*/
-                os << "\n\t" << gGlobals.getUnitInfo(possibleCombatUnits[j]).getType() << " : " << odds[j];
-            }
+            unitValueHelper.addMapEntry(cityDefenceUnitData, combatUnits[i], possibleCombatUnits, odds);
         }
 
-        /*for (size_t i = 0, count = combatUnits.size(); i < count; ++i)
-        {
-            os << "\nBest city attacker v. " << gGlobals.getUnitInfo(combatUnits[i]).getType() << " = "
-               << (bestCityAttackers[i] == NO_UNIT ? "NO_UNIT" : gGlobals.getUnitInfo(bestCityAttackers[i]).getType())
-               << " odds = " << bestCityAttackersOdds[i];
-            os << "\nBest city defender v. " << gGlobals.getUnitInfo(combatUnits[i]).getType() << " = "
-               << (bestCityDefenders[i] == NO_UNIT ? "NO_UNIT" : gGlobals.getUnitInfo(bestCityDefenders[i]).getType())
-               << " odds = " << bestCityDefendersOdds[i];
-        }*/
+        os << "\nCity Defence unit data values: ";
+        unitValueHelper.debug(cityDefenceUnitData, os);
+
+        os << "\nCity Attack unit data values: ";
+        unitValueHelper.debug(cityAttackUnitData, os);
 
         os << "\nProcess tactics:";
         for (ProcessTacticsMap::const_iterator ci(processTacticsMap_.begin()), ciEnd(processTacticsMap_.end()); ci != ciEnd; ++ci)
