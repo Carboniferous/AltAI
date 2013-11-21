@@ -1,9 +1,12 @@
+#include "AltAI.h"
+
 #include "./civ_helper.h"
 #include "./player.h"
 #include "./city.h"
 #include "./player_analysis.h"
 #include "./civic_info_visitors.h"
 #include "./iters.h"
+#include "./civ_log.h"
 
 namespace AltAI
 {
@@ -37,12 +40,17 @@ namespace AltAI
 
     void CivHelper::addTech(TechTypes techType)
     {
+        /*std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nCivHelper adding tech: " << gGlobals.getTechInfo(techType).getType();*/
         techs_.insert(techType);
     }
 
     // only removes techs we added
     void CivHelper::removeTech(TechTypes techType)
     {
+        /*std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nCivHelper removing tech: " << gGlobals.getTechInfo(techType).getType();*/
+
         std::set<TechTypes>::iterator iter = techs_.find(techType);
         if (iter != techs_.end())
         {

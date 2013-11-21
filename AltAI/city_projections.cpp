@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./city_projections.h"
 #include "./building_info_visitors.h"
 #include "./civic_info_visitors.h"

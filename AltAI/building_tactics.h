@@ -10,8 +10,8 @@ namespace AltAI
     class ICityBuildingTactics;
     typedef boost::shared_ptr<ICityBuildingTactics> ICityBuildingTacticsPtr;
 
-    ConstructList makeBuildingTactics(Player& player);
+    /*ConstructList makeBuildingTactics(Player& player);*/
 
-    ConstructItem selectExpansionBuildingTactics(const Player& player, const City& city, const ConstructItem& constructItem);
-    ConstructItem selectExpansionMilitaryBuildingTactics(const Player& player, const City& city, const ConstructItem& constructItem);
+    /*ConstructItem selectExpansionBuildingTactics(const Player& player, const City& city, const ConstructItem& constructItem);
+    ConstructItem selectExpansionMilitaryBuildingTactics(const Player& player, const City& city, const ConstructItem& constructItem);*/
 }

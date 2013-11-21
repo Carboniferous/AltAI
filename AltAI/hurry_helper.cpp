@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./hurry_helper.h"
 #include "./modifiers_helper.h"
 #include "./city_data.h"

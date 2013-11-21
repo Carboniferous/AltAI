@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./tictacs.h"
 #include "./tactic_actions.h"
 #include "./tactic_streams.h"
@@ -48,12 +50,14 @@ namespace AltAI
 
     void PlayerTactics::init()
     {
-        possibleTechTactics_ = makeTechTactics(player);
-        possibleUnitTactics_ = makeUnitTactics(player);
-        possibleBuildingTactics_ = makeBuildingTactics(player);
-        possibleProjectTactics_ = makeProjectTactics(player);
+        //possibleTechTactics_ = makeTechTactics(player);
+        //possibleUnitTactics_ = makeUnitTactics(player);
+        //possibleBuildingTactics_ = makeBuildingTactics(player);
+        //possibleProjectTactics_ = makeProjectTactics(player);
 
-        selectCityTactics();
+        makeSpecialistUnitTactics();
+
+        //selectCityTactics();
 
         debugTactics();
     }
@@ -71,12 +75,15 @@ namespace AltAI
         {
             iter->second->removeCityTactics(pCity->getIDInfo());
         }
+
+        for (UnitTacticsMap::iterator iter(unitTacticsMap_.begin()), endIter(unitTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            iter->second->removeCityTactics(pCity->getIDInfo());
+        }
     }
 
     void PlayerTactics::updateBuildingTactics()
     {
-        possibleBuildingTactics_ = makeBuildingTactics(player);
-        selectBuildingTactics();
     }
 
     void PlayerTactics::updateTechTactics()
@@ -86,51 +93,61 @@ namespace AltAI
         os << "\nupdateTechTactics(): turn = " << gGlobals.getGame().getGameTurn() << "\n";
 #endif
         cityImprovementTacticsMap_.clear();
+        techTacticsMap_.clear();
 
         for (int i = 0, count = gGlobals.getNumTechInfos(); i < count; ++i)
         {
             const int depth = player.getTechResearchDepth((TechTypes)i);
-            if (depth > 3)
+            if (depth > 3 || depth == 0)
             {
                 continue;
             }
 
-            std::list<ResearchTech>::iterator iter = std::find_if(possibleTechTactics_.begin(), possibleTechTactics_.end(), TechTacticFinder((TechTypes)i));
+            const boost::shared_ptr<TechInfo>& pTechInfo = player.getAnalysis()->getTechInfo((TechTypes)i);
 
-            if (depth == 0)
-            {
-                if (iter != possibleTechTactics_.end())
-                {
-                    possibleTechTactics_.erase(iter);
-                }
-            }
-            else
-            {
-                if (iter == possibleTechTactics_.end())
-                {
-                    ResearchTech researchTech = makeTechTactic(player, (TechTypes)i);
-                    if (researchTech.techType != NO_TECH)
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nAdding tech tactic: " << researchTech;
-#endif
-                        possibleTechTactics_.push_back(researchTech);
-                    }
-                }
-                else  // update tech depth
-                {
-                    iter->depth = depth;
-                }
+            techTacticsMap_[(TechTypes)i] = makeTechTactics(player, pTechInfo);
 
-                const boost::shared_ptr<TechInfo>& pTechInfo = player.getAnalysis()->getTechInfo((TechTypes)i);
-                if (techAffectsImprovements(pTechInfo))
-                {
-                    updateCityImprovementTactics(pTechInfo);
-                }
+            if (techAffectsImprovements(pTechInfo))
+            {
+                updateCityImprovementTactics(pTechInfo);
             }
+
+//            std::list<ResearchTech>::iterator iter = std::find_if(possibleTechTactics_.begin(), possibleTechTactics_.end(), TechTacticFinder((TechTypes)i));
+//
+//            if (depth == 0)
+//            {
+//                if (iter != possibleTechTactics_.end())
+//                {
+//                    possibleTechTactics_.erase(iter);
+//                }
+//            }
+//            else
+//            {
+//                if (iter == possibleTechTactics_.end())
+//                {
+//                    ResearchTech researchTech = makeTechTactic(player, (TechTypes)i);
+//                    if (researchTech.techType != NO_TECH)
+//                    {
+//#ifdef ALTAI_DEBUG
+//                        os << "\nAdding tech tactic: " << researchTech;
+//#endif
+//                        possibleTechTactics_.push_back(researchTech);
+//                    }
+//                }
+//                else  // update tech depth
+//                {
+//                    iter->depth = depth;
+//                }
+//
+//                const boost::shared_ptr<TechInfo>& pTechInfo = player.getAnalysis()->getTechInfo((TechTypes)i);
+//                if (techAffectsImprovements(pTechInfo))
+//                {
+//                    updateCityImprovementTactics(pTechInfo);
+//                }
+//            }
         }
         
-        selectTechTactics();
+        //selectTechTactics();
     }
 
     void PlayerTactics::updateCityBuildingTactics(TechTypes techType)
@@ -226,13 +243,13 @@ namespace AltAI
                             CityBuildingTacticsList::iterator buildingsIter = cityBuildingTacticsMap_[pCity->getIDInfo()].find(possibleBuildings[i]);
                             if (buildingsIter == cityBuildingTacticsMap_[pCity->getIDInfo()].end())
                             {
-                                if (couldConstructBuilding(player, player.getCity(pCity->getID()), 0, pBuildingInfo, true))
+                                if (couldConstructBuilding(player, player.getCity(pCity), lookAheadDepth, pBuildingInfo, true))
                                 {
 #ifdef ALTAI_DEBUG
                                     CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__
                                         << " Adding tactic for building: " << gGlobals.getBuildingInfo(possibleBuildings[i]).getType();
 #endif
-                                    cityBuildingTacticsMap_[pCity->getIDInfo()][possibleBuildings[i]] = makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo);
+                                    cityBuildingTacticsMap_[pCity->getIDInfo()][possibleBuildings[i]] = makeCityBuildingTactics(player, player.getCity(pCity), pBuildingInfo);
                                 }
                             }
                             else
@@ -262,7 +279,7 @@ namespace AltAI
         CityIter iter(*player.getCvPlayer());
         while (CvCity* pCity = iter())
         {
-            std::list<ICityImprovementTacticsPtr> cityImprovementTactics = makeCityBuildTactics(player, player.getCity(pCity->getID()), pTechInfo);
+            std::list<ICityImprovementTacticsPtr> cityImprovementTactics = makeCityBuildTactics(player, player.getCity(pCity), pTechInfo);
             std::copy(cityImprovementTactics.begin(), cityImprovementTactics.end(), std::back_inserter(cityImprovementTacticsMap_[pCity->getIDInfo()]));
         }
     }
@@ -395,7 +412,7 @@ namespace AltAI
                 if (techAffectsImprovements(pTechInfo))
                 {
                     const CvCity* pCity = getCity(city);
-                    std::list<ICityImprovementTacticsPtr> cityImprovementTactics = makeCityBuildTactics(player, player.getCity(pCity->getID()), pTechInfo);
+                    std::list<ICityImprovementTacticsPtr> cityImprovementTactics = makeCityBuildTactics(player, player.getCity(pCity), pTechInfo);
                     std::copy(cityImprovementTactics.begin(), cityImprovementTactics.end(), std::back_inserter(cityImprovementTacticsMap_[pCity->getIDInfo()]));
                 }
             }
@@ -449,17 +466,17 @@ namespace AltAI
         }
     }
 
-    void PlayerTactics::updateUnitTactics()
-    {
-        possibleUnitTactics_ = makeUnitTactics(player);
-        selectUnitTactics();
-    }
+    //void PlayerTactics::updateUnitTactics()
+    //{
+    //    //possibleUnitTactics_ = makeUnitTactics(player);
+    //    //selectUnitTactics();
+    //}
 
     void PlayerTactics::updateCityUnitTactics(TechTypes techType)
     {
         boost::shared_ptr<TechInfo> pTechInfo = player.getAnalysis()->getTechInfo(techType);
         // todo
-        //std::vector<UnitTypes> obsoletedBuildings = getObsoletedUnits(pTechInfo);
+        //std::vector<UnitTypes> obsoletedUnits = getObsoletedUnits(pTechInfo);
 
         const int lookAheadDepth = 2;
 
@@ -483,7 +500,13 @@ namespace AltAI
                     UnitTacticsMap::iterator iter = unitTacticsMap_.find(possibleUnits[i]);
                     if (iter == unitTacticsMap_.end() || !iter->second || iter->second->empty())
                     {
-                        unitTacticsMap_[possibleUnits[i]] = makeUnitTactics(player, pUnitInfo);
+                        IUnitTacticsPtr pUnitTactics = makeUnitTactics(player, pUnitInfo);
+                        // can return null tactic, as units which require multiple techs come back from 
+                        // getPossibleUnits() if we have one of the techs or it's not too deep
+                        if (pUnitTactics) 
+                        {
+                            unitTacticsMap_[possibleUnits[i]] = pUnitTactics;
+                        }
                     }
                     else
                     {
@@ -504,6 +527,7 @@ namespace AltAI
             {
                 if (iter->second)
                 {
+                    // this creates a new city tactic (and updates its entry in the unit's UnitTactic object) for each unit to reflect the change in unit's free experience
                     iter->second->addCityTactic(city, makeCityUnitTactics(player, player.getCity(city.iID), pUnitInfo));
                 }
             }
@@ -518,71 +542,72 @@ namespace AltAI
         }
     }
 
-    void PlayerTactics::updateProjectTactics()
-    {
-        possibleProjectTactics_ = makeProjectTactics(player);
-        selectProjectTactics();
-    }
+    //void PlayerTactics::updateProjectTactics()
+    //{
+    //    //possibleProjectTactics_ = makeProjectTactics(player);
+    //    //selectProjectTactics();
+    //}
 
-    void PlayerTactics::updateFirstToTechTactics(TechTypes techType)
-    {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-#endif
-        std::list<ResearchTech>::iterator iter(possibleTechTactics_.begin()), iterEnd(possibleTechTactics_.end());
-        while (iter != iterEnd)
-        {
-            if (iter->techType == techType)
-            {
-                if (iter->techFlags & TechFlags::Free_Tech)
-                {
-                    iter->techFlags &= ~TechFlags::Free_Tech;
-#ifdef ALTAI_DEBUG
-                    os << "\n(updateFirstToTechTactics) Removing free tech flag from research tech tactic: " << *iter;
-#endif
-                }
-
-                if (iter->techFlags & TechFlags::Free_GP)
-                {
-                    iter->techFlags &= ~TechFlags::Free_GP;
-#ifdef ALTAI_DEBUG
-                    os << "\n(updateFirstToTechTactics) Removing free GP flag from research tech tactic: " << *iter;
-#endif
-                }
-
-                if (iter->isEmpty())
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\n(updateFirstToTechTactics) Removing research tech tactic: " << *iter;
-#endif
-                    possibleTechTactics_.erase(iter++);
-                    continue;
-                }
-            }
-            ++iter;
-        }
-    }
+//    void PlayerTactics::updateFirstToTechTactics(TechTypes techType)
+//    {
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+//#endif
+//        std::list<ResearchTech>::iterator iter(possibleTechTactics_.begin()), iterEnd(possibleTechTactics_.end());
+//        while (iter != iterEnd)
+//        {
+//            if (iter->techType == techType)
+//            {
+//                if (iter->techFlags & TechFlags::Free_Tech)
+//                {
+//                    iter->techFlags &= ~TechFlags::Free_Tech;
+//#ifdef ALTAI_DEBUG
+//                    os << "\n(updateFirstToTechTactics) Removing free tech flag from research tech tactic: " << *iter;
+//#endif
+//                }
+//
+//                if (iter->techFlags & TechFlags::Free_GP)
+//                {
+//                    iter->techFlags &= ~TechFlags::Free_GP;
+//#ifdef ALTAI_DEBUG
+//                    os << "\n(updateFirstToTechTactics) Removing free GP flag from research tech tactic: " << *iter;
+//#endif
+//                }
+//
+//                if (iter->isEmpty())
+//                {
+//#ifdef ALTAI_DEBUG
+//                    os << "\n(updateFirstToTechTactics) Removing research tech tactic: " << *iter;
+//#endif
+//                    possibleTechTactics_.erase(iter++);
+//                    continue;
+//                }
+//            }
+//            ++iter;
+//        }
+//    }
 
     ResearchTech PlayerTactics::getResearchTech(TechTypes ignoreTechType)
     {
-        if (selectedTechTactics_.empty() || gGlobals.getGame().getGameTurn() == 0)
-        {
-            selectTechTactics();
-        }
+        //if (selectedTechTactics_.empty() || gGlobals.getGame().getGameTurn() == 0)
+        //{
+        //    selectTechTactics();
+        //}
+
         return AltAI::getResearchTech(*this, ignoreTechType);
     }
 
-    ResearchTech PlayerTactics::getResearchTechData(TechTypes techType) const
-    {
-        for (std::list<ResearchTech>::const_iterator ci(selectedTechTactics_.begin()), ciEnd(selectedTechTactics_.end()); ci != ciEnd; ++ci)
-        {
-            if (ci->techType == techType)
-            {
-                return *ci;
-            }
-        }
-        return ResearchTech();
-    }
+    //ResearchTech PlayerTactics::getResearchTechData(TechTypes techType) const
+    //{
+    //    /*for (std::list<ResearchTech>::const_iterator ci(selectedTechTactics_.begin()), ciEnd(selectedTechTactics_.end()); ci != ciEnd; ++ci)
+    //    {
+    //        if (ci->techType == techType)
+    //        {
+    //            return *ci;
+    //        }
+    //    }*/
+    //    return ResearchTech();
+    //}
 
     ConstructItem PlayerTactics::getBuildItem(const City& city)
     {
@@ -590,97 +615,67 @@ namespace AltAI
         //{
         //    updateTechTactics();
         //}
-        updateUnitTactics();
+        //updateUnitTactics();
         //updateBuildingTactics();
+
         debugTactics();
         return AltAI::getConstructItem(*this, city);
     }
 
-    void PlayerTactics::selectTechTactics()
+    ConstructItem PlayerTactics::getSpecialistBuild(UnitTypes unitType)
     {
-        selectedTechTactics_.clear();
-
-        std::list<ResearchTech>::iterator iter(possibleTechTactics_.begin());
-        while (iter != possibleTechTactics_.end())
-        {
-            ResearchTech selectedTech = selectReligionTechTactics(player, *iter);
-            if (selectedTech.techType != NO_TECH)
-            {
-                selectedTechTactics_.push_back(selectedTech);
-            }
-
-            selectedTech = selectWorkerTechTactics(player, *iter);
-            if (selectedTech.techType != NO_TECH)
-            {
-                selectedTechTactics_.push_back(selectedTech);
-            }
-
-            selectedTech = selectExpansionTechTactics(player, *iter);
-            if (selectedTech.techType != NO_TECH)
-            {
-                selectedTechTactics_.push_back(selectedTech);
-            }
-            ++iter;
-        }
-
-        //debugTactics();
+        return AltAI::getSpecialistBuild(*this, unitType);
     }
 
-    void PlayerTactics::selectUnitTactics()
-    {
-        selectedUnitTactics_.clear();
+    //void PlayerTactics::selectTechTactics()
+    //{
+    //    selectedTechTactics_.clear();
 
-        ConstructListIter iter(possibleUnitTactics_.begin());
-        while (iter != possibleUnitTactics_.end())
-        {
-            ConstructItem selectedUnit = selectExpansionUnitTactics(player, *iter);
-            if (selectedUnit.unitType != NO_UNIT)
-            {
-                selectedUnitTactics_.push_back(selectedUnit);
-            }
-            ++iter;
-        }
+    //    std::list<ResearchTech>::iterator iter(possibleTechTactics_.begin());
+    //    while (iter != possibleTechTactics_.end())
+    //    {
+    //        ResearchTech selectedTech = selectReligionTechTactics(player, *iter);
+    //        if (selectedTech.techType != NO_TECH)
+    //        {
+    //            selectedTechTactics_.push_back(selectedTech);
+    //        }
 
-        //debugTactics();
-    }
+    //        selectedTech = selectWorkerTechTactics(player, *iter);
+    //        if (selectedTech.techType != NO_TECH)
+    //        {
+    //            selectedTechTactics_.push_back(selectedTech);
+    //        }
 
-    void PlayerTactics::selectBuildingTactics()
-    {
-        const CvPlayer* pPlayer = player.getCvPlayer();
+    //        selectedTech = selectExpansionTechTactics(player, *iter);
+    //        if (selectedTech.techType != NO_TECH)
+    //        {
+    //            selectedTechTactics_.push_back(selectedTech);
+    //        }
+    //        ++iter;
+    //    }
 
-        CityIter cityIter(*pPlayer);
-        CvCity* pCity;
-        while (pCity = cityIter())
-        {
-            selectBuildingTactics(player.getCity(pCity->getID()));
-        }
-    }
+    //    //debugTactics();
+    //}
 
-    void PlayerTactics::selectBuildingTactics(const City& city)
-    {
-        selectedCityBuildingTactics_[city.getCvCity()->getIDInfo()].clear();
-        ConstructListIter iter(possibleBuildingTactics_.begin());
-        while (iter != possibleBuildingTactics_.end())
-        {
-            ConstructItem selectedBuilding = selectExpansionBuildingTactics(player, city, *iter);
-            if (selectedBuilding.buildingType != NO_BUILDING || selectedBuilding.processType != NO_PROCESS)
-            {
-                selectedCityBuildingTactics_[city.getCvCity()->getIDInfo()].push_back(selectedBuilding);
-            }
+    //void PlayerTactics::selectUnitTactics()
+    //{
+    //    selectedUnitTactics_.clear();
 
-            selectedBuilding = selectExpansionMilitaryBuildingTactics(player, city, *iter);
-            if (selectedBuilding.buildingType != NO_BUILDING)
-            {
-                selectedCityBuildingTactics_[city.getCvCity()->getIDInfo()].push_back(selectedBuilding);
-            }
+    //    ConstructListIter iter(possibleUnitTactics_.begin());
+    //    while (iter != possibleUnitTactics_.end())
+    //    {
+    //        ConstructItem selectedUnit = selectExpansionUnitTactics(player, *iter);
+    //        if (selectedUnit.unitType != NO_UNIT)
+    //        {
+    //            selectedUnitTactics_.push_back(selectedUnit);
+    //        }
+    //        ++iter;
+    //    }
 
-            ++iter;
-        }
+    //    //debugTactics();
+    //}
 
-        //debugTactics();           
-    }
-
-    void PlayerTactics::selectProjectTactics()
+    /*void PlayerTactics::selectBuildingTactics()
     {
         const CvPlayer* pPlayer = player.getCvPlayer();
 
@@ -688,116 +683,152 @@ namespace AltAI
         CvCity* pCity;
         while (pCity = cityIter())
         {
-            selectProjectTactics(player.getCity(pCity->getID()));
+            selectBuildingTactics(player.getCity(pCity));
         }
-    }
+    }*/
 
-    void PlayerTactics::selectProjectTactics(const City& city)
+    //void PlayerTactics::selectBuildingTactics(const City& city)
+    //{
+    //    selectedCityBuildingTactics_[city.getCvCity()->getIDInfo()].clear();
+    //    ConstructListIter iter(possibleBuildingTactics_.begin());
+    //    while (iter != possibleBuildingTactics_.end())
+    //    {
+    //        ConstructItem selectedBuilding = selectExpansionBuildingTactics(player, city, *iter);
+    //        if (selectedBuilding.buildingType != NO_BUILDING || selectedBuilding.processType != NO_PROCESS)
+    //        {
+    //            selectedCityBuildingTactics_[city.getCvCity()->getIDInfo()].push_back(selectedBuilding);
+    //        }
+
+    //        selectedBuilding = selectExpansionMilitaryBuildingTactics(player, city, *iter);
+    //        if (selectedBuilding.buildingType != NO_BUILDING)
+    //        {
+    //            selectedCityBuildingTactics_[city.getCvCity()->getIDInfo()].push_back(selectedBuilding);
+    //        }
+
+    //        ++iter;
+    //    }
+
+    //    //debugTactics();           
+    //}
+
+    /*void PlayerTactics::selectProjectTactics()
     {
-        selectedCityProjectTactics_[city.getCvCity()->getIDInfo()].clear();
-        ConstructListIter iter(possibleProjectTactics_.begin());
-        while (iter != possibleProjectTactics_.end())
+        const CvPlayer* pPlayer = player.getCvPlayer();
+
+        CityIter cityIter(*pPlayer);
+        CvCity* pCity;
+        while (pCity = cityIter())
         {
-            ConstructItem selectedProject = AltAI::selectProjectTactics(player, city, *iter);
-            if (selectedProject.projectType != NO_PROJECT)
-            {
-                ConstructList& constructList = selectedCityProjectTactics_[city.getCvCity()->getIDInfo()];
-
-                ConstructList::iterator listIter = std::find_if(constructList.begin(), constructList.end(), ConstructItemFinder(selectedProject));
-
-                if (listIter != constructList.end())
-                {
-                    listIter->merge(selectedProject);
-                }
-                else
-                {
-                    constructList.push_back(selectedProject);
-                }
-            }
-
-            ++iter;
+            selectProjectTactics(player.getCity(pCity));
         }
+    }*/
 
-        //debugTactics();           
-    }
+    //void PlayerTactics::selectProjectTactics(const City& city)
+    //{
+    //    selectedCityProjectTactics_[city.getCvCity()->getIDInfo()].clear();
+    //    ConstructListIter iter(possibleProjectTactics_.begin());
+    //    while (iter != possibleProjectTactics_.end())
+    //    {
+    //        ConstructItem selectedProject = AltAI::selectProjectTactics(player, city, *iter);
+    //        if (selectedProject.projectType != NO_PROJECT)
+    //        {
+    //            ConstructList& constructList = selectedCityProjectTactics_[city.getCvCity()->getIDInfo()];
 
-    void PlayerTactics::selectCityTactics()
-    {
-        typedef std::map<YieldTypes, std::multimap<int, IDInfo, std::greater<int> > > CityYieldMap;
-        CityYieldMap cityYieldMap;
+    //            ConstructList::iterator listIter = std::find_if(constructList.begin(), constructList.end(), ConstructItemFinder(selectedProject));
 
-        const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-        boost::shared_ptr<MapAnalysis> pMapAnalysis = player.getAnalysis()->getMapAnalysis();
-        YieldPriority yieldP = makeYieldP(YIELD_FOOD);
-        YieldWeights yieldW = makeYieldW(0, 2, 1);
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-#endif
-        int bestFoodDelta = 0;
-        IDInfo bestCity;
+    //            if (listIter != constructList.end())
+    //            {
+    //                listIter->merge(selectedProject);
+    //            }
+    //            else
+    //            {
+    //                constructList.push_back(selectedProject);
+    //            }
+    //        }
 
-        CityIter iter(*player.getCvPlayer());
-        while (CvCity* pCity = iter())
-        {
-            const CityImprovementManager& improvementManager = pMapAnalysis->getImprovementManager(pCity->getIDInfo());
+    //        ++iter;
+    //    }
 
-            const int size = pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel();
-            PlotYield projectedYield = improvementManager.getProjectedYield(size, yieldP, yieldW);
+    //    //debugTactics();           
+    //}
 
-            int thisFoodDelta = projectedYield[YIELD_FOOD] - foodPerPop * size;
-            if (thisFoodDelta > bestFoodDelta)
-            {
-                bestFoodDelta = thisFoodDelta;
-                bestCity = pCity->getIDInfo();
-            }
-#ifdef ALTAI_DEBUG
-            os << "\nCity: " << narrow(pCity->getName()) << ", projected yield = " << projectedYield << " for size: " << size;
-#endif
-            CityImprovementManager testImprovementManager(pCity->getIDInfo(), true);
-            for (int i = 0; i < NUM_YIELD_TYPES; ++i)
-            {
-                testImprovementManager.calcImprovements(std::vector<YieldTypes>(1, (YieldTypes)i), size, 3);
-                PlotYield projectedYield = testImprovementManager.getProjectedYield(size, yieldP, yieldW);
-#ifdef ALTAI_DEBUG
-                os << "\nCity: " << narrow(pCity->getName()) << ", projected yield = " << projectedYield << " for yieldtype: " << i;
-#endif
-                cityYieldMap[(YieldTypes)i].insert(std::make_pair(projectedYield[i], pCity->getIDInfo()));
-            }
-        }
-
-        if (bestCity.eOwner != NO_PLAYER)
-        {
-#ifdef ALTAI_DEBUG
-            os << "\nBest city = " << narrow(getCity(bestCity)->getName()) << " with delta = " << bestFoodDelta;
-#endif
-        }
-
-#ifdef ALTAI_DEBUG
-        for (CityYieldMap::const_iterator ci(cityYieldMap.begin()), ciEnd(cityYieldMap.end()); ci != ciEnd; ++ci)
-        {
-            os << "\nYieldtype : " << ci->first;
-            for (std::multimap<int, IDInfo, std::greater<int> >::const_iterator mi(ci->second.begin()), miEnd(ci->second.end()); mi != miEnd; ++mi)
-            {
-                os << " " << narrow(getCity(mi->second)->getName()) << " = " << mi->first;
-            }
-        }
-#endif
-    }
+//    void PlayerTactics::selectCityTactics()
+//    {
+//        typedef std::map<YieldTypes, std::multimap<int, IDInfo, std::greater<int> > > CityYieldMap;
+//        CityYieldMap cityYieldMap;
+//
+//        const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
+//        boost::shared_ptr<MapAnalysis> pMapAnalysis = player.getAnalysis()->getMapAnalysis();
+//        YieldPriority yieldP = makeYieldP(YIELD_FOOD);
+//        YieldWeights yieldW = makeYieldW(0, 2, 1);
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+//#endif
+//        int bestFoodDelta = 0;
+//        IDInfo bestCity;
+//
+//        CityIter iter(*player.getCvPlayer());
+//        while (CvCity* pCity = iter())
+//        {
+//            const CityImprovementManager& improvementManager = pMapAnalysis->getImprovementManager(pCity->getIDInfo());
+//
+//            const int size = pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel();
+//            PlotYield projectedYield = improvementManager.getProjectedYield(size, yieldP, yieldW);
+//
+//            int thisFoodDelta = projectedYield[YIELD_FOOD] - foodPerPop * size;
+//            if (thisFoodDelta > bestFoodDelta)
+//            {
+//                bestFoodDelta = thisFoodDelta;
+//                bestCity = pCity->getIDInfo();
+//            }
+//#ifdef ALTAI_DEBUG
+//            os << "\nCity: " << narrow(pCity->getName()) << ", projected yield = " << projectedYield << " for size: " << size;
+//#endif
+//            CityImprovementManager testImprovementManager(pCity->getIDInfo(), true);
+//            for (int i = 0; i < NUM_YIELD_TYPES; ++i)
+//            {
+//                testImprovementManager.calcImprovements(std::vector<YieldTypes>(1, (YieldTypes)i), size, 3);
+//                PlotYield projectedYield = testImprovementManager.getProjectedYield(size, yieldP, yieldW);
+//#ifdef ALTAI_DEBUG
+//                os << "\nCity: " << narrow(pCity->getName()) << ", projected yield = " << projectedYield << " for yieldtype: " << i;
+//#endif
+//                cityYieldMap[(YieldTypes)i].insert(std::make_pair(projectedYield[i], pCity->getIDInfo()));
+//            }
+//        }
+//
+//        if (bestCity.eOwner != NO_PLAYER)
+//        {
+//#ifdef ALTAI_DEBUG
+//            os << "\nBest city = " << narrow(getCity(bestCity)->getName()) << " with delta = " << bestFoodDelta;
+//#endif
+//        }
+//
+//#ifdef ALTAI_DEBUG
+//        for (CityYieldMap::const_iterator ci(cityYieldMap.begin()), ciEnd(cityYieldMap.end()); ci != ciEnd; ++ci)
+//        {
+//            os << "\nYieldtype : " << ci->first;
+//            for (std::multimap<int, IDInfo, std::greater<int> >::const_iterator mi(ci->second.begin()), miEnd(ci->second.end()); mi != miEnd; ++mi)
+//            {
+//                os << " " << narrow(getCity(mi->second)->getName()) << " = " << mi->first;
+//            }
+//        }
+//#endif
+//    }
 
     void PlayerTactics::write(FDataStreamBase* pStream) const
     {
-        writeComplexList(pStream, possibleTechTactics_);
-        writeComplexList(pStream, selectedTechTactics_);
-        writeComplexList(pStream, possibleUnitTactics_);
-        writeComplexList(pStream, selectedUnitTactics_);
-        writeComplexList(pStream, possibleBuildingTactics_);
+        //writeComplexList(pStream, possibleTechTactics_);
+        //writeComplexList(pStream, selectedTechTactics_);
+        //writeComplexList(pStream, possibleUnitTactics_);
+        //writeComplexList(pStream, selectedUnitTactics_);
+        //writeComplexList(pStream, possibleBuildingTactics_);
 
-        pStream->Write(selectedCityBuildingTactics_.size());
+        /*pStream->Write(selectedCityBuildingTactics_.size());
         for (std::map<IDInfo, ConstructList>::const_iterator ci(selectedCityBuildingTactics_.begin()), ciEnd(selectedCityBuildingTactics_.end()); ci != ciEnd; ++ci)
         {
             ci->first.write(pStream);
             writeComplexList(pStream, ci->second);
-        }
+        }*/
 
         pStream->Write(cityBuildingTacticsMap_.size());
         for (CityBuildingTacticsMap::const_iterator ci(cityBuildingTacticsMap_.begin()), ciEnd(cityBuildingTacticsMap_.end()); ci != ciEnd; ++ci)
@@ -862,13 +893,13 @@ namespace AltAI
 
     void PlayerTactics::read(FDataStreamBase* pStream)
     {
-        readComplexList(pStream, possibleTechTactics_);
-        readComplexList(pStream, selectedTechTactics_);
-        readComplexList(pStream, possibleUnitTactics_);
-        readComplexList(pStream, selectedUnitTactics_);
-        readComplexList(pStream, possibleBuildingTactics_);
+        //readComplexList(pStream, possibleTechTactics_);
+        //readComplexList(pStream, selectedTechTactics_);
+        //readComplexList(pStream, possibleUnitTactics_);
+        //readComplexList(pStream, selectedUnitTactics_);
+        //readComplexList(pStream, possibleBuildingTactics_);
 
-        selectedCityBuildingTactics_.clear();
+        /*selectedCityBuildingTactics_.clear();
         size_t size;
         pStream->Read(&size);
         for (size_t i = 0; i < size; ++i)
@@ -879,7 +910,7 @@ namespace AltAI
             readComplexList(pStream, constructList);
 
             selectedCityBuildingTactics_.insert(std::make_pair(city, constructList));
-        }
+        }*/
 
         cityBuildingTacticsMap_.clear();
         size_t cityBuildingTacticsMapSize;
@@ -974,7 +1005,7 @@ namespace AltAI
             {
                 for (CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
                 {
-                    if (li->second->areDependenciesSatisfied())
+                    if (li->second->areDependenciesSatisfied(IDependentTactic::Ignore_None))
                     {
                         buildingsCityCanAssistWith[ci->first].push_back(li->first);
                     }
@@ -1017,7 +1048,7 @@ namespace AltAI
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
         os << "\n\nPlayerTactics::debugTactics():\nPossible tactics: (turn = " << gGlobals.getGame().getGameTurn() << ") ";
 
-        os << "\nPossible tech tactics:\n";
+        /*os << "\nPossible tech tactics:\n";
         for (std::list<ResearchTech>::const_iterator ci(possibleTechTactics_.begin()), ciEnd(possibleTechTactics_.end()); ci != ciEnd; ++ci)
         {
             os << *ci << "\n";
@@ -1082,7 +1113,7 @@ namespace AltAI
         {
             os << *ci << "\n";
         }
-        os << "\n";
+        os << "\n";*/
 
         os << "\nCity building tactics:";
         for (CityBuildingTacticsMap::iterator ci(cityBuildingTacticsMap_.begin()), ciEnd(cityBuildingTacticsMap_.end()); ci != ciEnd; ++ci)
@@ -1091,7 +1122,7 @@ namespace AltAI
             if (pCity)
             {
                 os << "\nCity: " << narrow(pCity->getName());
-                const City& city = player.getCity(pCity->getID());
+                const City& city = player.getCity(pCity);
 
                 TotalOutput base = city.getCurrentOutputProjection().getOutput();
 
@@ -1167,31 +1198,12 @@ namespace AltAI
             int firstBuiltTurn = MAX_INT;
             IDInfo firstBuiltCity;
 
-            CityIter iter(*player.getCvPlayer());
-            while (CvCity* pCity = iter())
-            {                
-                const City& city = player.getCity(pCity->getID());
-                ICityBuildingTacticsPtr cityTactics = ci->second->getCityTactics(pCity->getIDInfo());
-                if (cityTactics)
-                {
-                    const ProjectionLadder& ladder = cityTactics->getProjection();
-                    if (!ladder.buildings.empty())
-                    {
-                        if (ladder.buildings[0].first < firstBuiltTurn)
-                        {
-                            firstBuiltTurn = ladder.buildings[0].first;
-                            firstBuiltCity = pCity->getIDInfo();
-                        }
-                    }
-                }
-            }
-            if (firstBuiltCity.eOwner != NO_PLAYER)
-            {
-                os << "\nFirst built in: " << narrow(getCity(firstBuiltCity)->getName()) << " turn = " << firstBuiltTurn;
-            }
+            boost::tie(firstBuiltTurn, firstBuiltCity) = ci->second->getFirstBuildCity();
 
             if (firstBuiltCity.eOwner != NO_PLAYER)
             {
+                os << "\nFirst built in: " << narrow(getCity(firstBuiltCity)->getName()) << " turn = " << firstBuiltTurn;
+
                 boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(ci->first);
                 std::vector<IProjectionEventPtr> possibleEvents = getPossibleEvents(player, pBuildingInfo, firstBuiltTurn);
 
@@ -1236,7 +1248,7 @@ namespace AltAI
                     CityIter iter(*player.getCvPlayer());
                     while (CvCity* pCity = iter())
                     {
-                        const City& thisCity = player.getCity(pCity->getID());
+                        const City& thisCity = player.getCity(pCity);
                         CityDataPtr pCityData = thisCity.getCityData()->clone();
                         std::vector<IProjectionEventPtr> events;
                         events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
@@ -1279,6 +1291,10 @@ namespace AltAI
             if (ci->second)
             {
                 ci->second->debug(os);
+            }
+            else
+            {
+                os << " No tactic.\n";
             }
         }
 
@@ -1329,7 +1345,7 @@ namespace AltAI
             while (CvCity* pCity = iter())
             {
                 ProjectionLadder projection = ci->second->getProjection(pCity->getIDInfo());
-                const City& city = player.getCity(pCity->getID());
+                const City& city = player.getCity(pCity);
                 os << "\nProcess output for city: " << narrow(pCity->getName()) << " = " << projection.getProcessOutput();
             }
         }
@@ -1341,7 +1357,7 @@ namespace AltAI
             if (pCity)
             {
                 os << "\nCity: " << narrow(pCity->getName());
-                const City& city = player.getCity(pCity->getID());
+                const City& city = player.getCity(pCity);
                 TotalOutput base = city.getCurrentOutputProjection().getOutput();
 
                 for (CityImprovementTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
@@ -1355,6 +1371,16 @@ namespace AltAI
             else
             {
                 os << "\nMissing city?";
+            }
+        }
+
+        os << "\nTech tactics:\n";
+        for (TechTacticsMap::const_iterator ci(techTacticsMap_.begin()), ciEnd(techTacticsMap_.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nTech: " << gGlobals.getTechInfo(ci->first).getType();
+            if (ci->second)
+            {
+                ci->second->debug(os);
             }
         }
 #endif
@@ -1378,7 +1404,7 @@ namespace AltAI
             {
                 if (pCity)
                 {
-                    const City& city = player.getCity(pCity->getID());
+                    const City& city = player.getCity(pCity);
                     if (couldConstructBuilding(player, city, lookAheadDepth, pBuildingInfo, true))
                     {
                         LimitedBuildingsTacticsMap::iterator iter = globalBuildingsTacticsMap_.find(buildingType);
@@ -1402,7 +1428,7 @@ namespace AltAI
             {
                 if (pCity)
                 {
-                    const City& city = player.getCity(pCity->getID());
+                    const City& city = player.getCity(pCity);
                     if (couldConstructBuilding(player, city, lookAheadDepth, pBuildingInfo, true))
                     {
                         LimitedBuildingsTacticsMap::iterator iter = nationalBuildingsTacticsMap_.find(buildingType);
@@ -1425,7 +1451,7 @@ namespace AltAI
         {
             if (pCity)
             {
-                if (!couldConstructBuilding(player, player.getCity(pCity->getID()), lookAheadDepth, pBuildingInfo, true))
+                if (!couldConstructBuilding(player, player.getCity(pCity), lookAheadDepth, pBuildingInfo, true))
                 {
                     return;
                 }
@@ -1433,14 +1459,14 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                 CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for building: " << gGlobals.getBuildingInfo(buildingType).getType();
 #endif
-                cityBuildingTacticsMap_[pCity->getIDInfo()][buildingType] = makeCityBuildingTactics(player, player.getCity(pCity->getID()), pBuildingInfo);
+                cityBuildingTacticsMap_[pCity->getIDInfo()][buildingType] = makeCityBuildingTactics(player, player.getCity(pCity), pBuildingInfo);
             }
             else
             {
                 CityIter iter(*player.getCvPlayer());
                 while (CvCity* pCity = iter())
                 {
-                    const City& city = player.getCity(pCity->getID());
+                    const City& city = player.getCity(pCity);
                     if (!couldConstructBuilding(player, city, lookAheadDepth, pBuildingInfo, true))
                     {
                         continue;
@@ -1475,7 +1501,7 @@ namespace AltAI
 
         if (pCity)
         {
-            const City& city = player.getCity(pCity->getID());
+            const City& city = player.getCity(pCity);
             
             // TODO - add city to check
             if (couldConstructUnit(player, lookAheadDepth, pUnitInfo, true))
@@ -1493,6 +1519,34 @@ namespace AltAI
         else
         {
             unitTacticsMap_[unitType] = makeUnitTactics(player, pUnitInfo);
+        }
+    }
+
+    void PlayerTactics::makeSpecialistUnitTactics()
+    {
+        for (int i = 0, count = gGlobals.getNumUnitClassInfos(); i < count; ++i)
+        {
+            UnitTypes unitType = getPlayerVersion(player.getPlayerID(), (UnitClassTypes)i);
+
+            if (unitType == NO_UNIT)
+            {
+                continue;
+            }
+
+            boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(unitType);
+
+            if (!pUnitInfo)
+            {
+                continue;
+            }
+
+            const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+
+            // count special units as those which cannot be constructed through normal production
+            if (unitInfo.getProductionCost() < 0)
+            {
+                unitTacticsMap_[unitType] = makeSpecialUnitTactics(player, pUnitInfo);
+            }
         }
     }
 }

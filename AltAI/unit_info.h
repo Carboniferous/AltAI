@@ -107,8 +107,67 @@ namespace AltAI
 
         struct MiscAbilityNode
         {   
-            MiscAbilityNode() : canFoundCity(false), betterHutResults(false) {}
-            bool canFoundCity, betterHutResults;
+            struct DiscoverTech
+            {
+                DiscoverTech() : baseDiscover(0), multiplier(0)
+                {
+                }
+                int baseDiscover, multiplier;
+            };
+
+            struct SpecialBuildings
+            {
+                SpecialBuildings()
+                {
+                }
+                std::vector<BuildingTypes> buildings;
+            };
+
+            struct CreateGreatWork
+            {
+                CreateGreatWork() : culture(0)
+                {
+                }
+                int culture;
+            };
+
+            struct TradeMission
+            {
+                TradeMission() : baseGold(0), multiplier(0)
+                {
+                }
+                int baseGold, multiplier;
+            };
+
+            struct SpyMission
+            {
+                SpyMission() : espionagePoints(0)
+                {
+                }
+                int espionagePoints;
+            };
+
+            struct HurryBuilding
+            {
+                HurryBuilding() : baseHurry(0), multiplier(0)
+                {
+                }
+                int baseHurry, multiplier;
+            };
+
+            MiscAbilityNode() : canFoundCity(false), betterHutResults(false), canDiscoverTech(false), canBuildSpecialBuilding(false),
+                canCreateGreatWork(false), canDoTradeMission(false), canDoEspionageMission(false), canHurryBuilding(false)
+            {
+            }
+
+            bool canFoundCity, betterHutResults, canDiscoverTech, canBuildSpecialBuilding, canCreateGreatWork, canDoTradeMission, canDoEspionageMission, canHurryBuilding;
+            DiscoverTech discoverTech;
+            SpecialBuildings specialBuildings;
+            CreateGreatWork createGreatWork;
+            TradeMission tradeMission;
+            SpyMission spyMission;
+            HurryBuilding hurryBuilding;
+            std::vector<SpecialistTypes> settledSpecialists;
         };
 
         struct CorporationNode

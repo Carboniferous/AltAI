@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./resource_info.h"
 #include "./game.h"
 #include "./player.h"
@@ -33,11 +35,12 @@ namespace AltAI
                 return node;
             }
 
-            const CvBonusInfo& bonusInfo = gGlobals.getBonusInfo(requestData.bonusType);
-            
+            const CvBonusInfo& bonusInfo = gGlobals.getBonusInfo(requestData.bonusType);            
 
             node.revealTech = (TechTypes)bonusInfo.getTechReveal();
             node.obsoleteTech = (TechTypes)bonusInfo.getTechObsolete();
+
+            
 
             node.baseHealth = bonusInfo.getHealth();
             node.baseHappy = bonusInfo.getHappiness();
@@ -103,6 +106,23 @@ namespace AltAI
 
     ResourceInfo::ResourceInfo(BonusTypes bonusType, PlayerTypes playerType) : bonusType_(bonusType), playerType_(playerType)
     {
+        // check each improvement type to see if it makes the resource valid - if so, check for build types which can produce the improvement
+        for (int i = 0, improvementCount = gGlobals.getNumImprovementInfos(); i < improvementCount; ++i)
+        {
+            const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo((ImprovementTypes)i);
+            if (improvementInfo.isImprovementBonusMakesValid(bonusType))
+            {
+                for (int j = 0, buildCount = gGlobals.getNumBuildInfos(); j < buildCount; ++j)
+                {
+                    const CvBuildInfo& buildInfo = gGlobals.getBuildInfo((BuildTypes)j);
+                    if ((ImprovementTypes)buildInfo.getImprovement() == (ImprovementTypes)i)
+                    {
+                        buildTypes.push_back((BuildTypes)j);
+                    }
+                }
+            }
+        }
+
         init_();
     }
 

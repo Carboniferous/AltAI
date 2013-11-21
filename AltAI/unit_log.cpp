@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./unit_log.h"
 #include "./helper_fns.h"
 #include "./iters.h"

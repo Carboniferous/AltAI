@@ -1,3 +1,4 @@
+#include "AltAI.h"
 #include "./dot_map.h"
 #include "./plot_info.h"
 #include "./plot_info_visitors.h"

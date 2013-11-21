@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./city_improvements.h"
 #include "./game.h"
 #include "./player.h"

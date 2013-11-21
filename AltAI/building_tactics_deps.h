@@ -12,10 +12,11 @@ namespace AltAI
         explicit ResearchTechDependency(TechTypes techType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual bool required(const Player& player) const;
+        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
+        virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual std::pair<int, int> getDependencyItem() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -38,10 +39,11 @@ namespace AltAI
         explicit CityBuildingDependency(BuildingTypes buildingType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual bool required(const Player& player) const;
+        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
+        virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual std::pair<int, int> getDependencyItem() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -61,10 +63,11 @@ namespace AltAI
         CivBuildingDependency(BuildingTypes buildingType, int count, BuildingTypes sourcebuildingType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual bool required(const Player& player) const;
+        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
+        virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual std::pair<int, int> getDependencyItem() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -85,10 +88,11 @@ namespace AltAI
         ReligiousDependency(ReligionTypes religionType, UnitTypes unitType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual bool required(const Player& player) const;
+        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
+        virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual std::pair<int, int> getDependencyItem() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -110,10 +114,11 @@ namespace AltAI
         CityBonusDependency(const std::vector<BonusTypes>& bonusTypes, UnitTypes unitType, bool isOr);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity) const;
-        virtual bool required(const Player& player) const;
+        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
+        virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual std::pair<int, int> getDependencyItem() const;
 
         virtual void debug(std::ostream& os) const;
 

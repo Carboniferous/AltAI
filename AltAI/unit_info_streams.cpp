@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./unit_info_streams.h"
 
 namespace AltAI
@@ -197,6 +199,43 @@ namespace AltAI
         if (node.canFoundCity)
         {
             os << " can found city ";
+        }
+        if (node.betterHutResults)
+        {
+            os << " only good hut results ";
+        }
+        if (node.canDiscoverTech)
+        {
+            os << " can research tech, base value = " << node.discoverTech.baseDiscover << ", multiplier = " << node.discoverTech.multiplier;
+        }
+        if (node.canBuildSpecialBuilding)
+        {
+            os << " can build: ";
+            for (size_t i = 0, count = node.specialBuildings.buildings.size(); i < count; ++i)
+            {
+                if (i > 0) os << ", ";
+                os << gGlobals.getBuildingInfo(node.specialBuildings.buildings[i]).getType();
+            }
+        }
+        if (node.canCreateGreatWork)
+        {
+            os << " can create great work, culture = " << node.createGreatWork.culture;
+        }
+        if (node.canDoTradeMission)
+        {
+            os << " can do trade mission, base value = " << node.tradeMission.baseGold << ", multiplier = " << node.tradeMission.multiplier;
+        }
+        if (node.canDoEspionageMission)
+        {
+            os << " can do spy mission, base value = " << node.spyMission.espionagePoints;
+        }
+        if (node.canHurryBuilding)
+        {
+            os << " can hurry building, base value = " <<  node.hurryBuilding.baseHurry << ", multiplier = " << node.hurryBuilding.multiplier;
+        }
+        for (size_t i = 0, count = node.settledSpecialists.size(); i < count; ++i)
+        {
+            os << " can create specialist: " << gGlobals.getSpecialistInfo(node.settledSpecialists[i]).getType();
         }
         return os;
     }

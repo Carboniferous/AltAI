@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./settler_manager.h"
 #include "./player_analysis.h"
 #include "./gamedata_analysis.h"
@@ -557,7 +559,7 @@ namespace AltAI
                         if (pLoopPlot.valid() && pLoopPlot->isRevealed(player.getTeam(), false) && pLoopPlot->getSubArea() == pSitePlot->getSubArea())
                         {
                             int thisBaseValue = pLoopPlot->getFoundValue(player.getID());
-                            if (thisBaseValue < (2 * bestBaseValue) / 3)
+                            if (thisBaseValue < (3 * bestBaseValue) / 4)
                             {
                                 continue;
                             }

@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./civ_log.h"
 #include "./helper_fns.h"
 

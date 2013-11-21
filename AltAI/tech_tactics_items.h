@@ -18,6 +18,8 @@ namespace AltAI
         virtual void update(const Player& player, const CityDataPtr& pCityData);
         virtual void apply(const ICityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& tacticSelectionData);
 
+        virtual const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const;
+
         virtual ProjectionLadder getProjection() const;
         virtual void debug(std::ostream& os) const;
 
@@ -97,5 +99,29 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
 
         static const int ID = 5;
+    };
+
+    class FreeTechTactic : public ITechTactic
+    {
+        virtual void debug(std::ostream& os) const;
+
+        virtual void apply(const ITechTacticsPtr& pTechTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 0;
+    };
+
+    class FoundReligionTechTactic : public ITechTactic
+    {
+        virtual void debug(std::ostream& os) const;
+
+        virtual void apply(const ITechTacticsPtr& pTechTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 1;
     };
 }

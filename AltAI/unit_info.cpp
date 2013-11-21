@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./unit_info.h"
 #include "./helper_fns.h"
 
@@ -267,7 +269,48 @@ namespace AltAI
             node.canFoundCity = unitInfo.isFound();
             node.betterHutResults = unitInfo.isNoBadGoodies();
 
-            if (node.canFoundCity || node.betterHutResults)
+            const int baseDiscover = unitInfo.getBaseDiscover();
+            if (baseDiscover > 0)
+            {
+                node.canDiscoverTech = true;
+                node.discoverTech.baseDiscover = baseDiscover;
+                node.discoverTech.multiplier = unitInfo.getDiscoverMultiplier();
+            }
+
+            for (int i = 0, count = gGlobals.getNumBuildingInfos(); i < count; ++i)
+            {
+                if (unitInfo.getBuildings(i))
+                {
+                    //const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo((BuildingTypes)i);
+                    node.specialBuildings.buildings.push_back((BuildingTypes)i);
+                }
+            }
+            node.canBuildSpecialBuilding = !node.specialBuildings.buildings.empty();
+
+            node.createGreatWork.culture = unitInfo.getGreatWorkCulture();
+            node.canCreateGreatWork = node.createGreatWork.culture > 0;
+
+            node.tradeMission.baseGold = unitInfo.getBaseTrade();
+            node.tradeMission.multiplier = unitInfo.getTradeMultiplier();
+            node.canDoTradeMission = node.tradeMission.baseGold > 0 && node.tradeMission.multiplier > 0;
+
+            node.spyMission.espionagePoints = unitInfo.getEspionagePoints();
+            node.canDoEspionageMission = node.spyMission.espionagePoints > 0;
+
+            node.hurryBuilding.baseHurry = unitInfo.getBaseHurry();
+            node.hurryBuilding.multiplier = unitInfo.getHurryMultiplier();
+            node.canHurryBuilding = node.hurryBuilding.baseHurry > 0 && node.hurryBuilding.multiplier > 0;
+
+            for (int i = 0, count = gGlobals.getNumSpecialistInfos(); i < count; ++i)
+	        {
+                if (unitInfo.getGreatPeoples(i))
+                {
+                    node.settledSpecialists.push_back((SpecialistTypes)i);
+                }
+            }
+
+            if (node.canFoundCity || node.betterHutResults || node.canBuildSpecialBuilding || node.canCreateGreatWork || 
+                node.canDiscoverTech || node.canDoTradeMission || node.canHurryBuilding)
             {
                 baseNode.nodes.push_back(node);
             }

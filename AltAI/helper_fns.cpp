@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./helper_fns.h"
 
 namespace AltAI

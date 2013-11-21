@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./city_data.h"
 #include "./iters.h"
 #include "./plot_info_visitors.h"

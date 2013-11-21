@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./utils.h"
 #include "./iters.h"
 #include "./city.h"
@@ -292,7 +294,7 @@ namespace AltAI
     void City::calcBuildings_()
     {
         const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
-        player->getAnalysis()->getPlayerTactics()->selectBuildingTactics(*this);
+        //player->getAnalysis()->getPlayerTactics()->selectBuildingTactics(*this);
 
         flags_ &= ~NeedsBuildingCalcs;
     }

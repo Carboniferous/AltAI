@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./area_helper.h"
 
 namespace AltAI

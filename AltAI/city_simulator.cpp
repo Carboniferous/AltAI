@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./city_simulator.h"
 #include "./building_info_visitors.h"
 #include "./plot_info_visitors.h"
@@ -425,13 +427,13 @@ namespace AltAI
 
                         ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 50, events);
                         plotResults.push_back(boost::make_tuple(improvementsIter->second[j].first, improvementsIter->second[j].second, ladder));
-//#ifdef ALTAI_DEBUG
-//                        std::ostream& os = CityLog::getLog(pCity_)->getStream();
-//                        os << "\nPlot: " << plotIter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
-//                        base.debug(os);
-//                        ladder.debug(os);
-//                        os << "\nLadder improvement delta = " << ladder.getOutput() - base.getOutput();
-//#endif
+#ifdef ALTAI_DEBUG
+                        std::ostream& os = CityLog::getLog(pCity_)->getStream();
+                        os << "\nPlot: " << plotIter->coords << " imp = " << gGlobals.getImprovementInfo(improvementsIter->second[j].second).getType() << "\n";
+                        base.debug(os);
+                        ladder.debug(os);
+                        os << "\nLadder improvement delta = " << ladder.getOutput() - base.getOutput();
+#endif
                     }
                     results.push_back(std::make_pair(plotIter->coords, plotResults));
                 }

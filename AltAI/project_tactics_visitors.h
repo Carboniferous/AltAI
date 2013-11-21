@@ -9,5 +9,5 @@ namespace AltAI
     class City;
     class ProjectInfo;
 
-    ConstructItem getProjectTactics(const Player& player, ProjectTypes projectType, VictoryTypes victoryType, const boost::shared_ptr<ProjectInfo>& pProjectInfo);
+    //ConstructItem getProjectTactics(const Player& player, ProjectTypes projectType, VictoryTypes victoryType, const boost::shared_ptr<ProjectInfo>& pProjectInfo);
 }

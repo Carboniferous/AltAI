@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./city_projections_ladder.h"
 #include "./save_utils.h"
 
@@ -111,6 +113,11 @@ namespace AltAI
             }            
         }
         return cumulativeOutput;
+    }
+
+    int ProjectionLadder::getPopChange() const
+    {
+        return entries.empty() ? 0 : entries.rbegin()->pop - entries.begin()->pop;
     }
 
     void ProjectionLadder::write(FDataStreamBase* pStream) const

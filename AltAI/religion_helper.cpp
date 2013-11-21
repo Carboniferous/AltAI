@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./religion_helper.h"
 
 namespace AltAI

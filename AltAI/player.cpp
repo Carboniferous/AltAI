@@ -1,4 +1,7 @@
-#include "./utils.h"
+#include "AltAI.h"
+
+#include "./tactic_actions.h"
+#include "./unit.h"
 #include "./game.h"
 #include "./player.h"
 #include "./city.h"
@@ -164,8 +167,9 @@ namespace AltAI
         cities_.erase(pCity->getID());
     }
 
-    City& Player::getCity(int ID)
+    City& Player::getCity(const CvCity* pCity)
     {
+        const int ID = pCity->getID();
         CityMap::iterator iter = cities_.find(ID);
         if (iter != cities_.end())
         {
@@ -183,8 +187,9 @@ namespace AltAI
         }
     }
 
-    const City& Player::getCity(int ID) const
+    const City& Player::getCity(const CvCity* pCity) const
     {
+        const int ID = pCity->getID();
         CityMap::const_iterator iter = cities_.find(ID);
         if (iter != cities_.end())
         {
@@ -200,6 +205,16 @@ namespace AltAI
             os << oss.str();
             throw std::runtime_error(oss.str());
         }
+    }
+
+    City& Player::getCity(const int ID)
+    {
+        return getCity(pPlayer_->getCity(ID));
+    }
+
+    const City& Player::getCity(const int ID) const
+    {
+        return getCity(pPlayer_->getCity(ID));
     }
 
     void Player::calcCivics_()
@@ -414,9 +429,10 @@ namespace AltAI
                 if (bonusType != NO_BONUS)
                 {
                     ImprovementTypes improvementType = pPlot->getImprovementType();
+                    const bool improvementActsAsCity = improvementType == NO_IMPROVEMENT ? false : gGlobals.getImprovementInfo(improvementType).isActsAsCity();
                     ImprovementTypes requiredImprovement = getBonusImprovementType(bonusType);
-                    // todo - does this mean we'll get/leave forts?
-                    if (improvementType == NO_IMPROVEMENT && requiredImprovement != NO_IMPROVEMENT)
+                    // will convert forts to actual improvement (useful if later used by city, but may want to keep fort in some cases)
+                    if ((improvementType == NO_IMPROVEMENT || improvementActsAsCity) && requiredImprovement != NO_IMPROVEMENT)
                     {
                         if (getNumWorkersAtPlot(pPlot) > 0)
                         {
@@ -450,7 +466,7 @@ namespace AltAI
 
                             pUnit->getGroup()->pushMission(MISSION_BUILD, buildType, -1, 0, (pUnit->getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot);
 
-                            if (pBestCity)
+                            if (pBestCity && pUnit->canBuildRoute())
                             {
                                 pUnit->getGroup()->pushMission(MISSION_ROUTE_TO, pBestCity->getX(), pBestCity->getY(), MOVE_SAFE_TERRITORY, (pUnit->getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot);
                             }
@@ -576,6 +592,21 @@ namespace AltAI
             }
         }
         return count;
+    }
+
+    std::vector<IDInfo> Player::getCitiesTargetingPlot(UnitTypes unitType, XYCoords buildTarget) const
+    {
+        std::vector<IDInfo> cities;
+
+        for (CityMap::const_iterator ci(cities_.begin()), ciEnd(cities_.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->second.getConstructItem().unitType == unitType && ci->second.getConstructItem().buildTarget == buildTarget)
+            {
+                cities.push_back(ci->second.getCvCity()->getIDInfo());
+            }
+        }
+
+        return cities;
     }
 
     std::vector<BuildTypes> Player::addAdditionalPlotBuilds(const CvPlot* pPlot, BuildTypes buildType) const
@@ -734,6 +765,11 @@ namespace AltAI
         return pPlot;
     }
 
+    void Player::doSpecialistMove(CvUnitAI* pUnit)
+    {
+        ConstructItem specialistBuild = pPlayerAnalysis_->getPlayerTactics()->getSpecialistBuild(pUnit->getUnitType());
+    }
+
     int Player::getMaxResearchRate(std::pair<int, int> fixedIncomeAndExpenses) const
     {
 #ifdef ALTAI_DEBUG
@@ -746,7 +782,7 @@ namespace AltAI
         CvCity* pCity;
         while (pCity = cityIter())
         {
-            const ConstructItem& constructItem = getCity(pCity->getID()).getConstructItem();
+            const ConstructItem& constructItem = getCity(pCity).getConstructItem();
             ProcessTypes processType = constructItem.processType;
             if (processType != NO_PROCESS)
             {
@@ -835,7 +871,7 @@ namespace AltAI
         CvCity* pCity;
         while (pCity = cityIter())
         {
-            const ConstructItem& constructItem = getCity(pCity->getID()).getConstructItem();
+            const ConstructItem& constructItem = getCity(pCity).getConstructItem();
             ProcessTypes processType = constructItem.processType;
             if (processType != NO_PROCESS)
             {
@@ -977,11 +1013,10 @@ namespace AltAI
         pPlayerAnalysis_->getMapAnalysis()->reinitDotMap();
 
         // store tech requirement against buildings - so need to update these (before updating tech tactics)
-        pPlayerAnalysis_->getPlayerTactics()->updateBuildingTactics();
         // similarly for units (potentially)
-        pPlayerAnalysis_->getPlayerTactics()->updateUnitTactics();
+        //pPlayerAnalysis_->getPlayerTactics()->updateUnitTactics();
         pPlayerAnalysis_->getPlayerTactics()->updateTechTactics();
-        pPlayerAnalysis_->getPlayerTactics()->updateProjectTactics();
+        //pPlayerAnalysis_->getPlayerTactics()->updateProjectTactics();
 
         boost::shared_ptr<TechInfo> pTechInfo = pPlayerAnalysis_->getTechInfo(techType);
 
@@ -1064,7 +1099,7 @@ namespace AltAI
 
     void Player::notifyFirstToTechDiscovered(TeamTypes teamType, TechTypes techType)
     {
-        pPlayerAnalysis_->getPlayerTactics()->updateFirstToTechTactics(techType);
+        //pPlayerAnalysis_->getPlayerTactics()->updateFirstToTechTactics(techType);
     }
 
     void Player::logHurry(const CvCity* pCity, const HurryData& hurryData) const
@@ -1139,7 +1174,7 @@ namespace AltAI
         return researchTech.techType;
     }
 
-    ResearchTech Player::getCurrentResearchTech() const
+    /*ResearchTech Player::getCurrentResearchTech() const
     {
         TechTypes currentResearchTech = pPlayer_->getCurrentResearch();
         if (currentResearchTech == NO_TECH)
@@ -1155,7 +1190,7 @@ namespace AltAI
         {
             return pPlayerAnalysis_->getPlayerTactics()->getResearchTechData(currentResearchTech);
         }
-    }
+    }*/
 
     std::pair<int, int> Player::getCityRank(IDInfo city, OutputTypes outputType) const
     {
@@ -1204,7 +1239,7 @@ namespace AltAI
 
             while (CvCity* pCity = iter())
             {
-                const City& city = getCity(pCity->getID());
+                const City& city = getCity(pCity);
                 if (city.getConstructItem().unitType == unitType)
                 {
                     ++count;
@@ -1237,10 +1272,20 @@ namespace AltAI
 
             while (CvCity* pCity = iter())
             {
-                const City& city = getCity(pCity->getID());
-                if (city.getConstructItem().militaryFlags & MilitaryFlags::Output_Combat_Unit)
+                const City& city = getCity(pCity);
+                if (city.getConstructItem().unitType != NO_UNIT)
                 {
-                    ++count;
+                    if (domainType != DOMAIN_AIR)
+                    {
+                        if (gGlobals.getUnitInfo(city.getConstructItem().unitType).getCombat() > 0)
+                        {
+                            ++count;
+                        }
+                    }
+                    else if (gGlobals.getUnitInfo(city.getConstructItem().unitType).getAirCombat() > 0)
+                    {
+                        ++count;
+                    }
                 }
             }
         }
@@ -1264,19 +1309,19 @@ namespace AltAI
             }
         }
 
-        if (militaryFlags)
+        /*if (militaryFlags)
         {
             CityIter iter(*pPlayer_);
 
             while (CvCity* pCity = iter())
             {
-                const City& city = getCity(pCity->getID());
+                const City& city = getCity(pCity);
                 if (city.getConstructItem().militaryFlags & militaryFlags)
                 {
                     ++count;
                 }
             }
-        }
+        }*/
         return count;
     }
 
@@ -1303,10 +1348,13 @@ namespace AltAI
 
             while (CvCity* pCity = iter())
             {
-                const City& city = getCity(pCity->getID());
-                if (city.getConstructItem().militaryFlags & militaryFlags)
+                const City& city = getCity(pCity);
+                if (city.getConstructItem().unitType != NO_UNIT)
                 {
-                    ++count;
+                    if (gGlobals.getUnitInfo(city.getConstructItem().unitType).getCollateralDamageMaxUnits() > 0)
+                    {
+                        ++count;
+                    }
                 }
             }
         }
@@ -1336,10 +1384,13 @@ namespace AltAI
 
             while (CvCity* pCity = iter())
             {
-                const City& city = getCity(pCity->getID());
-                if (city.getConstructItem().militaryFlags & MilitaryFlags::Output_Extra_Mobility)
+                const City& city = getCity(pCity);
+                if (city.getConstructItem().unitType != NO_UNIT)
                 {
-                    ++count;
+                    if (gGlobals.getUnitInfo(city.getConstructItem().unitType).isNoBadGoodies())
+                    {
+                        ++count;
+                    }
                 }
             }
         }

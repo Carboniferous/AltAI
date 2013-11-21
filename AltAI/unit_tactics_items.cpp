@@ -1,5 +1,8 @@
+#include "AltAI.h"
+
 #include "./unit_tactics_items.h"
 #include "./unit_tactics.h"
+#include "./tactic_selection_data.h"
 #include "./game.h"
 #include "./player.h"
 #include "./city.h"
@@ -60,8 +63,13 @@ namespace AltAI
     void CityDefenceUnitTactic::apply(const ICityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData)
     {
         const CvCity* pCity = getCity(pCityUnitTactics->getCity());
+        if (!pCity)
+        {
+            return;
+        }
+
         const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
-        const City& city = player.getCity(pCity->getID());
+        const City& city = player.getCity(pCity);
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
@@ -124,8 +132,13 @@ namespace AltAI
     void CityAttackUnitTactic::apply(const ICityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData)
     {
         const CvCity* pCity = getCity(pCityUnitTactics->getCity());
+        if (!pCity)
+        {
+            return;
+        }
+
         const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity->getID());
+        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
@@ -267,6 +280,16 @@ namespace AltAI
 
     void BuildCityUnitTactic::apply(const ICityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData)
     {
+        const ProjectionLadder& ladder = pCityUnitTactics->getProjection();
+
+        if (!ladder.units.empty())
+        {
+            SettlerUnitValue buildValue;
+            buildValue.unitType = pCityUnitTactics->getUnitType();
+            buildValue.nTurns = ladder.units[0].first;
+
+            selectionData.settlerUnits.insert(std::make_pair(buildValue.unitType, buildValue));
+        }
     }
 
     void BuildCityUnitTactic::debug(std::ostream& os) const
@@ -287,24 +310,40 @@ namespace AltAI
 
 
     BuildImprovementsUnitTactic::BuildImprovementsUnitTactic(const std::vector<BuildTypes>& buildTypes)
-        : buildTypes_(buildTypes)
+        : buildTypes_(buildTypes), hasConsumedBuilds_(false)
     {
+        for (size_t i = 0, count = buildTypes_.size(); i < count; ++i)
+        {
+            if (gGlobals.getBuildInfo(buildTypes_[i]).isKill())
+            {
+                hasConsumedBuilds_ = true;
+                break;
+            }
+        }
     }
 
     void BuildImprovementsUnitTactic::apply(const ICityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData)
     {
+#ifdef ALTAI_DEBUG
+        //std::ostream& os = CivLog::getLog(*pPlayer->getCvPlayer())->getStream();
+#endif
         const ProjectionLadder& ladder = pCityUnitTactics->getProjection();
         const CvCity* pCity = getCity(pCityUnitTactics->getCity());
+
+        if (!pCity)
+        {
+#ifdef ALTAI_DEBUG  // TODO: check why this may happen...
+        //    os << "\nBuildImprovementsUnitTactic::apply - called with NULL city";
+#endif
+            return;
+        }
 
         boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
         boost::shared_ptr<PlayerTactics> pPlayerTactics = pPlayer->getAnalysis()->getPlayerTactics();
 
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*pPlayer->getCvPlayer())->getStream();
-#endif
-        const City& city = pPlayer->getCity(pCity->getID());
+        const City& city = pPlayer->getCity(pCity);
 
-        if (pCityUnitTactics->areDependenciesSatisfied() && !ladder.units.empty())
+        if (pCityUnitTactics->areDependenciesSatisfied(IDependentTactic::Ignore_None) && !ladder.units.empty())
         {
             std::vector<CityImprovementManager::PlotImprovementData> improvements(getImprovements(*pPlayer, city));
 
@@ -317,17 +356,17 @@ namespace AltAI
                 if (boost::get<5>(improvements[i]) == CityImprovementManager::Not_Built)
                 {
 #ifdef ALTAI_DEBUG
-                    os << "\nBuildImprovementsUnitTactic::apply - imp: ";
-                    CityImprovementManager::logImprovement(os, improvements[i]);
+                    //os << "\nBuildImprovementsUnitTactic::apply - imp: ";
+                    //CityImprovementManager::logImprovement(os, improvements[i]);
 #endif
                     BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(boost::get<2>(improvements[i]));
 
                     if (std::find(buildTypes_.begin(), buildTypes_.end(), buildType) != buildTypes_.end())
                     {
 #ifdef ALTAI_DEBUG
-                        os << "\nAdding build: " << gGlobals.getBuildInfo(buildType).getType();
+                        //os << "\nAdding build: " << gGlobals.getBuildInfo(buildType).getType();
 #endif
-                        unitValue.addBuild(buildType, boost::make_tuple(boost::get<0>(improvements[i]), boost::get<4>(improvements[i]), std::vector<TechTypes>()));
+                        //unitValue.addBuild(buildType, boost::make_tuple(boost::get<0>(improvements[i]), boost::get<4>(improvements[i]), std::vector<TechTypes>()));
                     }
                 }
             }
@@ -337,11 +376,11 @@ namespace AltAI
             while (CvCity* pCity = iter())
             {
                 // already done ourselves above
-                if (pCity->getIDInfo() == selectionData.city)
+                if (pCity->getIDInfo() == pCityUnitTactics->getCity())
                 {
                     continue;
                 }
-                const City& city = pPlayer->getCity(pCity->getID());
+                const City& city = pPlayer->getCity(pCity);
 
                 std::vector<CityImprovementManager::PlotImprovementData> improvements(getImprovements(*pPlayer, city));
 
@@ -350,17 +389,44 @@ namespace AltAI
                     if (boost::get<5>(improvements[i]) == CityImprovementManager::Not_Built)
                     {
 #ifdef ALTAI_DEBUG
-                        os << "\nBuildImprovementsUnitTactic::apply - imp: ";
-                        CityImprovementManager::logImprovement(os, improvements[i]);
+                        //os << "\nBuildImprovementsUnitTactic::apply - imp: ";
+                        //CityImprovementManager::logImprovement(os, improvements[i]);
 #endif
                         BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(boost::get<2>(improvements[i]));
 
                         if (std::find(buildTypes_.begin(), buildTypes_.end(), buildType) != buildTypes_.end())
                         {
 #ifdef ALTAI_DEBUG
-                            os << "\nAdding build: " << gGlobals.getBuildInfo(buildType).getType();
+                            //os << "\nAdding build: " << gGlobals.getBuildInfo(buildType).getType();
 #endif
                             unitValue.addBuild(buildType, boost::make_tuple(boost::get<0>(improvements[i]), boost::get<4>(improvements[i]), std::vector<TechTypes>()));
+                        }
+                    }
+                }
+            }
+
+            if (hasConsumedBuilds_)
+            {
+                std::vector<int> accessibleSubAreas = pPlayer->getAnalysis()->getMapAnalysis()->
+                    getAccessibleSubAreas((DomainTypes)gGlobals.getUnitInfo(pCityUnitTactics->getUnitType()).getDomainType());
+
+                for (size_t subAreaIndex = 0, subAreaCount = accessibleSubAreas.size(); subAreaIndex < subAreaCount; ++subAreaIndex)
+                {
+                    for (size_t buildTypeIndex = 0, count = buildTypes_.size(); buildTypeIndex < count; ++buildTypeIndex)
+                    {
+                        std::vector<BonusTypes> bonusTypes = GameDataAnalysis::getBonusTypesForBuildType(buildTypes_[buildTypeIndex]);
+
+                        std::vector<CvPlot*> resourcePlots = pPlayer->getAnalysis()->getMapAnalysis()->
+                            getResourcePlots(bonusTypes, accessibleSubAreas[subAreaIndex]);
+
+                        for (size_t j = 0, resourceCount = resourcePlots.size(); j < resourceCount; ++j)
+                        {
+                            // todo - drive improvement check from bonus type's required imp
+                            if (resourcePlots[j]->getImprovementType() == NO_IMPROVEMENT && !resourcePlots[j]->isWithinTeamCityRadius(pPlayer->getTeamID()))
+                            {
+                                unitValue.addNonCityBuild(buildTypes_[buildTypeIndex], 
+                                    boost::make_tuple(XYCoords(resourcePlots[j]->getX(), resourcePlots[j]->getY()), TotalOutput(), std::vector<TechTypes>()));
+                            }
                         }
                     }
                 }
@@ -415,5 +481,92 @@ namespace AltAI
     void SeaAttackUnitTactic::read(FDataStreamBase* pStream)
     {
         readSet<PromotionTypes, int>(pStream, promotions_);
+    }
+
+    BuildSpecialBuildingUnitTactic::BuildSpecialBuildingUnitTactic(BuildingTypes buildingType)
+        : buildingType_(buildingType)
+    {
+    }
+
+    void BuildSpecialBuildingUnitTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tBuild special building: " << (buildingType_ == NO_BUILDING ? "NONE" : gGlobals.getBuildingInfo(buildingType_).getType());
+#endif
+    }
+
+    void BuildSpecialBuildingUnitTactic::apply(const IUnitTacticsPtr& pUnitTactics, TacticSelectionData& selectionData)
+    {
+    }
+
+    void BuildSpecialBuildingUnitTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+        pStream->Write(buildingType_);
+    }
+
+    void BuildSpecialBuildingUnitTactic::read(FDataStreamBase* pStream)
+    {
+        pStream->Read((int*)&buildingType_);
+    }
+
+    void DiscoverTechUnitTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tDiscover tech unit";
+#endif
+    }
+
+    void DiscoverTechUnitTactic::apply(const IUnitTacticsPtr& pUnitTactics, TacticSelectionData& selectionData)
+    {
+    }
+
+    void DiscoverTechUnitTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+    }
+
+    void DiscoverTechUnitTactic::read(FDataStreamBase* pStream)
+    {
+    }
+
+    void CreateGreatWorkUnitTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tCreate great work unit";
+#endif
+    }
+
+    void CreateGreatWorkUnitTactic::apply(const IUnitTacticsPtr& pUnitTactics, TacticSelectionData& selectionData)
+    {
+    }
+
+    void CreateGreatWorkUnitTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+    }
+
+    void CreateGreatWorkUnitTactic::read(FDataStreamBase* pStream)
+    {
+    }
+
+    void TradeMissionUnitTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tUndertake trade mission unit tactic";
+#endif
+    }
+
+    void TradeMissionUnitTactic::apply(const IUnitTacticsPtr& pUnitTactics, TacticSelectionData& selectionData)
+    {
+    }
+
+    void TradeMissionUnitTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+    }
+
+    void TradeMissionUnitTactic::read(FDataStreamBase* pStream)
+    {
     }
 }

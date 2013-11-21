@@ -32,6 +32,8 @@ namespace AltAI
         TotalOutput getOutputAfter(int turn) const;
         int getGPPTotal() const;
 
+        int getPopChange() const;
+
         void debug(std::ostream& os) const;
 
         void write(FDataStreamBase* pStream) const;

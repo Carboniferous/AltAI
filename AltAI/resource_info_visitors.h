@@ -38,4 +38,6 @@ namespace AltAI
     ResourceHealthInfo getResourceHealthInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
 
     void updateCityData(CityData& data, const boost::shared_ptr<ResourceInfo>& pResourceInfo, bool isAdding);
+
+    std::vector<BuildTypes> getBuildTypes(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
 }

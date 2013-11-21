@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./game.h"
 #include "./plot_info.h"
 #include "./player.h"

@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./specialist_helper.h"
 
 namespace AltAI

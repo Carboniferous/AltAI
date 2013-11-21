@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./civic_info_visitors.h"
 #include "./civic_info.h"
 #include "./player_analysis.h"

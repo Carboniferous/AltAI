@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./bonus_helper.h"
 #include "./city_data.h"
 

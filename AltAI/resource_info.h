@@ -58,6 +58,7 @@ namespace AltAI
             }
             BonusTypes bonusType;
             TechTypes revealTech, obsoleteTech;
+            
             int baseHealth, baseHappy;
             std::vector<BuildingNode> buildingNodes;
             std::vector<UnitNode> unitNodes;
@@ -66,10 +67,16 @@ namespace AltAI
 
         const ResourceInfoNode& getInfo() const;
 
+        const std::vector<BuildTypes>& getBuildTypes()
+        {
+            return buildTypes;
+        }
+
     private:
         void init_();
 
         BonusTypes bonusType_;
+        std::vector<BuildTypes> buildTypes;
         PlayerTypes playerType_;
         ResourceInfoNode infoNode_;
     };

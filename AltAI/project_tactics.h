@@ -8,7 +8,7 @@ namespace AltAI
     class Player;
     class City;
 
-    ConstructList makeProjectTactics(Player& player);
+    //ConstructList makeProjectTactics(Player& player);
 
-    ConstructItem selectProjectTactics(const Player& player, const City& city, const ConstructItem& constructItem);
+    //ConstructItem selectProjectTactics(const Player& player, const City& city, const ConstructItem& constructItem);
 }

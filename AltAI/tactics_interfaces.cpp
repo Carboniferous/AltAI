@@ -1,9 +1,12 @@
+#include "AltAI.h"
+
 #include "./tactics_interfaces.h"
 #include "./building_tactics_deps.h"
 #include "./building_tactics_items.h"
 #include "./unit_tactics_items.h"
 #include "./city_building_tactics.h"
 #include "./city_unit_tactics.h"
+#include "./player_tech_tactics.h"
 #include "./tech_tactics_items.h"
 
 namespace AltAI
@@ -90,6 +93,109 @@ namespace AltAI
         return pBuildingTactic;
     }
 
+    void debugDepItem(const DependencyItem& depItem, std::ostream& os)
+    {
+        switch (depItem.first)
+        {
+        case ResearchTechDependency::ID:
+            os << gGlobals.getTechInfo((TechTypes)depItem.second).getType();
+            break;
+        case CityBuildingDependency::ID:
+            os << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
+            break;
+        case CivBuildingDependency::ID:
+            os << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
+            break;
+        case ReligiousDependency::ID:
+            os << gGlobals.getReligionInfo((ReligionTypes)depItem.second).getType();
+            break;
+        case CityBonusDependency::ID:
+            os << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "");
+            break;
+        case -1:
+            os << "No Dependencies ";
+            break;
+        default:
+            os << "UNKNOWN Dependency?";
+            break;
+        }
+    }
+
+    std::vector<DependencyItem> ICityBuildingTactics::getDepItems(int ignoreFlags) const
+    {
+        std::vector<DependencyItem> depItems;
+        const CvCity* pCity = ::getCity(getCity());
+        if (!pCity)
+        {
+            return depItems;
+        }
+        bool allDependenciesSatisfied = true;
+
+        const std::vector<IDependentTacticPtr> deps = getDependencies();      
+        for (size_t i = 0, count = deps.size(); i < count; ++i)
+        {
+            if (!deps[i]->required(pCity, ignoreFlags))
+            {
+                depItems.push_back(deps[i]->getDependencyItem());
+            }
+            else
+            {
+                allDependenciesSatisfied = false;
+            }
+        }
+
+        const std::vector<ResearchTechDependencyPtr> techDeps = getTechDependencies();
+        for (size_t i = 0, count = techDeps.size(); i < count; ++i)
+        {
+            if (!techDeps[i]->required(pCity, ignoreFlags))
+            {
+                depItems.push_back(techDeps[i]->getDependencyItem());
+            }
+            else
+            {
+                allDependenciesSatisfied = false;
+            }
+        }
+
+        if (allDependenciesSatisfied && depItems.empty())
+        {
+            depItems.push_back(std::make_pair(-1, -1));
+        }
+
+        return depItems;
+    }
+
+    std::vector<DependencyItem> ICityUnitTactics::getDepItems(int ignoreFlags) const
+    {
+        std::vector<DependencyItem> depItems;
+        const CvCity* pCity = ::getCity(getCity());
+        if (!pCity)
+        {
+            return depItems;
+        }
+        bool allDependenciesSatisfied = true;
+
+        const std::vector<IDependentTacticPtr> deps = getDependencies();      
+        for (size_t i = 0, count = deps.size(); i < count; ++i)
+        {
+            if (!deps[i]->required(pCity, ignoreFlags))
+            {
+                depItems.push_back(deps[i]->getDependencyItem());
+            }
+            else
+            {
+                allDependenciesSatisfied = false;
+            }
+        }
+
+        if (allDependenciesSatisfied && depItems.empty())
+        {
+            depItems.push_back(std::make_pair(-1, -1));
+        }
+
+        return depItems;
+    }
+    
     ICityBuildingTacticsPtr ICityBuildingTactics::factoryRead(FDataStreamBase* pStream)
     {
         ICityBuildingTacticsPtr pCityBuildingTactics;
@@ -269,6 +375,35 @@ namespace AltAI
         return pCityUnitTactics;
     }
 
+    IUnitTacticPtr IUnitTactic::factoryRead(FDataStreamBase* pStream)
+    {
+        IUnitTacticPtr pUnitTactic;
+
+        int ID;
+        pStream->Read(&ID);
+
+        switch (ID)
+        {
+        case 0:
+            pUnitTactic = IUnitTacticPtr(new DiscoverTechUnitTactic());
+            break;
+        case 1:
+            pUnitTactic = IUnitTacticPtr(new BuildSpecialBuildingUnitTactic());
+            break;
+        case 2:
+            pUnitTactic = IUnitTacticPtr(new CreateGreatWorkUnitTactic());
+            break;
+        case 3:
+            pUnitTactic = IUnitTacticPtr(new TradeMissionUnitTactic());
+            break;
+        default:
+            break;
+        }
+
+        pUnitTactic->read(pStream);
+        return pUnitTactic;
+    }
+
     IUnitTacticsPtr IUnitTactics::factoryRead(FDataStreamBase* pStream)
     {
         IUnitTacticsPtr pUnitTactics;
@@ -289,5 +424,48 @@ namespace AltAI
 
         pUnitTactics->read(pStream);
         return pUnitTactics;
+    }
+
+    ITechTacticPtr ITechTactic::factoryRead(FDataStreamBase* pStream)
+    {
+        ITechTacticPtr pTechTactic;
+
+        int ID;
+        pStream->Read(&ID);
+
+        switch (ID)
+        {
+        default:
+            break;
+        case 0:
+            pTechTactic = ITechTacticPtr(new FreeTechTactic());
+            break;
+        case 1:
+            pTechTactic = ITechTacticPtr(new FoundReligionTechTactic());
+            break;
+        }
+
+        pTechTactic->read(pStream);
+        return pTechTactic;
+    }
+
+    ITechTacticsPtr ITechTactics::factoryRead(FDataStreamBase* pStream)
+    {
+        ITechTacticsPtr pTechTactics;
+
+        int ID;
+        pStream->Read(&ID);
+
+        switch (ID)
+        {
+        default:
+            break;
+        case 0:
+            pTechTactics = ITechTacticsPtr(new PlayerTechTactics());
+            break;
+        }
+
+        pTechTactics->read(pStream);
+        return pTechTactics;
     }
 }

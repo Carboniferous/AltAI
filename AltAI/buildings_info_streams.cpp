@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./buildings_info_streams.h"
 
 namespace AltAI
@@ -108,6 +110,10 @@ namespace AltAI
         if (!isEmpty(node.yield))
         {
             os << " extra plot yield = " << node.yield;
+        }
+        if (node.militaryProductionModifier != 0)
+        {
+            os << " military production modifier = " << node.militaryProductionModifier;
         }
         if (node.plotCond == &CvPlot::isWater)
         {
@@ -306,11 +312,6 @@ namespace AltAI
 
     }
 
-    //std::ostream& operator << (std::ostream& os, const BuildingInfo::ReligionNode& node)
-    //{
-    //    return os;
-    //}
-
     std::ostream& operator << (std::ostream& os, const BuildingInfo::MiscEffectNode& node)
     {
         os << "\n\t";
@@ -378,6 +379,12 @@ namespace AltAI
         {
             os << " religion type = " << gGlobals.getReligionInfo(node.religionType).getType();
         }
+        if (node.globalReligionType  != NO_RELIGION)
+        {
+            os << " global religion type = " << gGlobals.getReligionInfo(node.globalReligionType).getType();
+            os << " commerce change per city with religion = " << node.globalCommerceChange;
+        }
+
         return os;
     }
 

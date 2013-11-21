@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./events.h"
 
 namespace AltAI

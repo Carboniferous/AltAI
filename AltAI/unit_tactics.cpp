@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./unit_tactics.h"
 #include "./unit_tactics_visitors.h"
 #include "./unit_info_visitors.h"
@@ -9,6 +11,7 @@
 #include "./settler_manager.h"
 #include "./helper_fns.h"
 #include "./unit_analysis.h"
+#include "./tactic_selection_data.h"
 #include "./civ_helper.h"
 #include "./civ_log.h"
 #include "./iters.h"
@@ -71,7 +74,7 @@ namespace AltAI
         return (int)value;
     }
 
-    ConstructList makeUnitTactics(Player& player)
+    /*ConstructList makeUnitTactics(Player& player)
     {
         ConstructList unitTactics;
         const CvPlayer* pPlayer = player.getCvPlayer();
@@ -152,233 +155,233 @@ namespace AltAI
         }
 
         return unitTactics;
-    }
+    }*/
 
-    ConstructItem selectExpansionUnitTactics(const Player& player, const ConstructItem& constructItem)
-    {
-#ifdef ALTAI_DEBUG
-        // debug
-        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
-        std::ostream& os = pCivLog->getStream();
-        os << "\n(selectExpansionUnitTactics) checking: " << constructItem;
-#endif
-        ConstructItem selectedConstructItem(NO_UNIT);
+//    ConstructItem selectExpansionUnitTactics(const Player& player, const ConstructItem& constructItem)
+//    {
+//#ifdef ALTAI_DEBUG
+//        // debug
+//        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player.getCvPlayer());
+//        std::ostream& os = pCivLog->getStream();
+//        os << "\n(selectExpansionUnitTactics) checking: " << constructItem;
+//#endif
+//        ConstructItem selectedConstructItem(NO_UNIT);
+//
+//        // todo - need to include units which we also need resources for
+//        if (couldConstructUnit(player, 2, player.getAnalysis()->getUnitInfo(constructItem.unitType), false))
+//        {
+//            if (player.getMaxResearchRate() > 40 && !player.getSettlerManager()->getBestCitySites(140, 1).empty() ||
+//                player.getMaxResearchRate() > 60 && !player.getSettlerManager()->getBestCitySites(80, 1).empty())
+//            {
+//                if (constructItem.economicFlags & EconomicFlags::Output_Settler)
+//                {
+//                    selectedConstructItem.economicFlags |= EconomicFlags::Output_Settler;
+//                }
+//            }
+//
+//            if (constructItem.militaryFlags & MilitaryFlags::Output_Combat_Unit)
+//            {
+//                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Combat_Unit;
+//            }
+//            if (constructItem.militaryFlags & MilitaryFlags::Output_Collateral)
+//            {
+//                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Collateral;
+//            }
+//            if (constructItem.militaryFlags & MilitaryFlags::Output_Defence)
+//            {
+//                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Defence;
+//            }
+//            if (constructItem.militaryFlags & MilitaryFlags::Output_Extra_Mobility)
+//            {
+//                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Extra_Mobility;
+//            }
+//            if (constructItem.militaryFlags & MilitaryFlags::Output_Explore)
+//            {
+//                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Explore;
+//            }
+//
+//            // todo - count sites/improvements which need transport
+//            if (constructItem.militaryFlags & MilitaryFlags::Output_Unit_Transport)
+//            {
+//                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Unit_Transport;
+//            }
+//            
+//            if (!constructItem.possibleBuildTypes.empty())
+//            {
+//                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(constructItem.unitType);
+//
+//                boost::shared_ptr<MapAnalysis> pMapAnalysis = player.getAnalysis()->getMapAnalysis();
+//                CityIter cityIter(*player.getCvPlayer());
+//                CvCity* pCity;
+//
+//                std::map<BuildTypes, int> selectedBuildTypes;
+//
+//                while (pCity = cityIter())
+//                {
+//                    const CityImprovementManager& improvementManager = pMapAnalysis->getImprovementManager(pCity->getIDInfo());
+//                    const std::vector<CityImprovementManager::PlotImprovementData>& improvements = improvementManager.getImprovements();
+//
+//                    int possibleBuildCount = 0;
+//                    for (size_t i = 0, count = improvements.size(); i < count; ++i)
+//                    {
+//                        if (boost::get<5>(improvements[i]) == CityImprovementManager::Not_Built)
+//                        {
+//#ifdef ALTAI_DEBUG
+//                            //improvementManager.logImprovement(os, improvements[i]);
+//#endif
+//                            BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(boost::get<2>(improvements[i]));
+//                            std::map<BuildTypes, int>::const_iterator buildsIter = constructItem.possibleBuildTypes.find(buildType);
+//                            if (buildsIter != constructItem.possibleBuildTypes.end() && unitInfo.getBuilds(buildType))
+//                            {
+//#ifdef ALTAI_DEBUG
+//                                //os << "\nAdding selected build type: " << gGlobals.getBuildInfo(buildType).getType();
+//#endif
+//                                ++selectedBuildTypes[buildType];
+//                                ++possibleBuildCount;
+//                            }
+//
+//                            FeatureTypes featureType = boost::get<1>(improvements[i]);
+//                            if (featureType != NO_FEATURE)
+//                            {
+//                                buildType = GameDataAnalysis::getBuildTypeToRemoveFeature(featureType);
+//                                std::map<BuildTypes, int>::const_iterator buildsIter = constructItem.possibleBuildTypes.find(buildType);
+//                                if (buildsIter != constructItem.possibleBuildTypes.end() && unitInfo.getBuilds(buildType))
+//                                {
+//#ifdef ALTAI_DEBUG
+//                                    //os << "\nAdding selected build type: " << gGlobals.getBuildInfo(buildType).getType() << " for removing feature: " << gGlobals.getFeatureInfo(featureType).getType();
+//#endif
+//                                    ++selectedBuildTypes[buildType];
+//                                    ++possibleBuildCount;
+//                                }
+//                            }
+//                        }
+//                    }
+//                }
+//
+//                if (!selectedBuildTypes.empty())
+//                {
+//                    for (std::map<BuildTypes, int>::const_iterator ci(selectedBuildTypes.begin()), ciEnd(selectedBuildTypes.end()); ci != ciEnd; ++ci)
+//                    {
+//#ifdef ALTAI_DEBUG
+//                        os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
+//#endif
+//                        selectedConstructItem.possibleBuildTypes.insert(*ci);
+//                    }
+//                }
+//                else
+//                {
+//                    // check upcoming techs for new build types
+//                    ResearchTech currentResearchTech = player.getCurrentResearchTech();
+//                    std::vector<ImprovementTypes> possibleImprovements = currentResearchTech.possibleImprovements;
+//
+//                    if (currentResearchTech.techType != NO_TECH && currentResearchTech.targetTechType != currentResearchTech.techType)
+//                    {
+//                        currentResearchTech = player.getAnalysis()->getPlayerTactics()->getResearchTechData(currentResearchTech.targetTechType);
+//                        std::copy(currentResearchTech.possibleImprovements.begin(), currentResearchTech.possibleImprovements.end(), std::back_inserter(possibleImprovements));
+//                    }
+//
+//                    for (size_t i = 0, count = possibleImprovements.size(); i < count; ++i)
+//                    {
+//                        BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i]);
+//                        if (buildType != NO_BUILD && unitInfo.getBuilds(buildType))
+//                        {
+//    #ifdef ALTAI_DEBUG
+//                            os << "\nAdding tech selected build type: " << gGlobals.getBuildInfo(GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i])).getType();
+//    #endif
+//                            // add 1 as a count - TODO - source this better (store info in TechTactics?)
+//                            selectedBuildTypes.insert(std::make_pair(GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i]), 1));
+//                        }
+//                    }
+//
+//                    if (!selectedBuildTypes.empty())
+//                    {
+//                        for (std::map<BuildTypes, int>::const_iterator ci(selectedBuildTypes.begin()), ciEnd(selectedBuildTypes.end()); ci != ciEnd; ++ci)
+//                        {
+//    #ifdef ALTAI_DEBUG
+//                            os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
+//    #endif
+//                            selectedConstructItem.possibleBuildTypes.insert(*ci);
+//                        }
+//                    }
+//                }
+//            }
+//        
+//            // missionaries...
+//            if (!constructItem.religionTypes.empty())
+//            {
+//                if (constructItem.economicFlags & EconomicFlags::Output_Culture || constructItem.economicFlags & EconomicFlags::Output_Happy)
+//                {
+//                    CityIter iter(*player.getCvPlayer());
+//                    while (CvCity* pCity = iter())
+//                    {
+//                        const City& city = player.getCity(pCity);
+//                        if (constructItem.economicFlags & EconomicFlags::Output_Culture)
+//                        {
+//                            const CityDataPtr& pCityData = city.getCityData(); 
+//                            if (pCityData && pCityData->getNumUncontrolledPlots(true) > 0)
+//                            {
+//                                for (size_t i = 0, count = constructItem.religionTypes.size(); i < count; ++i)
+//                                {
+//                                    if (!pCity->isHasReligion(constructItem.religionTypes[i]))
+//                                    {
+//                                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Culture;
+//                                        if (std::find(selectedConstructItem.religionTypes.begin(), selectedConstructItem.religionTypes.end(), constructItem.religionTypes[i]) ==
+//                                            selectedConstructItem.religionTypes.end())
+//                                        {
+//                                            selectedConstructItem.religionTypes.push_back(constructItem.religionTypes[i]);
+//                                        }
+//                                    }
+//                                }
+//                            }
+//                        }
+//
+//                        if (constructItem.economicFlags & EconomicFlags::Output_Happy)
+//                        {
+//                            if (pCity->happyLevel() - pCity->unhappyLevel() < 0)
+//                            {
+//                                for (size_t i = 0, count = constructItem.religionTypes.size(); i < count; ++i)
+//                                {
+//                                    if (!pCity->isHasReligion(constructItem.religionTypes[i]))
+//                                    {
+//                                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Happy;
+//                                        if (std::find(selectedConstructItem.religionTypes.begin(), selectedConstructItem.religionTypes.end(), constructItem.religionTypes[i]) ==
+//                                            selectedConstructItem.religionTypes.end())
+//                                        {
+//                                            selectedConstructItem.religionTypes.push_back(constructItem.religionTypes[i]);
+//                                        }
+//                                    }
+//                                }
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//
+//        if (!selectedConstructItem.isEmpty())
+//        {
+//            std::vector<TechTypes> requiredTechs = getRequiredTechs(player.getAnalysis()->getUnitInfo(constructItem.unitType));
+//            for (size_t i = 0, count = requiredTechs.size(); i < count; ++i)
+//            {
+//                if (!player.getCivHelper()->hasTech(requiredTechs[i]))
+//                {
+//                    selectedConstructItem.requiredTechs.push_back(requiredTechs[i]);
+//                }
+//            }
+//            selectedConstructItem.militaryFlagValuesMap = constructItem.militaryFlagValuesMap;
+//            selectedConstructItem.unitType = constructItem.unitType;
+//#ifdef ALTAI_DEBUG
+//            os << "\nSelected build item: " << selectedConstructItem;
+//#endif
+//        }
+//
+//        return selectedConstructItem;
+//    }
 
-        // todo - need to include units which we also need resources for
-        if (couldConstructUnit(player, 2, player.getAnalysis()->getUnitInfo(constructItem.unitType), false))
-        {
-            if (player.getMaxResearchRate() > 40 && !player.getSettlerManager()->getBestCitySites(140, 1).empty() ||
-                player.getMaxResearchRate() > 60 && !player.getSettlerManager()->getBestCitySites(80, 1).empty())
-            {
-                if (constructItem.economicFlags & EconomicFlags::Output_Settler)
-                {
-                    selectedConstructItem.economicFlags |= EconomicFlags::Output_Settler;
-                }
-            }
-
-            if (constructItem.militaryFlags & MilitaryFlags::Output_Combat_Unit)
-            {
-                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Combat_Unit;
-            }
-            if (constructItem.militaryFlags & MilitaryFlags::Output_Collateral)
-            {
-                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Collateral;
-            }
-            if (constructItem.militaryFlags & MilitaryFlags::Output_Defence)
-            {
-                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Defence;
-            }
-            if (constructItem.militaryFlags & MilitaryFlags::Output_Extra_Mobility)
-            {
-                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Extra_Mobility;
-            }
-            if (constructItem.militaryFlags & MilitaryFlags::Output_Explore)
-            {
-                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Explore;
-            }
-
-            // todo - count sites/improvements which need transport
-            if (constructItem.militaryFlags & MilitaryFlags::Output_Unit_Transport)
-            {
-                selectedConstructItem.militaryFlags |= MilitaryFlags::Output_Unit_Transport;
-            }
-            
-            if (!constructItem.possibleBuildTypes.empty())
-            {
-                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(constructItem.unitType);
-
-                boost::shared_ptr<MapAnalysis> pMapAnalysis = player.getAnalysis()->getMapAnalysis();
-                CityIter cityIter(*player.getCvPlayer());
-                CvCity* pCity;
-
-                std::map<BuildTypes, int> selectedBuildTypes;
-
-                while (pCity = cityIter())
-                {
-                    const CityImprovementManager& improvementManager = pMapAnalysis->getImprovementManager(pCity->getIDInfo());
-                    const std::vector<CityImprovementManager::PlotImprovementData>& improvements = improvementManager.getImprovements();
-
-                    int possibleBuildCount = 0;
-                    for (size_t i = 0, count = improvements.size(); i < count; ++i)
-                    {
-                        if (boost::get<5>(improvements[i]) == CityImprovementManager::Not_Built)
-                        {
-#ifdef ALTAI_DEBUG
-                            //improvementManager.logImprovement(os, improvements[i]);
-#endif
-                            BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(boost::get<2>(improvements[i]));
-                            std::map<BuildTypes, int>::const_iterator buildsIter = constructItem.possibleBuildTypes.find(buildType);
-                            if (buildsIter != constructItem.possibleBuildTypes.end() && unitInfo.getBuilds(buildType))
-                            {
-#ifdef ALTAI_DEBUG
-                                //os << "\nAdding selected build type: " << gGlobals.getBuildInfo(buildType).getType();
-#endif
-                                ++selectedBuildTypes[buildType];
-                                ++possibleBuildCount;
-                            }
-
-                            FeatureTypes featureType = boost::get<1>(improvements[i]);
-                            if (featureType != NO_FEATURE)
-                            {
-                                buildType = GameDataAnalysis::getBuildTypeToRemoveFeature(featureType);
-                                std::map<BuildTypes, int>::const_iterator buildsIter = constructItem.possibleBuildTypes.find(buildType);
-                                if (buildsIter != constructItem.possibleBuildTypes.end() && unitInfo.getBuilds(buildType))
-                                {
-#ifdef ALTAI_DEBUG
-                                    //os << "\nAdding selected build type: " << gGlobals.getBuildInfo(buildType).getType() << " for removing feature: " << gGlobals.getFeatureInfo(featureType).getType();
-#endif
-                                    ++selectedBuildTypes[buildType];
-                                    ++possibleBuildCount;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (!selectedBuildTypes.empty())
-                {
-                    for (std::map<BuildTypes, int>::const_iterator ci(selectedBuildTypes.begin()), ciEnd(selectedBuildTypes.end()); ci != ciEnd; ++ci)
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
-#endif
-                        selectedConstructItem.possibleBuildTypes.insert(*ci);
-                    }
-                }
-                else
-                {
-                    // check upcoming techs for new build types
-                    ResearchTech currentResearchTech = player.getCurrentResearchTech();
-                    std::vector<ImprovementTypes> possibleImprovements = currentResearchTech.possibleImprovements;
-
-                    if (currentResearchTech.techType != NO_TECH && currentResearchTech.targetTechType != currentResearchTech.techType)
-                    {
-                        currentResearchTech = player.getAnalysis()->getPlayerTactics()->getResearchTechData(currentResearchTech.targetTechType);
-                        std::copy(currentResearchTech.possibleImprovements.begin(), currentResearchTech.possibleImprovements.end(), std::back_inserter(possibleImprovements));
-                    }
-
-                    for (size_t i = 0, count = possibleImprovements.size(); i < count; ++i)
-                    {
-                        BuildTypes buildType = GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i]);
-                        if (buildType != NO_BUILD && unitInfo.getBuilds(buildType))
-                        {
-    #ifdef ALTAI_DEBUG
-                            os << "\nAdding tech selected build type: " << gGlobals.getBuildInfo(GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i])).getType();
-    #endif
-                            // add 1 as a count - TODO - source this better (store info in TechTactics?)
-                            selectedBuildTypes.insert(std::make_pair(GameDataAnalysis::getBuildTypeForImprovementType(possibleImprovements[i]), 1));
-                        }
-                    }
-
-                    if (!selectedBuildTypes.empty())
-                    {
-                        for (std::map<BuildTypes, int>::const_iterator ci(selectedBuildTypes.begin()), ciEnd(selectedBuildTypes.end()); ci != ciEnd; ++ci)
-                        {
-    #ifdef ALTAI_DEBUG
-                            os << "\nCopying selected build type: " << gGlobals.getBuildInfo(ci->first).getType();
-    #endif
-                            selectedConstructItem.possibleBuildTypes.insert(*ci);
-                        }
-                    }
-                }
-            }
-        
-            // missionaries...
-            if (!constructItem.religionTypes.empty())
-            {
-                if (constructItem.economicFlags & EconomicFlags::Output_Culture || constructItem.economicFlags & EconomicFlags::Output_Happy)
-                {
-                    CityIter iter(*player.getCvPlayer());
-                    while (CvCity* pCity = iter())
-                    {
-                        const City& city = player.getCity(pCity->getID());
-                        if (constructItem.economicFlags & EconomicFlags::Output_Culture)
-                        {
-                            const CityDataPtr& pCityData = city.getCityData(); 
-                            if (pCityData && pCityData->getNumUncontrolledPlots(true) > 0)
-                            {
-                                for (size_t i = 0, count = constructItem.religionTypes.size(); i < count; ++i)
-                                {
-                                    if (!pCity->isHasReligion(constructItem.religionTypes[i]))
-                                    {
-                                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Culture;
-                                        if (std::find(selectedConstructItem.religionTypes.begin(), selectedConstructItem.religionTypes.end(), constructItem.religionTypes[i]) ==
-                                            selectedConstructItem.religionTypes.end())
-                                        {
-                                            selectedConstructItem.religionTypes.push_back(constructItem.religionTypes[i]);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (constructItem.economicFlags & EconomicFlags::Output_Happy)
-                        {
-                            if (pCity->happyLevel() - pCity->unhappyLevel() < 0)
-                            {
-                                for (size_t i = 0, count = constructItem.religionTypes.size(); i < count; ++i)
-                                {
-                                    if (!pCity->isHasReligion(constructItem.religionTypes[i]))
-                                    {
-                                        selectedConstructItem.economicFlags |= EconomicFlags::Output_Happy;
-                                        if (std::find(selectedConstructItem.religionTypes.begin(), selectedConstructItem.religionTypes.end(), constructItem.religionTypes[i]) ==
-                                            selectedConstructItem.religionTypes.end())
-                                        {
-                                            selectedConstructItem.religionTypes.push_back(constructItem.religionTypes[i]);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!selectedConstructItem.isEmpty())
-        {
-            std::vector<TechTypes> requiredTechs = getRequiredTechs(player.getAnalysis()->getUnitInfo(constructItem.unitType));
-            for (size_t i = 0, count = requiredTechs.size(); i < count; ++i)
-            {
-                if (!player.getCivHelper()->hasTech(requiredTechs[i]))
-                {
-                    selectedConstructItem.requiredTechs.push_back(requiredTechs[i]);
-                }
-            }
-            selectedConstructItem.militaryFlagValuesMap = constructItem.militaryFlagValuesMap;
-            selectedConstructItem.unitType = constructItem.unitType;
-#ifdef ALTAI_DEBUG
-            os << "\nSelected build item: " << selectedConstructItem;
-#endif
-        }
-
-        return selectedConstructItem;
-    }
-
-    UnitTypes getConstructItem(const PlayerTactics& playerTactics)
+    /*UnitTypes getConstructItem(const PlayerTactics& playerTactics)
     {
         return NO_UNIT;
-    }
+    }*/
 
     std::pair<std::vector<UnitTypes>, std::vector<UnitTypes> > getActualAndPossibleCombatUnits(const Player& player, const CvCity* pCity, DomainTypes domainType)
     {
@@ -407,11 +410,11 @@ namespace AltAI
                         if (pCity)
                         {
                             ICityUnitTacticsPtr pCityTactics = ci->second->getCityTactics(pCity->getIDInfo());
-                            depsSatisfied = pCityTactics && pCityTactics->areDependenciesSatisfied();
+                            depsSatisfied = pCityTactics && pCityTactics->areDependenciesSatisfied(IDependentTactic::Ignore_None);
                         }
                         else
                         {
-                            depsSatisfied = ci->second->areDependenciesSatisfied(player);
+                            depsSatisfied = ci->second->areDependenciesSatisfied(player, IDependentTactic::Ignore_None);
                         }
                         bool couldConstruct = couldConstructUnit(player, 0, pUnitInfo, false);
 //#ifdef ALTAI_DEBUG
@@ -432,5 +435,22 @@ namespace AltAI
         }
 
         return std::make_pair(combatUnits, possibleCombatUnits);
+    }
+
+    ConstructItem getSpecialistBuild(const PlayerTactics& playerTactics, UnitTypes unitType)
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*playerTactics.player.getCvPlayer())->getStream();
+#endif
+        PlayerTactics::UnitTacticsMap::const_iterator unitIter = playerTactics.unitTacticsMap_.find(unitType);
+        TacticSelectionData selectionData;
+
+        if (unitIter != playerTactics.unitTacticsMap_.end())
+        {
+            unitIter->second->update(playerTactics.player);
+            unitIter->second->apply(selectionData);
+        }
+
+        return ConstructItem();
     }
 }

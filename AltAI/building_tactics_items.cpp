@@ -1,10 +1,14 @@
+#include "AltAI.h"
+
 #include "./building_tactics_items.h"
+#include "./tactic_selection_data.h"
 #include "./city_data.h"
 #include "./game.h"
 #include "./player.h"
 #include "./city.h"
 #include "./city_tactics.h"
 #include "./civ_log.h"
+#include "./helper_fns.h"
 #include "./save_utils.h"
 
 namespace AltAI
@@ -12,15 +16,16 @@ namespace AltAI
     void EconomicBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
         const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity->getID());
+        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
 
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
-        if (pCityBuildingTactics->areDependenciesSatisfied() && pCity->canConstruct(pCityBuildingTactics->getBuildingType(), true) && !ladder.buildings.empty())
+        if (!ladder.buildings.empty())
         {
             EconomicBuildingValue economicValue;
 
             economicValue.buildingType = pCityBuildingTactics->getBuildingType();
+            economicValue.city = pCityBuildingTactics->getCity();
             economicValue.output = ladder.getOutput() - city.getCurrentOutputProjection().getOutput();
 
             economicValue.nTurns = ladder.buildings[0].first;
@@ -154,22 +159,27 @@ namespace AltAI
     void CultureBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
         const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity->getID());
+        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
 
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
-        if (pCityBuildingTactics->areDependenciesSatisfied() && pCity->canConstruct(pCityBuildingTactics->getBuildingType(), true) && !ladder.buildings.empty())
+        if (!ladder.buildings.empty())
         {
             CultureBuildingValue cultureValue;
 
             cultureValue.buildingType = pCityBuildingTactics->getBuildingType();
+            cultureValue.city = pCityBuildingTactics->getCity();
             cultureValue.output = ladder.getOutput() - city.getCurrentOutputProjection().getOutput();
             cultureValue.nTurns = ladder.buildings[0].first;
 
             bool needCulture = pCity->getCultureLevel() == 1 && pCity->getCommerceRate(COMMERCE_CULTURE) == 0;
             bool culturePressure = city.getCityData()->getNumUncontrolledPlots(true) > 0;
 
-            if (needCulture || culturePressure)
+            if (needCulture && !isLimitedWonderClass(getBuildingClass(cultureValue.buildingType)))
+            {
+                selectionData.smallCultureBuildings.insert(cultureValue);
+            }
+            else if (culturePressure)
             {
                 selectionData.smallCultureBuildings.insert(cultureValue);
             }
@@ -290,11 +300,11 @@ namespace AltAI
     void UnitExperienceTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
         const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity->getID());
+        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
 
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
-        if (pCityBuildingTactics->areDependenciesSatisfied() && !ladder.buildings.empty())
+        if (!ladder.buildings.empty())
         {
             MilitaryBuildingValue buildingValue;
             buildingValue.freeExperience = freeExperience;

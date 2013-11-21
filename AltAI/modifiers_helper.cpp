@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./modifiers_helper.h"
 #include "./building_helper.h"
 #include "./religion_helper.h"

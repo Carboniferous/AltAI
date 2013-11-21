@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./tech_info_visitors.h"
 #include "./tech_info.h"
 #include "./tech_info_streams.h"
@@ -615,26 +617,48 @@ namespace AltAI
         return boost::apply_visitor(TechRevealBonusVisitor(), pTechInfo->getInfo());
     }
 
+    namespace
+    {
+        std::list<TechTypes> calculateResearchTechs(TechTypes techType, PlayerTypes playerType)
+        {
+            std::list<TechTypes> techs;
+
+            if (techType != NO_TECH)
+            {
+                boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
+                boost::shared_ptr<CivHelper> pCivHelper = pPlayer->getCivHelper();
+
+                PushTechResearchVisitor visitor(playerType);
+                bool canResearch = boost::apply_visitor(visitor, pPlayer->getAnalysis()->getTechInfo(techType)->getInfo());
+
+                if (canResearch)
+                {
+                    techs = pCivHelper->getResearchTechs();
+                    pCivHelper->clearResearchTechs();
+                }
+            }
+
+            return techs;
+        }
+    }
+
     int calculateTechResearchDepth(TechTypes techType, PlayerTypes playerType)
     {
-        if (techType == NO_TECH)
+        return calculateResearchTechs(techType, playerType).size();
+    }
+
+    int calculateTechResearchCost(TechTypes techType, PlayerTypes playerType)
+    {
+        std::list<TechTypes> techs = calculateResearchTechs(techType, playerType);
+
+        int cost = 0;
+            
+        for (std::list<TechTypes>::const_iterator ci(techs.begin()), ciEnd(techs.end()); ci != ciEnd; ++ci)
         {
-            return 0;
+            cost += CvTeamAI::getTeam(CvPlayerAI::getPlayer(playerType).getTeam()).getResearchLeft(*ci);
         }
-        else
-        {
-            boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
-            boost::shared_ptr<CivHelper> pCivHelper = pPlayer->getCivHelper();
 
-            PushTechResearchVisitor visitor(playerType);
-            bool canResearch = boost::apply_visitor(visitor, pPlayer->getAnalysis()->getTechInfo(techType)->getInfo());
-
-            const std::list<TechTypes>& techs = pCivHelper->getResearchTechs();
-            const int depth = techs.size();
-
-            pCivHelper->clearResearchTechs();
-            return depth;
-        }
+        return cost;
     }
 
     std::list<TechTypes> pushTechAndPrereqs(TechTypes techType, const Player& player)

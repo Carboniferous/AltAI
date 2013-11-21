@@ -19,17 +19,21 @@ namespace AltAI
 
         void updateBuildingTactics();
         void updateTechTactics();
-        void updateUnitTactics();
-        void updateProjectTactics();
+        //void updateUnitTactics();
+        //void updateProjectTactics();
 
-        void updateFirstToTechTactics(TechTypes techType);
+        void makeSpecialistUnitTactics();
 
-        void selectTechTactics();
-        void selectUnitTactics();
-        void selectBuildingTactics();
-        void selectBuildingTactics(const City& city);
-        void selectProjectTactics();
-        void selectProjectTactics(const City& city);
+        //void updateFirstToTechTactics(TechTypes techType);
+
+        //void selectTechTactics();
+        //void selectUnitTactics();
+        //void selectCityTactics();
+        //void selectBuildingTactics();
+        //void selectBuildingTactics(const City& city);
+        //void selectProjectTactics();
+        //void selectProjectTactics(const City& city);
+        
 
         void deleteCity(const CvCity* pCity);
 
@@ -57,18 +61,17 @@ namespace AltAI
         void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
 
         ConstructItem getBuildItem(const City& city);
-
-        void selectCityTactics();
+        ConstructItem getSpecialistBuild(UnitTypes unitType);
 
         std::map<IDInfo, std::vector<BuildingTypes> > getBuildingsCityCanAssistWith(IDInfo city) const;
         std::map<BuildingTypes, std::vector<BuildingTypes> > getPossibleDependentBuildings(IDInfo city) const;
 
         void debugTactics();
 
-        std::list<ResearchTech> possibleTechTactics_, selectedTechTactics_;
-        ConstructList possibleUnitTactics_, selectedUnitTactics_;
-        ConstructList possibleBuildingTactics_, possibleProjectTactics_;
-        std::map<IDInfo, ConstructList> selectedCityBuildingTactics_, selectedCityProjectTactics_;
+        //std::list<ResearchTech> possibleTechTactics_, selectedTechTactics_;
+        //ConstructList possibleUnitTactics_, selectedUnitTactics_;
+        //ConstructList possibleBuildingTactics_, possibleProjectTactics_;
+        //std::map<IDInfo, ConstructList> selectedCityBuildingTactics_, selectedCityProjectTactics_;
 
         // ordinary buildings tactics, keyed by city IDInfo
         typedef std::map<BuildingTypes, ICityBuildingTacticsPtr> CityBuildingTacticsList;
@@ -91,6 +94,10 @@ namespace AltAI
         // unit tactics
         typedef std::map<UnitTypes, IUnitTacticsPtr> UnitTacticsMap;
         UnitTacticsMap unitTacticsMap_;
+
+        // tech tactics
+        typedef std::map<TechTypes, ITechTacticsPtr> TechTacticsMap;
+        TechTacticsMap techTacticsMap_;
 
         Player& player;
 

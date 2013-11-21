@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./city_log.h"
 #include "./city_data.h"
 #include "./city_optimiser.h"

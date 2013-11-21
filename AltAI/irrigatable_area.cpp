@@ -1,3 +1,4 @@
+#include "AltAI.h"
 #include "./irrigatable_area.h"
 
 namespace AltAI

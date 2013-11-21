@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./tech_info.h"
 #include "./helper_fns.h"
 

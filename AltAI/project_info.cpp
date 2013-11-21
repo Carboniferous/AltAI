@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./project_info.h"
 
 namespace AltAI

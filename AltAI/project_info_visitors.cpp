@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./project_info_visitors.h"
 #include "./project_info.h"
 #include "./project_info_streams.h"

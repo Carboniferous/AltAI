@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./plot_info.h"
 #include "./irrigatable_area.h"
 #include "./game.h"

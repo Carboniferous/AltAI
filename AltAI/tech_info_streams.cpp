@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./tech_info_streams.h"
 
 namespace AltAI

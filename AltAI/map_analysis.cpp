@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include <fstream>
 
 #include "./map_analysis.h"
@@ -378,6 +380,62 @@ namespace AltAI
         return resourceCount;
     }
 
+    std::vector<int> MapAnalysis::getAccessibleSubAreas(DomainTypes domainType) const
+    {
+        std::vector<int> accessibleSubAreas;
+        const CvMap& theMap = gGlobals.getMap();
+
+        for (SubAreaMapConstIter ci(revealedSubAreaDataMap_.begin()), ciEnd(revealedSubAreaDataMap_.end()); ci != ciEnd; ++ci)
+        {
+            boost::shared_ptr<SubArea> pSubArea = theMap.getSubArea(ci->first);
+            if (!pSubArea->isImpassable())
+            {
+                // add domain type to sub area class?
+                if (pSubArea->isWater())
+                {
+                    if (domainType == DOMAIN_SEA)
+                    {
+                        accessibleSubAreas.push_back(ci->first);
+                    }
+                }
+                else if (domainType == DOMAIN_LAND)
+                {
+                    accessibleSubAreas.push_back(ci->first);
+                }
+            }
+        }
+
+        return accessibleSubAreas;
+    }
+
+    std::vector<CvPlot*> MapAnalysis::getResourcePlots(const std::vector<BonusTypes>& bonusTypes, int subArea) const
+    {
+        std::vector<CvPlot*> resourcePlots;
+        const CvMap& theMap = gGlobals.getMap();
+
+        ResourcesMapConstIter ci = resourcesMap_.find(subArea);
+        if (ci != resourcesMap_.end())
+        {
+            for (size_t i = 0, count = bonusTypes.size(); i < count; ++i)
+            {
+                std::map<BonusTypes, ResourceData::ResourcePlotData>::const_iterator bi(ci->second.subAreaResourcesMap.find(bonusTypes[i]));
+                if (bi != ci->second.subAreaResourcesMap.end())
+                {
+                    for (size_t i = 0, count = bi->second.size(); i < count; ++i)
+                    {
+                        if (bi->second[i].second == player_.getPlayerID())
+                        {
+                            resourcePlots.push_back(theMap.plot(bi->second[i].first.iX, bi->second[i].first.iY));
+                        }              
+                    }
+                }
+            }
+        }
+
+        // todo - check for duplicates
+        return resourcePlots;
+    }
+
     // initialisation functions
     void MapAnalysis::init()
     {
@@ -679,7 +737,7 @@ namespace AltAI
                         {
                             const CvCity* pCity = pLoopPlot->getPlotCity();
                             player_.setCityDirty(pCity->getIDInfo());
-                            player_.getCity(pCity->getID()).setFlag(City::NeedsImprovementCalcs);
+                            player_.getCity(pCity).setFlag(City::NeedsImprovementCalcs);
                         }
                     }
                 }
@@ -702,7 +760,7 @@ namespace AltAI
                             {
                                 const CvCity* pCity = pLoopPlot->getPlotCity();
                                 player_.setCityDirty(pCity->getIDInfo());
-                                player_.getCity(pCity->getID()).setFlag(City::NeedsImprovementCalcs);
+                                player_.getCity(pCity).setFlag(City::NeedsImprovementCalcs);
                             }
                         }
                     }
@@ -1032,7 +1090,8 @@ namespace AltAI
 
     void MapAnalysis::updateKeysValueMap_(int key, const PlotInfo::PlotInfoNode& plotInfo)
     {
-        plotValues_.keysValueMap[key] = getYields(plotInfo, player_.getPlayerID(), DotMapTechDepth);
+        plotValues_.keysValueMap[key] = getYields(plotInfo, player_.getPlayerID(),
+            player_.getCvPlayer()->isBarbarian() ? BarbDotMapTechDepth : DotMapTechDepth);
     }
 
     int MapAnalysis::updateAreaCounts_(int areaID)
@@ -1342,7 +1401,7 @@ namespace AltAI
         for (size_t k = 0, count = deltas.size(); k < count; ++k)
         {
             const CvCity* pCity = getCity(deltas[k].first);
-            TotalOutputWeights outputWeights = player_.getCity(pCity->getID()).getMaxOutputWeights();
+            TotalOutputWeights outputWeights = player_.getCity(pCity).getMaxOutputWeights();
             TotalOutputValueFunctor valueF(deltas[k].second.second);
 
             if (valueF(deltas[k].second.first) > bestCityValue)
@@ -1422,7 +1481,7 @@ namespace AltAI
             {
                 if (k > 0) os << ", ";
                 const CvCity* pCity = getCity(deltas[k].first);
-                //TotalOutputWeights outputWeights = player_.getCity(pCity->getID()).getMaxOutputWeights();
+                //TotalOutputWeights outputWeights = player_.getCity(pCity).getMaxOutputWeights();
                 TotalOutputValueFunctor valueF(deltas[k].second.second);
 
                 os << " city: " << narrow(pCity->getName()) << " = " << deltas[k].second.first << " value = " << valueF(deltas[k].second.first) << " (weights = " << deltas[k].second.second << ")";

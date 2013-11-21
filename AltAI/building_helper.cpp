@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./building_helper.h"
 #include "./religion_helper.h"
 #include "./modifiers_helper.h"
@@ -210,11 +212,12 @@ namespace AltAI
             //os << " total = " << totalCommerce;
             
             ReligionTypes buildingReligionType = (ReligionTypes)buildingInfo.getReligionType();
+            ReligionTypes globalReligionType = (ReligionTypes)buildingInfo.getGlobalReligionCommerce();
 
-            if (buildingInfo.getGlobalReligionCommerce() != NO_RELIGION)  // shrine
+            if (globalReligionType != NO_RELIGION)  // shrine
     	    {
-                ReligionTypes religionType = (ReligionTypes)buildingInfo.getGlobalReligionCommerce();
-			    totalCommerce += Commerce(gGlobals.getReligionInfo(religionType).getGlobalReligionCommerceArray()) * data.getReligionHelper()->getReligionCount(religionType) * activeBuildingCount;
+			    totalCommerce += Commerce(gGlobals.getReligionInfo(globalReligionType).getGlobalReligionCommerceArray()) * 
+                    data.getReligionHelper()->getReligionCount(globalReligionType) * activeBuildingCount;
 		    }
 
             for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)

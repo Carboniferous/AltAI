@@ -1,4 +1,7 @@
 #include "./trade_route_helper.h"
+#include "AltAI.h"
+
+#include "./trade_route_helper.h"
 #include "./iters.h"
 #include "./city_log.h"
 

@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./resource_info_visitors.h"
 #include "./resource_info.h"
 #include "./resource_info_streams.h"
@@ -313,5 +315,10 @@ namespace AltAI
     {
         boost::apply_visitor(CityOutputUpdater(data, isAdding), pResourceInfo->getInfo());
         data.recalcOutputs();
+    }
+
+    std::vector<BuildTypes> getBuildTypes(const boost::shared_ptr<ResourceInfo>& pResourceInfo)
+    {
+        return pResourceInfo->getBuildTypes();
     }
 }

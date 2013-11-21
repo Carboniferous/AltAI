@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./error_log.h"
 #include "./helper_fns.h"
 

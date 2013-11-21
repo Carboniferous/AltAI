@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./building_tactics_deps.h"
 #include "./game.h"
 #include "./player.h"
@@ -27,14 +29,14 @@ namespace AltAI
         pCityData->getCivHelper()->removeTech(techType_);
     }
 
-    bool ResearchTechDependency::required(const CvCity* pCity) const
+    bool ResearchTechDependency::required(const CvCity* pCity, int ignoreFlags) const
     {
-        return !CvTeamAI::getTeam(pCity->getTeam()).isHasTech(techType_);
+        return ignoreFlags & IDependentTactic::Ignore_Techs ? false : !gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCivHelper()->hasTech(techType_);
     }
 
-    bool ResearchTechDependency::required(const Player& player) const
+    bool ResearchTechDependency::required(const Player& player, int ignoreFlags) const
     {
-        return !CvTeamAI::getTeam(player.getTeamID()).isHasTech(techType_);
+        return ignoreFlags & IDependentTactic::Ignore_Techs ? false : !player.getCivHelper()->hasTech(techType_);
     }
 
     bool ResearchTechDependency::removeable() const
@@ -45,6 +47,11 @@ namespace AltAI
     std::pair<BuildQueueTypes, int> ResearchTechDependency::getBuildItem() const
     {
         return std::make_pair(NoItem, -1);
+    }
+
+    std::pair<int, int> ResearchTechDependency::getDependencyItem() const
+    {
+        return std::make_pair(ID, techType_);
     }
 
     void ResearchTechDependency::debug(std::ostream& os) const
@@ -80,13 +87,17 @@ namespace AltAI
         pCityData->getBuildingsHelper()->changeNumRealBuildings(buildingType_, false);
     }
 
-    bool CityBuildingDependency::required(const CvCity* pCity) const
+    bool CityBuildingDependency::required(const CvCity* pCity, int ignoreFlags) const
     {
-        return pCity->getNumBuilding(buildingType_) == 0;
+        return ignoreFlags & IDependentTactic::Ignore_City_Buildings ? false : pCity->getNumBuilding(buildingType_) == 0;
     }
 
-    bool CityBuildingDependency::required(const Player& player) const
+    bool CityBuildingDependency::required(const Player& player, int ignoreFlags) const
     {
+        if (ignoreFlags & IDependentTactic::Ignore_City_Buildings)
+        {
+            return false;
+        }
         // treat as meaning do we have the building anywhere
         int buildingCount = 0;
         CityIter iter(*player.getCvPlayer());
@@ -105,6 +116,11 @@ namespace AltAI
     std::pair<BuildQueueTypes, int> CityBuildingDependency::getBuildItem() const
     {
         return std::make_pair(BuildingItem, buildingType_);
+    }
+
+    std::pair<int, int> CityBuildingDependency::getDependencyItem() const
+    {
+        return std::make_pair(ID, buildingType_);
     }
 
     void CityBuildingDependency::debug(std::ostream& os) const
@@ -141,8 +157,13 @@ namespace AltAI
         // nothing to do - presumes city will also get building through likely CityBuildingDependency
     }
 
-    bool CivBuildingDependency::required(const CvCity* pCity) const
+    bool CivBuildingDependency::required(const CvCity* pCity, int ignoreFlags) const
     {
+        if (ignoreFlags & IDependentTactic::Ignore_Civ_Buildings)
+        {
+            return false;
+        }
+
         const CvPlayerAI& player = CvPlayerAI::getPlayer(pCity->getOwner());
 
         const BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(buildingType_).getBuildingClassType(),
@@ -151,8 +172,13 @@ namespace AltAI
         return player.getBuildingClassCount(buildingClassType) < (1 + player.getBuildingClassCountPlusMaking(sourceBuildingClassType)) * count_;
     }
 
-    bool CivBuildingDependency::required(const Player& player) const
+    bool CivBuildingDependency::required(const Player& player, int ignoreFlags) const
     {
+        if (ignoreFlags & IDependentTactic::Ignore_Civ_Buildings)
+        {
+            return false;
+        }
+
         const BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(buildingType_).getBuildingClassType(),
             sourceBuildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(sourceBuildingType_).getBuildingClassType();
 
@@ -167,6 +193,11 @@ namespace AltAI
     std::pair<BuildQueueTypes, int> CivBuildingDependency::getBuildItem() const
     {
         return std::make_pair(BuildingItem, buildingType_);
+    }
+
+    std::pair<int, int> CivBuildingDependency::getDependencyItem() const
+    {
+        return std::make_pair(ID, buildingType_);
     }
 
     void CivBuildingDependency::debug(std::ostream& os) const
@@ -207,14 +238,14 @@ namespace AltAI
         pCityData->getReligionHelper()->changeReligionCount(religionType_, -1);
     }
 
-    bool ReligiousDependency::required(const CvCity* pCity) const
+    bool ReligiousDependency::required(const CvCity* pCity, int ignoreFlags) const
     {
-        return !pCity->isHasReligion(religionType_);
+        return ignoreFlags & IDependentTactic::Ignore_Religions ? false : !pCity->isHasReligion(religionType_);
     }
 
-    bool ReligiousDependency::required(const Player& player) const
+    bool ReligiousDependency::required(const Player& player, int ignoreFlags) const
     {
-        return player.getCvPlayer()->getHasReligionCount(religionType_) == 0;
+        return ignoreFlags & IDependentTactic::Ignore_Religions ? false : player.getCvPlayer()->getHasReligionCount(religionType_) == 0;
     }
 
     bool ReligiousDependency::removeable() const
@@ -225,6 +256,11 @@ namespace AltAI
     std::pair<BuildQueueTypes, int> ReligiousDependency::getBuildItem() const
     {
         return std::make_pair(UnitItem, unitType_);
+    }
+
+    std::pair<int, int> ReligiousDependency::getDependencyItem() const
+    {
+        return std::make_pair(ID, religionType_);
     }
 
     void ReligiousDependency::debug(std::ostream& os) const
@@ -274,13 +310,13 @@ namespace AltAI
         }
     }
 
-    bool CityBonusDependency::required(const CvCity* pCity) const
+    bool CityBonusDependency::required(const CvCity* pCity, int ignoreFlags) const
     {
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity->getOwner()))->getStream();
-//        os << "\nChecking CityBonusDependency for city: " << narrow(pCity->getName());
-//        debug(os);
-//#endif
+        if (ignoreFlags & IDependentTactic::Ignore_Resources)
+        {
+            return false;
+        }
+
         bool foundAny = false;
         for (size_t i = 0, count = bonusTypes_.size(); i < count; ++i)
         {
@@ -291,25 +327,19 @@ namespace AltAI
             }
             else if (!isOr_)
             {
-//#ifdef ALTAI_DEBUG
-//                os << " return = " << true;
-//#endif
                 return true;
             }
         }
-//#ifdef ALTAI_DEBUG
-//        os << " return = " << (isOr_ ? !foundAny : false);
-//#endif
         return isOr_ ? !foundAny : false;
     }
 
-    bool CityBonusDependency::required(const Player& player) const
+    bool CityBonusDependency::required(const Player& player, int ignoreFlags) const
     {
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-//        os << "\nChecking CityBonusDependency: (player) ";
-//        debug(os);
-//#endif
+        if (ignoreFlags & IDependentTactic::Ignore_Resources)
+        {
+            return false;
+        }
+
         bool foundAny = false;
         for (size_t i = 0, count = bonusTypes_.size(); i < count; ++i)
         {
@@ -320,15 +350,9 @@ namespace AltAI
             }
             else if (!isOr_)
             {
-//#ifdef ALTAI_DEBUG
-//                os << " return = " << true;
-//#endif
                 return true;
             }
         }
-//#ifdef ALTAI_DEBUG
-//        os << " return = " << (isOr_ ? !foundAny : false);
-//#endif
         return isOr_ ? !foundAny : false;
     }
 
@@ -340,6 +364,11 @@ namespace AltAI
     std::pair<BuildQueueTypes, int> CityBonusDependency::getBuildItem() const
     {
         return std::make_pair(UnitItem, unitType_);
+    }
+
+    std::pair<int, int> CityBonusDependency::getDependencyItem() const
+    {
+        return std::make_pair(ID, bonusTypes_.empty() ? NO_BONUS : bonusTypes_[0]);
     }
 
     void CityBonusDependency::debug(std::ostream& os) const

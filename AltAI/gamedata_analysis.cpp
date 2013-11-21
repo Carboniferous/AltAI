@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./gamedata_analysis.h"
 #include "./player.h"
 #include "./city.h"
@@ -183,6 +185,43 @@ namespace AltAI
         }
 
         return NO_BUILD;
+    }
+
+    GameDataAnalysis::BuildsResourcesMap GameDataAnalysis::getBonusTypesForBuildTypes_()
+    {
+        BuildsResourcesMap bonusBuildsMap;
+
+        for (int i = 0, bonusCount = gGlobals.getNumBonusInfos(); i < bonusCount; ++i)
+        {
+            for (int j = 0, improvementCount = gGlobals.getNumImprovementInfos(); j < improvementCount; ++j)
+            {
+                const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo((ImprovementTypes)j);
+                if (improvementInfo.isImprovementBonusMakesValid((BonusTypes)i))
+                {
+                    BuildTypes buildType = getBuildTypeForImprovementType((ImprovementTypes)j);
+                    if (buildType != NO_BUILD)
+                    {
+                        bonusBuildsMap.insert(std::make_pair(buildType, (BonusTypes)i));
+                    }
+                }
+            }
+        }
+
+        return bonusBuildsMap;
+    }
+
+    std::vector<BonusTypes> GameDataAnalysis::getBonusTypesForBuildType(BuildTypes buildType)
+    {
+        static BuildsResourcesMap bonusBuildsMap = getBonusTypesForBuildTypes_();
+
+        std::vector<BonusTypes> bonusTypes;
+        const std::pair<BuildsResourcesMap::const_iterator, BuildsResourcesMap::const_iterator> iters = bonusBuildsMap.equal_range(buildType);
+
+        for (BuildsResourcesMap::const_iterator ci(iters.first), ciEnd(iters.second); ci != ciEnd; ++ci)
+        {
+            bonusTypes.push_back(ci->second);
+        }
+        return bonusTypes;
     }
 
     TechTypes GameDataAnalysis::getTechTypeForRouteType(RouteTypes routeType)

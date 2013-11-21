@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./corporation_helper.h"
 #include "./city_data.h"
 

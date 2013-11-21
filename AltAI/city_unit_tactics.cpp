@@ -1,11 +1,16 @@
+#include "AltAI.h"
+
 #include "./city_unit_tactics.h"
+#include "./tactic_selection_data.h"
 #include "./city_data.h"
+#include "./game.h"
 #include "./player.h"
 #include "./city.h"
 #include "./player_analysis.h"
 #include "./city_tactics.h"
 #include "./building_tactics_deps.h"
 #include "./save_utils.h"
+#include "./civ_log.h"
 
 namespace AltAI
 {
@@ -28,7 +33,7 @@ namespace AltAI
         dependentTactics_.push_back(pDependentTactic);
     }
 
-    std::vector<IDependentTacticPtr> CityUnitTactic::getDependencies() const
+    const std::vector<IDependentTacticPtr>& CityUnitTactic::getDependencies() const
     {
         return dependentTactics_;
     }
@@ -50,13 +55,13 @@ namespace AltAI
         dependentTactics_.erase(iter, dependentTactics_.end());
     }
 
-    bool CityUnitTactic::areDependenciesSatisfied() const
+    bool CityUnitTactic::areDependenciesSatisfied(int ignoreFlags) const
     {
         const CvCity* pCity = ::getCity(city_);
 
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {            
-            if (pCity && dependentTactics_[i]->required(pCity))
+            if (pCity && dependentTactics_[i]->required(pCity, ignoreFlags))
             {
                 return false;
             }
@@ -64,12 +69,37 @@ namespace AltAI
         return true;
     }
 
+    void CityUnitTactic::apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags)
+    {
+        const std::vector<DependencyItem> depItems = getDepItems(ignoreFlags);
+
+        const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner);
+        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+        os << "\nunit tactics deps: ";
+
+        for (size_t i = 0, depCount = depItems.size(); i < depCount; ++i)
+        {
+            debugDepItem(depItems[i], os);
+            apply_(tacticSelectionDataMap[depItems[i]]);
+        }
+        debug(os);
+    }
+
     void CityUnitTactic::apply(TacticSelectionData& selectionData)
+    {
+        if (areDependenciesSatisfied(IDependentTactic::Ignore_None))
+        {
+            apply_(selectionData);
+        }
+    }
+
+    void CityUnitTactic::apply_(TacticSelectionData& selectionData)
     {
         for (std::list<ICityUnitTacticPtr>::iterator iter(unitTactics_.begin()), endIter(unitTactics_.end()); iter != endIter; ++iter)
         {
             (*iter)->apply(shared_from_this(), selectionData);
         }
+
     }
 
     UnitTypes CityUnitTactic::getUnitType() const
@@ -147,6 +177,11 @@ namespace AltAI
     {
     }
 
+    void UnitTactic::addTactic(const IUnitTacticPtr& pPlayerTactic)
+    {
+        playerUnitTacticsList_.push_back(pPlayerTactic);
+    }
+
     void UnitTactic::addTactic(const ICityUnitTacticPtr& pUnitTactic)
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
@@ -190,6 +225,9 @@ namespace AltAI
                 iter->second->updateDependencies(player, pCity);
             }
         }
+
+        std::vector<ResearchTechDependencyPtr>::iterator techIter = std::remove_if(techDependencies_.begin(), techDependencies_.end(), IsNotRequired(player));
+        techDependencies_.erase(techIter, techDependencies_.end());
     }
 
     void UnitTactic::addCityTactic(IDInfo city, const ICityUnitTacticsPtr& pCityTactic)
@@ -207,11 +245,11 @@ namespace AltAI
         return ICityUnitTacticsPtr();
     }
 
-    bool UnitTactic::areDependenciesSatisfied(const Player& player) const
+    bool UnitTactic::areDependenciesSatisfied(const Player& player, int ignoreFlags) const
     {
         for (size_t i = 0, count = techDependencies_.size(); i < count; ++i)
         {
-            if (techDependencies_[i]->required(player))
+            if (techDependencies_[i]->required(player, ignoreFlags))
             {
                 return false;
             }
@@ -219,7 +257,7 @@ namespace AltAI
 
         for (CityTacticsMap::const_iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
-            if (iter->second->areDependenciesSatisfied())
+            if (iter->second->areDependenciesSatisfied(ignoreFlags))
             {
                 return true;
             }
@@ -233,12 +271,56 @@ namespace AltAI
         return techDependencies_;
     }
 
+    void UnitTactic::apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags)
+    {
+        std::vector<DependencyItem> depItems;
+
+        const CvCity* pCity = NULL;
+        if (!cityTactics_.empty())
+        {
+            pCity = getCity(cityTactics_.begin()->first);
+        }
+
+        if (!pCity)
+        {
+            return;
+        }
+
+        bool allDependenciesSatisfied = true;
+        for (size_t i = 0, count = techDependencies_.size(); i < count; ++i)
+        {
+            if (!techDependencies_[i]->required(pCity, ignoreFlags))
+            {
+                depItems.push_back(techDependencies_[i]->getDependencyItem());
+            }
+            else
+            {
+                allDependenciesSatisfied = false;
+            }
+        }
+
+        for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
+        {
+            if (iter->second->areDependenciesSatisfied(ignoreFlags))
+            {
+                for (size_t i = 0, depCount = depItems.size(); i < depCount; ++i)
+                {
+                    iter->second->apply(tacticSelectionDataMap[depItems[i]]);
+                }
+            }
+        }
+    }
+
     void UnitTactic::apply(TacticSelectionData& selectionData)
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
-            TacticSelectionData thisCityData(iter->second->getCity());
-            iter->second->apply(thisCityData);
+            iter->second->apply(selectionData);
+        }
+
+        for (PlayerUnitTacticsList::const_iterator ci(playerUnitTacticsList_.begin()), ciEnd(playerUnitTacticsList_.end()); ci != ciEnd; ++ci)
+        {
+            (*ci)->apply(shared_from_this(), selectionData);
         }
     }
 
@@ -268,6 +350,17 @@ namespace AltAI
                 iter->second->debug(os);
             }
         }
+
+        for (PlayerUnitTacticsList::const_iterator iter(playerUnitTacticsList_.begin()), endIter(playerUnitTacticsList_.end()); iter != endIter; ++iter)
+        {
+            (*iter)->debug(os);
+        }
+
+        for (size_t i = 0, count = techDependencies_.size(); i < count; ++i)
+        {
+            techDependencies_[i]->debug(os);
+        }
+        os << "\n";
     }
 
     void UnitTactic::write(FDataStreamBase* pStream) const

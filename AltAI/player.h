@@ -1,11 +1,5 @@
 #pragma once
 
-#include "boost/shared_ptr.hpp"
-#include <set>
-
-#include "CvGameCoreDLL.h"
-#include "CvStructs.h"
-
 #include "./unit.h"
 #include "./tactic_actions.h"
 
@@ -13,6 +7,8 @@ class CvPlayer;
 class CvCity;
 class CvUnit;
 class CvPlot;
+
+#include <set>
 
 namespace AltAI
 {
@@ -36,8 +32,12 @@ namespace AltAI
 
         void addCity(CvCity* pCity);
         void deleteCity(CvCity* pCity);
-        City& getCity(int ID);
-        const City& getCity(int ID) const;
+
+        City& getCity(const CvCity* pCity);
+        const City& getCity(const CvCity* pCity) const;
+
+        City& getCity(const int ID);
+        const City& getCity(const int ID) const;
 
         void addUnit(CvUnitAI* pUnit);
         void deleteUnit(CvUnitAI* pUnit);
@@ -58,6 +58,10 @@ namespace AltAI
         bool checkResourcesOutsideCities(CvUnitAI* pUnit) const;
         int getNumWorkersAtPlot(const CvPlot* pTargetPlot) const;
         int getNumSettlersTargetingPlot(CvUnit* pIgnoreUnit, const CvPlot* pTargetPlot) const;
+
+        std::vector<IDInfo> getCitiesTargetingPlot(UnitTypes unitType, XYCoords buildTarget) const;
+
+        void doSpecialistMove(CvUnitAI* pUnit);
 
         void logMission(CvSelectionGroup* pGroup, MissionData missionData, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit) const;
         void logClearMissions(const CvSelectionGroup* pGroup) const;

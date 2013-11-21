@@ -125,6 +125,7 @@ namespace AltAI
 
         std::map<UnitTypes, boost::shared_ptr<UnitInfo> > unitsInfo_;
         std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> > buildingsInfo_;
+        std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> > specialBuildingsInfo_;
         std::map<ProjectTypes, boost::shared_ptr<ProjectInfo> > projectsInfo_;
         std::map<TechTypes, boost::shared_ptr<TechInfo> > techsInfo_;
         std::map<CivicTypes, boost::shared_ptr<CivicInfo> > civicsInfo_;

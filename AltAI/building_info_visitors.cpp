@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./utils.h"
 #include "./building_info_visitors.h"
 #include "./buildings_info_streams.h"
@@ -137,6 +139,11 @@ namespace AltAI
                         data_.changeCommerceYieldModifier(node.modifier[YIELD_COMMERCE]);
                     }
                     data_.getModifiersHelper()->changePowerYieldModifier(node.powerModifier);
+                }
+
+                if (node.militaryProductionModifier != 0)
+                {
+                    data_.getModifiersHelper()->changeMilitaryProductionModifier(node.militaryProductionModifier);
                 }
 
                 if (!node.plotCond)  // applies to building itself
@@ -408,6 +415,11 @@ namespace AltAI
                         pCityData_->getModifiersHelper()->changePowerYieldModifier(node.powerModifier);
                     }
 
+                    if (node.militaryProductionModifier != 0)
+                    {
+                        pCityData_->getModifiersHelper()->changeMilitaryProductionModifier(node.militaryProductionModifier);
+                    }
+
                     if (node.plotCond)
                     {
                         int xCoord = pCityData_->getCityPlotOutput().coords.iX, yCoord = pCityData_->getCityPlotOutput().coords.iY;
@@ -581,7 +593,10 @@ namespace AltAI
         result_type operator() (const BuildingInfo::YieldNode& node) const
         {
             return YieldAndCommerceFunctor<LessThanZero>()(node.modifier) || 
-                YieldAndCommerceFunctor<LessThanZero>()(node.yield) ? node : BuildingInfo::BuildingInfoNode(BuildingInfo::NullNode());
+                YieldAndCommerceFunctor<LessThanZero>()(node.yield) ||
+                YieldAndCommerceFunctor<LessThanZero>()(node.powerModifier) || 
+                node.militaryProductionModifier < 0
+                ? node : BuildingInfo::BuildingInfoNode(BuildingInfo::NullNode());
         }
 
         result_type operator() (const BuildingInfo::CommerceNode& node) const
@@ -694,7 +709,7 @@ namespace AltAI
 
         result_type operator() (const BuildingInfo::YieldNode& node) const
         {
-            if (!isEmpty(node.modifier))
+            if (!isEmpty(node.modifier) || !isEmpty(node.powerModifier))
             {
                 return true;
             }
@@ -983,6 +998,11 @@ namespace AltAI
                 }
             }
             return false;
+        }
+
+        result_type operator() (const BuildingInfo::YieldNode& node) const
+        {
+            return node.militaryProductionModifier != 0;
         }
 
         result_type operator() (const BuildingInfo::CityDefenceNode&) const
@@ -1337,6 +1357,11 @@ namespace AltAI
 
         bool operator() (const BuildingInfo::BaseNode& node) const
         {
+            if (node.cost < 0)
+            {
+                return false;
+            }
+
             for (size_t i = 0, count = node.techs.size(); i < count; ++i)
             {
                 // if we don't we have the tech and its depth is deeper than our lookaheadDepth, return false

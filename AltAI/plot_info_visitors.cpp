@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./plot_info_visitors.h"
 #include "./plot_info_visitors_streams.h"
 #include "./tech_info_visitors.h"
@@ -923,6 +925,10 @@ namespace AltAI
 #endif
 
         boost::apply_visitor(CityOutputUpdater(data, plotData, featureType, routeType, improvementType, plotInfo.getInfo()), plotInfo.getInfo());
+
+#ifdef ALTAI_DEBUG
+        os << " after = " << plotData.actualOutput;
+#endif
     }
 
     PlotsAndImprovements getPossibleImprovements(const CityData& data, bool ignoreExisting)

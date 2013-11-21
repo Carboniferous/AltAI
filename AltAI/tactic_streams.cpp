@@ -1,9 +1,11 @@
+#include "AltAI.h"
+
 #include "./tactic_actions.h"
 #include "./tactic_streams.h"
 
 namespace AltAI
 {
-    void streamEconomicFlags(std::ostream& os, int flags)
+    /*void streamEconomicFlags(std::ostream& os, int flags)
     {
         if (flags & EconomicFlags::Output_Food)
         {
@@ -165,7 +167,7 @@ namespace AltAI
         {
             os << " Prereq_Project, ";
         }
-    }
+    }*/
 
     std::ostream& operator << (std::ostream& os, const ConstructItem& node)
     {
@@ -176,6 +178,10 @@ namespace AltAI
         if (node.unitType != NO_UNIT)
         {
             os << " want unit = " << gGlobals.getUnitInfo(node.unitType).getType();
+        }
+        if (node.buildTarget != XYCoords())
+        {
+            os << " targeting plot: " << node.buildTarget;
         }
         if (node.improvementType != NO_IMPROVEMENT)
         {
@@ -189,7 +195,7 @@ namespace AltAI
         {
             os << " want project = " << gGlobals.getProjectInfo(node.projectType).getType();
         }
-        if (node.economicFlags)
+        /*if (node.economicFlags)
         {
             streamEconomicFlags(os, node.economicFlags);
         }
@@ -257,7 +263,7 @@ namespace AltAI
         for (std::vector<ConstructItem>::const_iterator ci(node.prerequisites.begin()), ciEnd(node.prerequisites.end()); ci != ciEnd; ++ci)
         {
             os << "\nPrerequisite: " << *ci;
-        }
+        }*/
         return os;
     }
 
@@ -273,7 +279,7 @@ namespace AltAI
         {
             os << " target tech = " << gGlobals.getTechInfo(node.targetTechType).getType();
         }
-        if (node.techFlags)
+        /*if (node.techFlags)
         {
             streamTechFlags(os, node.techFlags);
         }
@@ -357,11 +363,12 @@ namespace AltAI
                     os << gGlobals.getFeatureInfo(fi->first).getType() << " feature count = " << fi->second;
                 }
             }
-        }
+        }*/
 
         return os;
     }
 
+    /*
     std::ostream& operator << (std::ostream& os, EconomicFlags economicFlags)
     {
         os << "EconomicFlags: ";
@@ -425,5 +432,5 @@ namespace AltAI
         }
         
         return os;
-    }
+    }*/
 }

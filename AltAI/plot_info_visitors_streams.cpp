@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./plot_info_visitors_streams.h"
 
 namespace AltAI

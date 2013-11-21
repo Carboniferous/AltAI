@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./culture_helper.h"
 #include "./city_data.h"
 #include "./city_simulator.h"

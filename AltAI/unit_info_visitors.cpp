@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./unit_info_visitors.h"
 #include "./unit_info.h"
 #include "./unit_info_streams.h"
@@ -86,12 +88,18 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             //std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
 #endif
+            // includes great people
+            if (node.cost < 0)
+            {
+                // do great people if city can produce the right type of great people points from specialists
+                return false;
+            }
 
             for (size_t i = 0, count = node.techTypes.size(); i < count; ++i)
             {
                 // if we don't we have the tech and its depth is deeper than our lookaheadDepth, return false
                 if (!civHelper_->hasTech(node.techTypes[i]) &&
-                    (lookaheadDepth_ == 0 ? true : pAnalysis_->getTechResearchDepth(node.techTypes[i]) > lookaheadDepth_))
+                    (lookaheadDepth_ == 0 || pAnalysis_->getTechResearchDepth(node.techTypes[i]) > lookaheadDepth_))
                 {
                     return false;
                 }
@@ -114,7 +122,7 @@ namespace AltAI
             }
 
             // todo - add religion and any other checks
-            bool passedAreaCheck = !(node.minAreaSize > -1), passedBonusCheck = ignoreRequiredResources_ || (node.andBonusTypes.empty() && node.orBonusTypes.empty());
+            bool passedAreaCheck = node.minAreaSize < 0, passedBonusCheck = ignoreRequiredResources_ || (node.andBonusTypes.empty() && node.orBonusTypes.empty());
             bool passedBuildingCheck = node.prereqBuildingType == NO_BUILDING;
 
             if (!passedBuildingCheck)
@@ -174,11 +182,11 @@ namespace AltAI
                                 break;
                             }
                         }
-                    }
 
-                    if (foundAllAndBonuses && foundOrBonus)
-                    {
-                        passedBonusCheck = true;
+                        if (foundOrBonus)
+                        {
+                            passedBonusCheck = true;
+                        }
                     }
                 }
 

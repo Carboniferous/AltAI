@@ -16,7 +16,7 @@ namespace AltAI
             None = 0, CityAttack = (1 << 0), FortifyDefender = (1 << 1)
         };
 
-        explicit UnitData(const CvUnitInfo& unitInfo_);
+        explicit UnitData(const CvUnitInfo& unitInfo_, const Promotions& promotions_ = Promotions());
 
         void applyPromotion(const CvPromotionInfo& promotion);
 

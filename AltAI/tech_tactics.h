@@ -10,12 +10,12 @@ namespace AltAI
 
     struct PlayerTactics;
 
-    std::list<ResearchTech> makeTechTactics(Player& player);
-    ResearchTech makeTechTactic(Player& player, TechTypes techType);
+    //std::list<ResearchTech> makeTechTactics(Player& player);
+    //ResearchTech makeTechTactic(Player& player, TechTypes techType);
 
-    ResearchTech selectReligionTechTactics(const Player& player, const ResearchTech& researchTech);
-    ResearchTech selectWorkerTechTactics(const Player& player, const ResearchTech& researchTech);
-    ResearchTech selectExpansionTechTactics(const Player& player, const ResearchTech& researchTech);
+    //ResearchTech selectReligionTechTactics(const Player& player, const ResearchTech& researchTech);
+    //ResearchTech selectWorkerTechTactics(const Player& player, const ResearchTech& researchTech);
+    //ResearchTech selectExpansionTechTactics(const Player& player, const ResearchTech& researchTech);
 
     ResearchTech getResearchTech(const PlayerTactics& playerTactics, TechTypes ignoreTechType = NO_TECH);
 }

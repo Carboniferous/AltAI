@@ -16,7 +16,7 @@ namespace AltAI
     class MapAnalysis : public boost::enable_shared_from_this<MapAnalysis>
     {
     public:
-        static const int DotMapTechDepth = 3;
+        static const int DotMapTechDepth = 3, BarbDotMapTechDepth = 1;
 
         struct AreaDetail
         {
@@ -65,7 +65,9 @@ namespace AltAI
         void updatePlotBonus(const CvPlot* pPlot, BonusTypes bonusType);
 
         void debugResourceData() const;
+        std::vector<int> getAccessibleSubAreas(DomainTypes domainType) const;
         int getControlledResourceCount(BonusTypes bonusType) const;
+        std::vector<CvPlot*> getResourcePlots(const std::vector<BonusTypes>& bonusTypes, int subArea) const;
 
         const PlotInfo::PlotInfoNode& getPlotInfoNode(const CvPlot* pPlot);
         const Player& getPlayer() const { return player_; }

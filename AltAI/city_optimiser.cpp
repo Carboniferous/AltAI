@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./city_optimiser.h"
 #include "./city_log.h"
 #include "./civ_log.h"
@@ -275,8 +277,10 @@ namespace AltAI
         const bool canPopRush = pPlayer->getCvPlayer()->canPopRush();
         const int maxResearchRate = pPlayer->getMaxResearchRate();
         const int cityCount = pPlayer->getCvPlayer()->getNumCities();
+        const int atWarCount = CvTeamAI::getTeam(pPlayer->getTeamID()).getAtWarCount(true);
+        const bool plotDanger = CvPlayerAI::getPlayer(pCity->getOwner()).AI_getPlotDanger(pCity->plot(), 3) > 0;
 
-        TotalOutput maxOutputs = pPlayer->getCity(pCity->getID()).getMaxOutputs();
+        TotalOutput maxOutputs = pPlayer->getCity(pCity).getMaxOutputs();
 
         const std::pair<int, int> rankAndMaxProduction = pPlayer->getCityRank(pCity->getIDInfo(), OUTPUT_PRODUCTION);
         const std::pair<int, int> rankAndMaxGold = pPlayer->getCityRank(pCity->getIDInfo(), OUTPUT_GOLD);
@@ -291,25 +295,25 @@ namespace AltAI
         if (pCity->isProductionBuilding())
         {
             bool isWonder = false;
-            if (haveConstructItem)
+            /*if (haveConstructItem)
             {
-                isWonder = constructItem.buildingFlags & (BuildingFlags::Building_World_Wonder | BuildingFlags::Building_National_Wonder);
-            }
-            else
-            {
+                isWonder =  constructItem.buildingFlags & (BuildingFlags::Building_World_Wonder | BuildingFlags::Building_National_Wonder);
+            }*/
+            //else
+            //{
                 BuildingClassTypes buildingClassType = (BuildingClassTypes)(gGlobals.getBuildingInfo(pCity->getProductionBuilding()).getBuildingClassType());
                 isWonder = isWorldWonderClass(buildingClassType) || isNationalWonderClass(buildingClassType) || isTeamWonderClass(buildingClassType);
-            }
+            //}
 
             if (isWonder)
             {
                 targetFoodYield = Range<>(pCity->foodConsumption() * 100, maxOutputs[OUTPUT_FOOD]);
                 outputTypes.push_back(OUTPUT_PRODUCTION);
             }
-            else if (haveConstructItem && constructItem.economicFlags & EconomicFlags::Output_Culture)
-            {
-                outputTypes.push_back(OUTPUT_PRODUCTION);
-            }
+            //else if (haveConstructItem && constructItem.economicFlags & EconomicFlags::Output_Culture)
+            //{
+            //    outputTypes.push_back(OUTPUT_PRODUCTION);
+            //}
             else if (canPopRush && angryPop < 4)
             {
                 outputTypes.push_back(OUTPUT_FOOD);
@@ -332,27 +336,33 @@ namespace AltAI
         else if (pCity->isProductionUnit())
         {
             // Building a unit which can build improvments (likely a workboat, since worker production consumes food and won't hit this check)
-            if (haveConstructItem && !constructItem.possibleBuildTypes.empty())
-            {
-                outputTypes.push_back(OUTPUT_PRODUCTION);
-                growthType = CityOptimiser::MinorGrowth;
-            }
-            else if (haveConstructItem && constructItem.militaryFlags & MilitaryFlags::Output_Defence)
-            {
-                outputTypes.push_back(OUTPUT_PRODUCTION);
-            }
-            else
-            {
-                if (maxResearchRate < 30)
+            //if (haveConstructItem && !constructItem.possibleBuildTypes.empty())
+            //{
+            //    outputTypes.push_back(OUTPUT_PRODUCTION);
+            //    growthType = CityOptimiser::MinorGrowth;
+            //}
+            //else if (haveConstructItem && constructItem.militaryFlags & MilitaryFlags::Output_Defence)
+            //{
+            //    outputTypes.push_back(OUTPUT_PRODUCTION);
+            //}
+            //else
+            //{
+                
+                if (atWarCount > 0 || plotDanger)
+                {
+                    outputTypes.push_back(OUTPUT_PRODUCTION);
+                }
+                else if (maxResearchRate < 30)
                 {
                     outputTypes.push_back(OUTPUT_GOLD);
                     outputTypes.push_back(OUTPUT_PRODUCTION);
                 }
                 else
                 {
+                    outputTypes.push_back(OUTPUT_FOOD);
                     outputTypes.push_back(OUTPUT_PRODUCTION);
                 }
-            }
+            //}
         }
         else if (pCity->isProductionProcess())
         {

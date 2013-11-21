@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./sub_area.h"
 #include "./utils.h"
 #include "./iters.h"

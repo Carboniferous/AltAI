@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./health_helper.h"
 #include "./city_data.h"
 #include "./building_helper.h"

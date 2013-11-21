@@ -10,6 +10,7 @@ namespace AltAI
 
     boost::shared_ptr<TechInfo> makeTechInfo(TechTypes techType, PlayerTypes playerType);
     int calculateTechResearchDepth(TechTypes techType, PlayerTypes playerType);
+    int calculateTechResearchCost(TechTypes techType, PlayerTypes playerType);
     std::list<TechTypes> pushTechAndPrereqs(TechTypes techType, const Player& player);
 
     void streamTechInfo(std::ostream& os, const boost::shared_ptr<TechInfo>& pTechInfo);

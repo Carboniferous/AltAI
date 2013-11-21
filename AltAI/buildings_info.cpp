@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./buildings_info.h"
 #include "./helper_fns.h"
 
@@ -55,13 +57,15 @@ namespace AltAI
             PlotYield yieldChange = buildingInfo.getYieldChangeArray();
             YieldModifier yieldModifier = buildingInfo.getYieldModifierArray();
             YieldModifier powerYieldModifier = buildingInfo.getPowerYieldModifierArray();
+            int militaryProductionModifier = buildingInfo.getMilitaryProductionModifier();
 
-            if (!isEmpty(yieldChange) || !isEmpty(yieldModifier) || !isEmpty(powerYieldModifier))
+            if (!isEmpty(yieldChange) || !isEmpty(yieldModifier) || !isEmpty(powerYieldModifier) || militaryProductionModifier != 0)
             {
                 BuildingInfo::YieldNode node;
                 node.yield = yieldChange;
                 node.modifier = yieldModifier;
                 node.powerModifier = powerYieldModifier;
+                node.militaryProductionModifier = militaryProductionModifier;
                 baseNode.nodes.push_back(node);
             }
 
@@ -353,7 +357,15 @@ namespace AltAI
             node.prereqReligion = (ReligionTypes)buildingInfo.getPrereqReligion();
             node.religionType = (ReligionTypes)buildingInfo.getReligionType();
 
-            if (node.prereqReligion != NO_RELIGION || node.religionType != NO_RELIGION)
+            ReligionTypes globalReligionType = (ReligionTypes)buildingInfo.getGlobalReligionCommerce();
+
+            if (globalReligionType != NO_RELIGION)  // shrine
+            {
+                node.globalReligionType = globalReligionType;
+                node.globalCommerceChange = gGlobals.getReligionInfo(globalReligionType).getGlobalReligionCommerceArray();
+            }
+
+            if (node.prereqReligion != NO_RELIGION || node.religionType != NO_RELIGION || node.globalReligionType != NO_RELIGION)
             {
                 baseNode.nodes.push_back(node);
             }

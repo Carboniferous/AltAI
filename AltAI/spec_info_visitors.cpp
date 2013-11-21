@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./spec_info_visitors.h"
 #include "./spec_info.h"
 #include "./game.h"

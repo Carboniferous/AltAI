@@ -50,10 +50,11 @@ namespace AltAI
 
         struct YieldNode
         {
-            YieldNode() : plotCond(NULL), global(false) {}
+            YieldNode() : plotCond(NULL), militaryProductionModifier(0), global(false) {}
             PlotYield yield;
             YieldModifier modifier, powerModifier;       
             CvPlotFnPtr plotCond;
+            int militaryProductionModifier;
             bool global;
         };
 
@@ -141,8 +142,9 @@ namespace AltAI
 
         struct ReligionNode
         {
-            ReligionNode() : prereqReligion(NO_RELIGION), religionType(NO_RELIGION) {}
-            ReligionTypes prereqReligion, religionType;
+            ReligionNode() : prereqReligion(NO_RELIGION), religionType(NO_RELIGION), globalReligionType(NO_RELIGION) {}
+            ReligionTypes prereqReligion, religionType, globalReligionType;
+            Commerce globalCommerceChange;
         };
 
         struct AreaEffectNode

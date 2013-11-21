@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./unit_tactics_visitors.h"
 #include "./unit_info.h"
 #include "./unit_info_visitors.h"
@@ -18,7 +20,7 @@
 
 namespace AltAI
 {
-    class MakeEconomicUnitConditionsVisitor : public boost::static_visitor<>
+    /*class MakeEconomicUnitConditionsVisitor : public boost::static_visitor<>
     {
     public:
         MakeEconomicUnitConditionsVisitor(const Player& player, UnitTypes unitType) : player_(player), constructItem_(unitType)
@@ -88,119 +90,119 @@ namespace AltAI
     private:
         const Player& player_;
         ConstructItem constructItem_;
-    };
+    };*/
 
-    class MakeMilitaryExpansionUnitConditionsVisitor : public boost::static_visitor<>
-    {
-    public:
-        MakeMilitaryExpansionUnitConditionsVisitor(const Player& player, UnitTypes unitType) : player_(player), constructItem_(unitType)
-        {
-            pUnitAnalysis_ = player_.getAnalysis()->getUnitAnalysis();
-        }
+    //class MakeMilitaryExpansionUnitConditionsVisitor : public boost::static_visitor<>
+    //{
+    //public:
+    //    MakeMilitaryExpansionUnitConditionsVisitor(const Player& player, UnitTypes unitType) : player_(player), constructItem_(unitType)
+    //    {
+    //        pUnitAnalysis_ = player_.getAnalysis()->getUnitAnalysis();
+    //    }
 
-        template <typename T>
-            void operator() (const T&)
-        {
-        }
+    //    template <typename T>
+    //        void operator() (const T&)
+    //    {
+    //    }
 
-        void operator() (const UnitInfo::BaseNode& node)
-        {
-            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
-            {
-                boost::apply_visitor(*this, node.nodes[i]);
-            }
+    //    void operator() (const UnitInfo::BaseNode& node)
+    //    {
+    //        for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+    //        {
+    //            boost::apply_visitor(*this, node.nodes[i]);
+    //        }
 
-            if (node.domainType != DOMAIN_LAND)
-            {
-                constructItem_.militaryFlags |= MilitaryFlags::Output_Explore;
-            }
-        }
+    //        if (node.domainType != DOMAIN_LAND)
+    //        {
+    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Explore;
+    //        }
+    //    }
 
-        void operator() (const UnitInfo::CityCombatNode& node)
-        {
-            if (node.extraDefence > 0)
-            {
-                constructItem_.militaryFlags |= MilitaryFlags::Output_Defence;
-            }
-            if (node.extraAttack > 0)
-            {
-                constructItem_.militaryFlags |= MilitaryFlags::Output_City_Attack;
-            }
-        }
+    //    void operator() (const UnitInfo::CityCombatNode& node)
+    //    {
+    //        if (node.extraDefence > 0)
+    //        {
+    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Defence;
+    //        }
+    //        if (node.extraAttack > 0)
+    //        {
+    //            constructItem_.militaryFlags |= MilitaryFlags::Output_City_Attack;
+    //        }
+    //    }
 
-        void operator() (const UnitInfo::CollateralNode& node)
-        {
-            constructItem_.militaryFlags |= MilitaryFlags::Output_Collateral;
-            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Collateral,
-                std::make_pair(pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType, 1), -1)));
-            // TODO: add another entry for field collateral?
-        }
+    //    void operator() (const UnitInfo::CollateralNode& node)
+    //    {
+    //        constructItem_.militaryFlags |= MilitaryFlags::Output_Collateral;
+    //        constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Collateral,
+    //            std::make_pair(pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType, 1), -1)));
+    //        // TODO: add another entry for field collateral?
+    //    }
 
-        void operator() (const UnitInfo::CombatNode& node)
-        {
-            int attackValue = pUnitAnalysis_->getAttackUnitValue(constructItem_.unitType);
-            int defenceValue = pUnitAnalysis_->getDefenceUnitValue(constructItem_.unitType);
+    //    void operator() (const UnitInfo::CombatNode& node)
+    //    {
+    //        int attackValue = pUnitAnalysis_->getAttackUnitValue(constructItem_.unitType);
+    //        int defenceValue = pUnitAnalysis_->getDefenceUnitValue(constructItem_.unitType);
 
-            if (attackValue > 0)
-            {
-                constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Attack, std::make_pair(attackValue, -1)));
-            }
+    //        if (attackValue > 0)
+    //        {
+    //            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Attack, std::make_pair(attackValue, -1)));
+    //        }
 
-            if (defenceValue > 0)
-            {
-                constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Defence, std::make_pair(defenceValue, -1)));
-            }
+    //        if (defenceValue > 0)
+    //        {
+    //            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Defence, std::make_pair(defenceValue, -1)));
+    //        }
 
-            int cityAttackValue = pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType, 1);
-            if (cityAttackValue > 0)
-            {
-                constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_City_Attack, std::make_pair(cityAttackValue, -1)));
-            }
+    //        int cityAttackValue = pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType, 1);
+    //        if (cityAttackValue > 0)
+    //        {
+    //            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_City_Attack, std::make_pair(cityAttackValue, -1)));
+    //        }
 
-            int cityDefenceValue = pUnitAnalysis_->getCityDefenceUnitValue(constructItem_.unitType);
-            if (cityDefenceValue > 0)
-            {
-                constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_City_Defence, std::make_pair(cityDefenceValue, -1)));
-            }
-            
-            for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
-            {
-                int counterValue = pUnitAnalysis_->getUnitCounterValue(constructItem_.unitType, (UnitCombatTypes)i);
-                if (counterValue > 0)
-                {
-                    constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_UnitCombat_Counter, std::make_pair(counterValue, (UnitCombatTypes)i)));
-                }
-            }
+    //        int cityDefenceValue = pUnitAnalysis_->getCityDefenceUnitValue(constructItem_.unitType);
+    //        if (cityDefenceValue > 0)
+    //        {
+    //            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_City_Defence, std::make_pair(cityDefenceValue, -1)));
+    //        }
+    //        
+    //        for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
+    //        {
+    //            int counterValue = pUnitAnalysis_->getUnitCounterValue(constructItem_.unitType, (UnitCombatTypes)i);
+    //            if (counterValue > 0)
+    //            {
+    //                constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_UnitCombat_Counter, std::make_pair(counterValue, (UnitCombatTypes)i)));
+    //            }
+    //        }
 
-            if (!constructItem_.militaryFlagValuesMap.empty())
-            {
-                constructItem_.militaryFlags |= MilitaryFlags::Output_Combat_Unit;
-            }
+    //        if (!constructItem_.militaryFlagValuesMap.empty())
+    //        {
+    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Combat_Unit;
+    //        }
 
-            if (node.moves > 1)
-            {
-                constructItem_.militaryFlags |= MilitaryFlags::Output_Extra_Mobility;
-            }
-        }
+    //        if (node.moves > 1)
+    //        {
+    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Extra_Mobility;
+    //        }
+    //    }
 
-        void operator() (const UnitInfo::CargoNode& node)
-        {
-            if (node.cargoDomain == DOMAIN_LAND)
-            {
-                constructItem_.militaryFlags |= MilitaryFlags::Output_Unit_Transport;
-            }
-        }
+    //    void operator() (const UnitInfo::CargoNode& node)
+    //    {
+    //        if (node.cargoDomain == DOMAIN_LAND)
+    //        {
+    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Unit_Transport;
+    //        }
+    //    }
 
-        ConstructItem getConstructItem() const
-        {
-            return constructItem_.isEmpty() ? ConstructItem(NO_UNIT): constructItem_;
-        }
+    //    ConstructItem getConstructItem() const
+    //    {
+    //        return constructItem_.isEmpty() ? ConstructItem(NO_UNIT): constructItem_;
+    //    }
 
-    private:
-        const Player& player_;
-        boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;
-        ConstructItem constructItem_;
-    };
+    //private:
+    //    const Player& player_;
+    //    boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;
+    //    ConstructItem constructItem_;
+    //};
 
     class MakeUnitTacticsDependenciesVisitor : public boost::static_visitor<>
     {
@@ -363,21 +365,84 @@ namespace AltAI
         boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;
     };
 
-    ConstructItem getEconomicUnitTactics(const Player& player, UnitTypes unitType, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    class MakeSpecialUnitTacticsVisitor : public boost::static_visitor<>
+    {
+    public:
+        MakeSpecialUnitTacticsVisitor(const Player& player, UnitTypes unitType)
+            : unitInfo_(gGlobals.getUnitInfo(unitType)), player_(player), unitType_(unitType)
+        {
+            pUnitAnalysis_ = player_.getAnalysis()->getUnitAnalysis();           
+        }
+
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const UnitInfo::BaseNode& node)
+        {
+            pTactic_ = IUnitTacticsPtr(new UnitTactic(unitType_));
+
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                boost::apply_visitor(*this, node.nodes[i]);
+            }            
+        }
+       
+        void operator() (const UnitInfo::MiscAbilityNode& node)
+        {
+            if (node.canBuildSpecialBuilding)
+            {
+                for (size_t i = 0, count = node.specialBuildings.buildings.size(); i < count; ++i)
+                {
+                    pTactic_->addTactic(IUnitTacticPtr(new BuildSpecialBuildingUnitTactic(node.specialBuildings.buildings[i])));
+                }
+            }
+
+            if (node.canDiscoverTech)
+            {
+                pTactic_->addTactic(IUnitTacticPtr(new DiscoverTechUnitTactic()));
+            }
+
+            if (node.canCreateGreatWork)
+            {
+                pTactic_->addTactic(IUnitTacticPtr(new CreateGreatWorkUnitTactic()));
+            }
+
+            if (node.canDoTradeMission)
+            {
+                pTactic_->addTactic(IUnitTacticPtr(new TradeMissionUnitTactic()));
+            }
+        }
+
+        const IUnitTacticsPtr& getTactic() const
+        {
+            return pTactic_;
+        }
+
+    private:
+        UnitTypes unitType_;
+        const CvUnitInfo& unitInfo_;
+        const Player& player_;
+        IUnitTacticsPtr pTactic_;
+        boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;
+    };
+
+    /*ConstructItem getEconomicUnitTactics(const Player& player, UnitTypes unitType, const boost::shared_ptr<UnitInfo>& pUnitInfo)
     {
         MakeEconomicUnitConditionsVisitor visitor(player, unitType);
         boost::apply_visitor(visitor, pUnitInfo->getInfo());
 
         return visitor.getConstructItem();
-    }
+    }*/
 
-    ConstructItem getMilitaryExpansionUnitTactics(const Player& player, UnitTypes unitType, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    /*ConstructItem getMilitaryExpansionUnitTactics(const Player& player, UnitTypes unitType, const boost::shared_ptr<UnitInfo>& pUnitInfo)
     {
         MakeMilitaryExpansionUnitConditionsVisitor visitor(player, unitType);
         boost::apply_visitor(visitor, pUnitInfo->getInfo());
 
         return visitor.getConstructItem();
-    }
+    }*/
 
     ICityUnitTacticsPtr makeCityUnitTactics(const Player& player, const City& city, const boost::shared_ptr<UnitInfo>& pUnitInfo)
     {
@@ -410,12 +475,7 @@ namespace AltAI
 				        levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 			        }
 
-                    UnitData unitData(unitInfo);
-                    for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		            {
-			            unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		            }
-
+                    UnitData unitData(unitInfo, levelsAndPromotions.second);
                     pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityAttackUnitTactic(levelsAndPromotions.second)));
                 }
 
@@ -423,12 +483,7 @@ namespace AltAI
                 {
                     UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 
-                    UnitData unitData(unitInfo);
-                    for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		            {
-			            unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		            }
-
+                    UnitData unitData(unitInfo, levelsAndPromotions.second);
                     pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldAttackUnitTactic(levelsAndPromotions.second)));
                 }
 
@@ -442,12 +497,7 @@ namespace AltAI
                         levelsAndPromotions = pUnitAnalysis->getCollateralPromotions(unitType, maxPromotionLevel);
 			        }
 
-                    UnitData unitData(unitInfo);
-                    for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		            {
-			            unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		            }
-
+                    UnitData unitData(unitInfo, levelsAndPromotions.second);
                     pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CollateralUnitTactic(levelsAndPromotions.second)));
                 }
             }
@@ -460,24 +510,14 @@ namespace AltAI
 				    levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 			    }
 
-                UnitData unitData(unitInfo);
-                for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		        {
-			        unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		        }
-
+                UnitData unitData(unitInfo, levelsAndPromotions.second);
                 pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityDefenceUnitTactic(levelsAndPromotions.second)));
             }
 
             {
                 UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 
-                UnitData unitData(unitInfo);
-                for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		        {
-			        unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		        }
-
+                UnitData unitData(unitInfo, levelsAndPromotions.second);
                 pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldDefenceUnitTactic(levelsAndPromotions.second)));
             }
         }
@@ -487,11 +527,7 @@ namespace AltAI
             {
                 UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 
-                UnitData unitData(unitInfo);
-                for (Promotions::const_iterator ci(levelsAndPromotions.second.begin()), ciEnd(levelsAndPromotions.second.end()); ci != ciEnd; ++ci)
-		        {
-			        unitData.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		        }
+                UnitData unitData(unitInfo, levelsAndPromotions.second);
 
                 if (unitData.combat > 0)
                 {
@@ -526,7 +562,7 @@ namespace AltAI
                 CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for unit: " << unitInfo.getType();
 #endif
                 
-                pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, player.getCity(pCity->getID()), pUnitInfo));               
+                pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, player.getCity(pCity), pUnitInfo));               
             }
 
             MakeUnitTacticsDependenciesVisitor dependentTacticsVisitor(player, NULL);
@@ -542,5 +578,17 @@ namespace AltAI
         }
 
         return IUnitTacticsPtr();
+    }
+
+    IUnitTacticsPtr makeSpecialUnitTactics(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    {
+        const UnitTypes unitType = pUnitInfo->getUnitType();
+        const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+
+        boost::shared_ptr<UnitAnalysis> pUnitAnalysis = player.getAnalysis()->getUnitAnalysis();   
+
+        MakeSpecialUnitTacticsVisitor visitor(player, pUnitInfo->getUnitType());
+        boost::apply_visitor(visitor, pUnitInfo->getInfo());
+        return visitor.getTactic();
     }
 }

@@ -1,3 +1,5 @@
+#include "AltAI.h"
+
 #include "./map_log.h"
 #include "./plot_info.h"
 #include "./plot_info_visitors_streams.h"

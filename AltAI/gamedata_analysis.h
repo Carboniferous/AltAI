@@ -28,6 +28,7 @@ namespace AltAI
 
         static BuildTypes getBuildTypeForImprovementType(ImprovementTypes improvementType);
         static BuildTypes getBuildTypeForRouteType(RouteTypes routeType);
+        static std::vector<BonusTypes> getBonusTypesForBuildType(BuildTypes buildType);
 
         static bool doesBuildTypeRemoveFeature(BuildTypes buildType, FeatureTypes featureType);
         static bool isBadFeature(FeatureTypes featureType);
@@ -51,6 +52,8 @@ namespace AltAI
         static TechTypes getCanWorkWaterTech_();
         static std::vector<TechTypes> getIgnoreIrrigationTechs_();
         static std::vector<TechTypes> getCarriesIrrigationTechs_();
+        typedef std::multimap<BuildTypes, BonusTypes> BuildsResourcesMap;
+        static BuildsResourcesMap getBonusTypesForBuildTypes_();
 
         struct PlayerData
         {

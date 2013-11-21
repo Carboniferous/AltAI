@@ -1,8 +1,18 @@
+#include "AltAI.h"
+
 #include "./tech_tactics_items.h"
+#include "./tactic_selection_data.h"
 #include "./gamedata_analysis.h"
 #include "./city_tactics.h"
 #include "./city_data.h"
 #include "./building_tactics_deps.h"
+#include "./tech_info_visitors.h"
+#include "./game.h"
+#include "./player.h"
+#include "./city.h"
+#include "./player_analysis.h"
+#include "./civ_helper.h"
+#include "./civ_log.h"
 
 namespace AltAI
 {
@@ -23,12 +33,13 @@ namespace AltAI
 
     void CityImprovementTactics::update(const Player& player, const CityDataPtr& pCityData)
     {
+        CityDataPtr pSimulationCityData(new CityData(pCityData->getCity(), plotData_, true));
+
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {
-            dependentTactics_[i]->apply(pCityData);
+            dependentTactics_[i]->apply(pSimulationCityData);
         }
-
-        CityDataPtr pSimulationCityData(new CityData(pCityData->getCity(), plotData_, true));
+        
         std::vector<IProjectionEventPtr> events;
         events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
 
@@ -36,7 +47,7 @@ namespace AltAI
 
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {
-            dependentTactics_[i]->remove(pCityData);
+            dependentTactics_[i]->remove(pSimulationCityData);
         }
     }
 
@@ -66,6 +77,11 @@ namespace AltAI
                 }
             }
         }
+    }
+
+    const std::vector<ResearchTechDependencyPtr>& CityImprovementTactics::getTechDependencies() const
+    {
+        return dependentTactics_;
     }
 
     ProjectionLadder CityImprovementTactics::getProjection() const
@@ -241,6 +257,90 @@ namespace AltAI
     }
 
     void MilitaryImprovementTactic::read(FDataStreamBase* pStream)
+    {
+    }
+
+    void FreeTechTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tFree tech tactic";
+#endif
+    }
+
+    void FreeTechTactic::apply(const ITechTacticsPtr& pTechTactics, TacticSelectionData& selectionData)
+    {
+        const TechTypes techType = pTechTactics->getTechType();
+
+        if (gGlobals.getGame().countKnownTechNumTeams(techType) == 0)
+        {
+            selectionData.getFreeTech = true;
+
+            const PlayerTypes playerType = pTechTactics->getPlayer();
+            boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
+            const CvPlayer& player = CvPlayerAI::getPlayer(playerType);
+
+#ifdef ALTAI_DEBUG
+            std::ostream& os = CivLog::getLog(player)->getStream();
+            os << "\nChecking free tech data for tech: " << gGlobals.getTechInfo(techType).getType();
+#endif
+
+            std::list<TechTypes> prereqTechs = pushTechAndPrereqs(techType, *pPlayer);
+            pPlayer->getAnalysis()->recalcTechDepths();
+
+            std::vector<TechTypes> techs = pPlayer->getAnalysis()->getTechsWithDepth(1);
+
+            int maxCost = 0;
+            for (size_t i = 0, count = techs.size(); i < count; ++i)
+            {
+                const int thisCost = calculateTechResearchCost(techs[i], playerType);
+                maxCost = std::max<int>(maxCost, thisCost);
+#ifdef ALTAI_DEBUG
+                os << "\n\tTech: " << gGlobals.getTechInfo(techs[i]).getType() << " has depth = 1 and research cost: " << thisCost;
+#endif
+            }
+
+            for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
+            {
+                pPlayer->getCivHelper()->removeTech(*ci);
+            }
+            pPlayer->getCivHelper()->removeTech(techType);
+            pPlayer->getAnalysis()->recalcTechDepths();
+
+            selectionData.freeTechValue = maxCost;
+        }
+    }
+
+    void FreeTechTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+    }
+
+    void FreeTechTactic::read(FDataStreamBase* pStream)
+    {
+    }
+
+    void FoundReligionTechTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tFound religion tech tactic";
+#endif
+    }
+
+    void FoundReligionTechTactic::apply(const ITechTacticsPtr& pTechTactics, TacticSelectionData& selectionData)
+    {
+        const TechTypes techType = pTechTactics->getTechType();
+
+        if (gGlobals.getGame().countKnownTechNumTeams(techType) == 0)
+        {
+        }
+    }
+
+    void FoundReligionTechTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+    }
+
+    void FoundReligionTechTactic::read(FDataStreamBase* pStream)
     {
     }
 }
