@@ -279,7 +279,7 @@ public:
 	void changeRiverTradeCount(int iChange);
 
 	bool isHasTech(TechTypes eIndex) const;																																			// Exposed to Python
-	void setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, bool bFirst, bool bAnnounce);	// Exposed to Python
+	void setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, bool bFirst, bool bAnnounce, int source = -1);	// Exposed to Python
 
 	bool isNoTradeTech(TechTypes eIndex) const;																														// Exposed to Python
 	void setNoTradeTech(TechTypes eIndex, bool bNewValue);																					// Exposed to Python

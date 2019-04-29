@@ -7,18 +7,20 @@
 #include "./plot_info_visitors.h"
 #include "./building_info_visitors.h"
 #include "./resource_info_visitors.h"
+#include "./resource_tactics.h"
 #include "./game.h"
 #include "./player.h"
 #include "./maintenance_helper.h"
 #include "./city.h"
 #include "./iters.h"
+#include "./tactic_selection_data.h"
 #include "./civ_log.h"
 #include "./map_log.h"
 #include "./error_log.h"
 
 namespace AltAI
 {
-    SettlerManager::SettlerManager(const boost::shared_ptr<MapAnalysis>& pMapAnalysis) : pMapAnalysis_(pMapAnalysis)
+    SettlerManager::SettlerManager(const boost::shared_ptr<MapAnalysis>& pMapAnalysis) : pMapAnalysis_(pMapAnalysis), turnLastCalculated_(-1)
     {
         playerType_ = pMapAnalysis->getPlayer().getPlayerID();
         teamType_ = pMapAnalysis->getPlayer().getTeamID();
@@ -77,6 +79,20 @@ namespace AltAI
             }
         }
         return foundCount;
+    }
+
+    XYCoords SettlerManager::getBestPlot() const
+    {
+        for (std::map<int, XYCoords, std::greater<int> >::const_iterator ci(bestSites_.begin()), ciEnd(bestSites_.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->first < 50)
+            {
+                break;
+            }
+            return ci->second;
+        }
+
+        return XYCoords();
     }
 
     CvPlot* SettlerManager::getBestPlot(int subAreaID, const std::vector<CvPlot*>& ignorePlots) const
@@ -178,12 +194,30 @@ namespace AltAI
         }
     }
 
+    DotMapItem SettlerManager::getPlotDotMap(XYCoords coords) const
+    {
+        DotMap::const_iterator ci = dotMap_.find(DotMapItem(coords, PlotYield()));
+        if (ci != dotMap_.end())
+        {
+            return *ci;
+        }
+        return DotMapItem(coords, PlotYield());
+    }
+
     void SettlerManager::analysePlotValues()
     {
+        const int thisGameTurn = gGlobals.getGame().getGameTurn();
+        if (thisGameTurn == turnLastCalculated_ && !pMapAnalysis_->plotValuesDirty())
+        {
+            return;
+        }
+
+        turnLastCalculated_ = thisGameTurn;
+
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
         const CvMap& theMap = gGlobals.getMap();
         for (int i = 0, count = theMap.numPlots(); i < count; ++i)
-	    {
+        {
             theMap.plotByIndex(i)->setFoundValue(playerType_, 0);
         }
 
@@ -195,7 +229,7 @@ namespace AltAI
         {
             for (MapAnalysis::PlotValues::SubAreaPlotValueMap::const_iterator ci2(ci->second.begin()), ci2End(ci->second.end()); ci2 != ci2End; ++ci2)
             {
-                dotMap_.insert(analysePlotValue_(ci2));
+                dotMap_.insert(analysePlotValue_(plotValues, ci2));
             }
         }
 
@@ -211,7 +245,7 @@ namespace AltAI
             //opt.optimise();
             std::vector<YieldTypes> yieldTypes(boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE));
             opt.optimise(yieldTypes, iter->plotData.size());
-            iter->debugOutputs(os);
+            //iter->debugOutputs(os);
         }
 
         YieldValueFunctor valueF(makeYieldW(0, 6, 2));
@@ -256,10 +290,9 @@ namespace AltAI
 #endif
     }
 
-    DotMapItem SettlerManager::analysePlotValue_(MapAnalysis::PlotValues::SubAreaPlotValueMap::const_iterator ci)
+    DotMapItem SettlerManager::analysePlotValue_(const MapAnalysis::PlotValues& plotValues, MapAnalysis::PlotValues::SubAreaPlotValueMap::const_iterator ci)
     {
         CvMap& theMap = gGlobals.getMap(); 
-        const MapAnalysis::PlotValues& plotValues = pMapAnalysis_->getPlotValues();
 
         CvPlot* pPlot = theMap.plot(ci->first.iX, ci->first.iY);
         const PlotInfo::PlotInfoNode& plotInfoNode = pMapAnalysis_->getPlotInfoNode(pPlot);
@@ -338,7 +371,7 @@ namespace AltAI
                 else
                 {
                     std::ostream& os = ErrorLog::getLog(CvPlayerAI::getPlayer(playerType_))->getStream();
-                    os << "\n(analysePlotValue_): Failed to find plot key: " << mi->first << " for coords: " << *si;
+                    os << "\nTurn: " << gGlobals.getGame().getGameTurn() << " (analysePlotValue_): Failed to find plot key: " << mi->first << " for coords: " << *si;
                 }
                 
                 BonusTypes bonusType = boost::get<PlotInfo::BaseNode>(pMapAnalysis_->getPlotInfoNode(pLoopPlot)).bonusType;
@@ -418,12 +451,12 @@ namespace AltAI
     int SettlerManager::doSiteValueAdjustment_(XYCoords coords, int baseValue, int maintenanceDelta,
         const std::map<XYCoords, int>& plotCountMap, const std::map<XYCoords, std::map<BonusTypes, int> >& resourcesMap)
     {
-        boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
-//#ifdef ALTAI_DEBUG
-//        // debug
-//        const CvPlayerAI& player = CvPlayerAI::getPlayer(playerType_);
-//        std::ostream& os = CivLog::getLog(player)->getStream();
-//#endif
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
+#ifdef ALTAI_DEBUG
+        // debug
+        const CvPlayerAI& player = CvPlayerAI::getPlayer(playerType_);
+        std::ostream& os = CivLog::getLog(player)->getStream();
+#endif
         int finalSiteValue = baseValue;
 
 //#ifdef ALTAI_DEBUG
@@ -453,27 +486,55 @@ namespace AltAI
             for (std::map<BonusTypes, int>::const_iterator bonusIter(resourceMapIter->second.begin()), endBonusIter(resourceMapIter->second.end()); bonusIter != endBonusIter; ++bonusIter)
             {
                 int currentCount = pMapAnalysis_->getControlledResourceCount(bonusIter->first);
-//#ifdef ALTAI_DEBUG
-//              os << "\n" << gGlobals.getBonusInfo(bonusIter->first).getType() << " = " << bonusIter->second << (currentCount == 0 ? " (new)" : "")<< ", ";
-//#endif
+#ifdef ALTAI_DEBUG
+                os << "\n" << gGlobals.getBonusInfo(bonusIter->first).getType() << " = " << bonusIter->second << (currentCount == 0 ? " (new)" : "") << ", ";
+#endif
                 finalSiteValue += bonusIter->second * (currentCount == 0 ? 4 : 2);
 
                 boost::shared_ptr<ResourceInfo> pResourceInfo = pPlayer->getAnalysis()->getResourceInfo(bonusIter->first);
                 std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
 
-                ResourceHappyInfo happyInfo = getResourceHappyInfo(pResourceInfo);
+                ResourceHappyInfo happyInfo = getResourceHappyInfo(pResourceInfo, ResourceQuery::AssumeAllCitiesHaveResource);
                 ResourceHealthInfo healthInfo = getResourceHealthInfo(pResourceInfo);
+#ifdef ALTAI_DEBUG
+                os << "\n needed for: " << unitCounts.first << " units, optional for: " << unitCounts.second << " units";
+
+#endif
 
                 if (currentCount == 0)
                 {
-                    finalSiteValue += std::min<int>(10, 2 * unitCounts.first + unitCounts.second) + std::min<int>(10, happyInfo.actualHappy + healthInfo.actualHealth);
+                    // todo - drive this from city deltas
+                    finalSiteValue += std::min<int>(10, 2 * unitCounts.first + unitCounts.second);// + 
+                        //std::min<int>(10, happyInfo.actualHappy + happyInfo.potentialHappy + happyInfo.unusedHappy +
+                        //    healthInfo.actualHealth + healthInfo.potentialHealth + healthInfo.unusedHealth);
+                    // tack on actual deltas for resources
+                    TotalOutputValueFunctor valueF(makeOutputW(1, 1, 1, 1, 1, 1));
+                    TacticSelectionData selectionData;
+                    PlayerTactics::ResourceTacticsMap::const_iterator ri = pPlayer->getAnalysis()->getPlayerTactics()->resourceTacticsMap_.find(bonusIter->first);
+                    if (ri != pPlayer->getAnalysis()->getPlayerTactics()->resourceTacticsMap_.end())
+                    {
+                        ri->second->apply(selectionData);
+                    }
+                    finalSiteValue += valueF(selectionData.potentialResourceOutputDeltas[bonusIter->first]) / 100;
+#ifdef ALTAI_DEBUG
+                    os << "\nResource selection data:";
+                    selectionData.debug(os);
+#endif
                 }
-//#ifdef ALTAI_DEBUG
-//                os << "\n needed for: " << unitCounts.first << ", optional for: " << unitCounts.second;
-//
-//                os << "\n actual happy = " << happyInfo.actualHappy << " potential happy = " << happyInfo.potentialHappy << " unused happy = " << happyInfo.unusedHappy;
-//                os << "\n actual health = " << healthInfo.actualHealth << " potential health = " << healthInfo.potentialHealth << " unused health = " << healthInfo.unusedHealth;
-//#endif
+#ifdef ALTAI_DEBUG
+                /*os << "\n actual happy = " << happyInfo.actualHappy << " potential happy = " << happyInfo.potentialHappy << " unused happy = " << happyInfo.unusedHappy << " building happy = ";
+                for (size_t i = 0, count = happyInfo.buildingHappy.size(); i < count; ++i)
+                {
+                    if (i > 0) os << ", ";
+                    os << gGlobals.getBuildingInfo(happyInfo.buildingHappy[i].first).getType() << " = " << happyInfo.buildingHappy[i].second;
+                }
+                os << "\n actual health = " << healthInfo.actualHealth << " potential health = " << healthInfo.potentialHealth << " unused health = " << healthInfo.unusedHealth << " building health = ";
+                for (size_t i = 0, count = healthInfo.buildingHealth.size(); i < count; ++i)
+                {
+                    if (i > 0) os << ", ";
+                    os << gGlobals.getBuildingInfo(healthInfo.buildingHealth[i].first).getType() << " = " << healthInfo.buildingHealth[i].second;
+                }*/
+#endif
             }
         }
         return finalSiteValue;
@@ -483,9 +544,10 @@ namespace AltAI
     {
         CvMap& theMap = gGlobals.getMap();
         const CvPlayerAI& player = CvPlayerAI::getPlayer(playerType_);
-        const boost::shared_ptr<Player>& pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
+        const PlayerPtr& pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
 
         const int MAX_DISTANCE_CITY_MAINTENANCE_ = gGlobals.getDefineINT("MAX_DISTANCE_CITY_MAINTENANCE");
+        const int numCities = player.getNumCities();
         std::map<XYCoords, int> bestSitesMap;
         std::map<int, int> areaTotals;
 
@@ -535,12 +597,13 @@ namespace AltAI
         int i = 0;
         for (std::map<XYCoords, int>::iterator iter(bestSitesMap.begin()), endIter(bestSitesMap.end()); iter != endIter; ++iter)
         {
-            const int maintenanceDelta = newMaintenanceMap[iter->first] - currentMaintenance;
+            // if no cities yet - effectively we want to ignore maintenance delta
+            const int maintenanceDelta = numCities == 0 ? 0 : newMaintenanceMap[iter->first] - currentMaintenance;
 #ifdef ALTAI_DEBUG
-            os << "\nMaintenance delta = " << maintenanceDelta << ", current maintenance = " << currentMaintenance
+            os << "\nSite: " << iter->first << " - maintenance delta = " << maintenanceDelta << ", current maintenance = " << currentMaintenance
                << ", max gold = " << pPlayer->getMaxGold() << ", max gold with processes = " << pPlayer->getMaxGoldWithProcesses();
 #endif
-            if (maintenanceDelta * 3 < pPlayer->getMaxGoldWithProcesses())
+            if (maintenanceDelta * 3 <= pPlayer->getMaxGoldWithProcesses())
             {
                 int finalSiteValue = doSiteValueAdjustment_(iter->first, iter->second, maintenanceDelta, plotCountMap, resourcesMap);
                 XYCoords finalSiteCoords(iter->first);
@@ -564,7 +627,7 @@ namespace AltAI
                                 continue;
                             }
 
-                            XYCoords thisPlot(pLoopPlot->getX(), pLoopPlot->getY());
+                            XYCoords thisPlot(pLoopPlot->getCoords());
 
                             populatePlotCountAndResources_(thisPlot, plotCountMap, resourcesMap);
 
@@ -588,15 +651,15 @@ namespace AltAI
                         }
                     }
                 //}
-
+#ifdef ALTAI_DEBUG
                 // debug
-                /*DotMap::const_iterator dotMapIter = dotMap_.find(DotMapItem(finalSiteCoords, PlotYield()));
+                DotMap::const_iterator dotMapIter = dotMap_.find(DotMapItem(finalSiteCoords, PlotYield()));
                 if (dotMapIter != dotMap_.end())
                 {
                     dotMapIter->debugOutputs(os);
-                }*/
-#ifdef ALTAI_DEBUG
-                os << "\nfinal site value = " << finalSiteValue;
+                }
+
+                os << "\nFinal site: " << finalSiteCoords << " value = " << finalSiteValue;
 #endif
                 bestSites_.insert(std::make_pair(finalSiteValue, finalSiteCoords));
                 areaTotals[pSitePlot->getArea()] += finalSiteValue;
@@ -648,30 +711,6 @@ namespace AltAI
             }
         }
         return bonuses;
-    }
-
-    std::set<ImprovementTypes> SettlerManager::getImprovementTypesForSites(int siteCount) const
-    {
-        std::set<ImprovementTypes> improvements;
-        int foundCount = 0;
-        for (std::map<int, XYCoords, std::greater<int> >::const_iterator ci(bestSites_.begin()), ciEnd(bestSites_.end()); ci != ciEnd; ++ci)
-        {
-            ++foundCount;
-            if (foundCount > siteCount)
-            {
-                break;
-            }
-
-            DotMap::const_iterator siteIter(dotMap_.find(DotMapItem(XYCoords(ci->second.iX, ci->second.iY), PlotYield())));
-            for (DotMapItem::PlotDataConstIter plotIter(siteIter->plotData.begin()), endPlotIter(siteIter->plotData.end()); plotIter != endPlotIter; ++plotIter)
-            {
-                if (plotIter->getWorkedImprovement() != NO_IMPROVEMENT)
-                {
-                    improvements.insert(plotIter->getWorkedImprovement());
-                }
-            }
-        }
-        return improvements;
     }
 
     std::pair<int, bool> SettlerManager::getNeighbourCityData_(const CvPlot* pPlot) const
@@ -742,7 +781,7 @@ namespace AltAI
 
         {
             int iNetCommerce = 1 + player.getCommerceRate(COMMERCE_GOLD) + player.getCommerceRate(COMMERCE_RESEARCH) + std::max(0, player.getGoldPerTurn());
-	        int iNetExpenses = player.calculateInflatedCosts() + std::min(0, player.getGoldPerTurn());		
+            int iNetExpenses = player.calculateInflatedCosts() + std::min(0, player.getGoldPerTurn());        
 
             os << "\nMinimum found value = " << player.AI_getMinFoundValue();
             os << "\nNet Commerce = " << iNetCommerce << ", net expenses: " << iNetExpenses;
@@ -764,6 +803,15 @@ namespace AltAI
         MapLog::getLog(player)->init();
         MapLog::getLog(player)->logMap(coordMap);
 #endif
+    }
+
+    void SettlerManager::debugPlot(XYCoords coords, std::ostream& os) const
+    {
+        DotMap::const_iterator ci = dotMap_.find(DotMapItem(coords, PlotYield()));
+        if (ci != dotMap_.end())
+        {
+            ci->debugOutputs(os);
+        }
     }
 
     void SettlerManager::write(FDataStreamBase* pStream) const

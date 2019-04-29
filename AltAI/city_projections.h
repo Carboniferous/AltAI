@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./utils.h"
+#include "./tactic_actions.h"
 #include "./city_projections_ladder.h"
 
 namespace AltAI
@@ -9,30 +10,56 @@ namespace AltAI
     class CityData;
     typedef boost::shared_ptr<CityData> CityDataPtr;
 
+    class CityImprovementManager;
+    typedef boost::shared_ptr<CityImprovementManager> CityImprovementManagerPtr;
+
     class BuildingInfo;
     class UnitInfo;
     class CivicInfo;
-
-    struct ProjectionLadder;
-    struct IProjectionEvent;
-    typedef boost::shared_ptr<IProjectionEvent> IProjectionEventPtr;
-
-    struct IProjectionEvent
-    {
-        virtual ~IProjectionEvent() = 0 {}
-        virtual void init(const CityDataPtr&) = 0;
-        virtual void debug(std::ostream& os) const = 0;
-        virtual int getTurnsToEvent() const = 0;
-        virtual IProjectionEventPtr update(int nTurns, ProjectionLadder& ladder) = 0;
-    };    
 
     class ProjectionPopulationEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionPopulationEvent>
     {
     public:
         virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
         virtual void debug(std::ostream& os) const;
         virtual int getTurnsToEvent() const;
-        virtual IProjectionEventPtr update(int nTurns, ProjectionLadder& ladder);
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
+
+    private:
+        CityDataPtr pCityData_;
+    };
+
+    class ProjectionCultureLevelEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionCultureLevelEvent>
+    {
+    public:
+        virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
+        virtual void debug(std::ostream& os) const;
+        virtual int getTurnsToEvent() const;
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
+
+    private:
+        CityDataPtr pCityData_;
+    };
+
+    class ProjectionImprovementUpgradeEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionImprovementUpgradeEvent>
+    {
+    public:
+        virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
+        virtual void debug(std::ostream& os) const;
+        virtual int getTurnsToEvent() const;
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
 
     private:
         CityDataPtr pCityData_;
@@ -42,17 +69,24 @@ namespace AltAI
     {
     public:
         ProjectionBuildingEvent(const CvCity* pCity, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
+        ProjectionBuildingEvent(const CvCity* pCity, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, const std::pair<HurryTypes, int>& hurryEvent);
 
         virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
         virtual void debug(std::ostream& os) const;
         virtual int getTurnsToEvent() const;
-        virtual IProjectionEventPtr update(int nTurns, ProjectionLadder& ladder);
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
 
     private:
+        ProjectionBuildingEvent(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int accumulatedTurns, const std::pair<HurryTypes, int>& hurryEvent);
+
         CityDataPtr pCityData_;
         boost::shared_ptr<BuildingInfo> pBuildingInfo_;
-        int requiredProduction_;
         int accumulatedTurns_;
+        std::pair<HurryTypes, int> hurryEvent_;
     };
 
     class ProjectionUnitEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionUnitEvent>
@@ -61,11 +95,17 @@ namespace AltAI
         ProjectionUnitEvent(const CvCity* pCity, const boost::shared_ptr<UnitInfo>& pUnitInfo);
 
         virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
         virtual void debug(std::ostream& os) const;
         virtual int getTurnsToEvent() const;
-        virtual IProjectionEventPtr update(int nTurns, ProjectionLadder& ladder);
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
 
     private:
+        ProjectionUnitEvent(const boost::shared_ptr<UnitInfo>& pUnitInfo, bool isFoodProduction, int requiredProduction, int accumulatedTurns);
+
         CityDataPtr pCityData_;
         boost::shared_ptr<UnitInfo> pUnitInfo_;
         bool isFoodProduction_;
@@ -79,15 +119,20 @@ namespace AltAI
         ProjectionGlobalBuildingEvent(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int turnBuilt, const CvCity* pBuiltInCity);
 
         virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
         virtual void debug(std::ostream& os) const;
         virtual int getTurnsToEvent() const;
-        virtual IProjectionEventPtr update(int nTurns, ProjectionLadder& ladder);
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
 
-    private:        
+    private:
         CityDataPtr pCityData_;
         boost::shared_ptr<BuildingInfo> pBuildingInfo_;
         int remainingTurns_;
         const CvCity* pBuiltInCity_;
+        bool complete_;
     };
 
     class ProjectionChangeCivicEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionChangeCivicEvent>
@@ -96,9 +141,13 @@ namespace AltAI
         ProjectionChangeCivicEvent(const boost::shared_ptr<CivicInfo>& pCivicInfo, int turnsToChange);
 
         virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
         virtual void debug(std::ostream& os) const;
         virtual int getTurnsToEvent() const;
-        virtual IProjectionEventPtr update(int nTurns, ProjectionLadder& ladder);
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
 
     private:        
         CityDataPtr pCityData_;
@@ -106,5 +155,25 @@ namespace AltAI
         int turnsToChange_;
     };
 
-    ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns, std::vector<IProjectionEventPtr>& events);
+    class ProjectionHappyTimerEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionHappyTimerEvent>
+    {
+    public:
+        virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
+        virtual void debug(std::ostream& os) const;
+        virtual int getTurnsToEvent() const;
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
+
+    private:
+        CityDataPtr pCityData_;
+    };
+
+	struct IProjectionEvent;
+    typedef boost::shared_ptr<IProjectionEvent> IProjectionEventPtr;
+
+    ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns, std::vector<IProjectionEventPtr>& events, 
+        const ConstructItem& constructItem, const std::string& sourceFunc, bool doComparison = false, bool debug = false);
 }

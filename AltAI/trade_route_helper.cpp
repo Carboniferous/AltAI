@@ -1,6 +1,4 @@
-#include "./trade_route_helper.h"
 #include "AltAI.h"
-
 #include "./trade_route_helper.h"
 #include "./iters.h"
 #include "./city_log.h"
@@ -86,15 +84,15 @@ namespace AltAI
                                 {
                                     if (routeValue > bestValueRoutes[i])
                                     {
-	                                    for (int j = numTradeRoutes_ - 1; j > i; --j)
-	                                    {
-		                                    bestValueRoutes[j] = bestValueRoutes[j - 1];
-		                                    tradeCities_[j] = tradeCities_[j - 1];
-	                                    }
+                                        for (int j = numTradeRoutes_ - 1; j > i; --j)
+                                        {
+                                            bestValueRoutes[j] = bestValueRoutes[j - 1];
+                                            tradeCities_[j] = tradeCities_[j - 1];
+                                        }
 
-	                                    bestValueRoutes[i] = routeValue;
-	                                    tradeCities_[i] = pOtherCity->getIDInfo();
-	                                    break;
+                                        bestValueRoutes[i] = routeValue;
+                                        tradeCities_[i] = pOtherCity->getIDInfo();
+                                        break;
                                     }
                                 }
                             }
@@ -134,53 +132,53 @@ namespace AltAI
             }
         }
 
-	    for (int i = 0; i < NUM_YIELD_TYPES; ++i)
-	    {
+        for (int i = 0; i < NUM_YIELD_TYPES; ++i)
+        {
             totalTradeYield_[i] = totalTradeProfit * tradeYieldModifier_[i] / 100;
         }
     }
 
     int TradeRouteHelper::calculateTradeProfit_(const CvCity* pTradeCity) const
     {
-	    return (getBaseTradeProfit_(pTradeCity) * totalTradeModifier_(pTradeCity)) / 10000;
+        return (getBaseTradeProfit_(pTradeCity) * totalTradeModifier_(pTradeCity)) / 10000;
     }
 
     int TradeRouteHelper::getBaseTradeProfit_(const CvCity* pTradeCity) const
     {
-    	int profit = std::min<int>(pTradeCity->getPopulation() * THEIR_POPULATION_TRADE_PERCENT_, 
+        int profit = std::min<int>(pTradeCity->getPopulation() * THEIR_POPULATION_TRADE_PERCENT_, 
             plotDistance(pCity_->getX(), pCity_->getY(), pTradeCity->getX(), pTradeCity->getY()) * tradeProfitPercent_);
 
-	    profit *= TRADE_PROFIT_PERCENT_;
-	    profit /= 100;
+        profit *= TRADE_PROFIT_PERCENT_;
+        profit /= 100;
         profit = std::max<int>(100, profit);
 
-	    return profit;
+        return profit;
     }
 
     int TradeRouteHelper::totalTradeModifier_(const CvCity* pTradeCity) const
     {
         int modifier = 100;
-    	modifier += tradeRouteModifier_;
-    	modifier += getPopulationTradeModifier_();
+        modifier += tradeRouteModifier_;
+        modifier += getPopulationTradeModifier_();
 
-    	if (isConnectedToCapital_)
-	    {
-		    modifier += CAPITAL_TRADE_MODIFIER_;
-	    }
+        if (isConnectedToCapital_)
+        {
+            modifier += CAPITAL_TRADE_MODIFIER_;
+        }
 
-	    if (pTradeCity && pCity_->area() != pTradeCity->area())
-	    {
-			modifier += OVERSEAS_TRADE_MODIFIER_;
-		}
+        if (pTradeCity && pCity_->area() != pTradeCity->area())
+        {
+            modifier += OVERSEAS_TRADE_MODIFIER_;
+        }
 
-		if (pCity_->getTeam() != pTradeCity->getTeam())
-		{
-			modifier += foreignTradeRouteModifier_;
+        if (pCity_->getTeam() != pTradeCity->getTeam())
+        {
+            modifier += foreignTradeRouteModifier_;
 
-			modifier += pCity_->getPeaceTradeModifier(pTradeCity->getTeam());
-		}
+            modifier += pCity_->getPeaceTradeModifier(pTradeCity->getTeam());
+        }
 
-    	return modifier;
+        return modifier;
     }
 
     int TradeRouteHelper::getPopulationTradeModifier_() const
@@ -198,25 +196,25 @@ namespace AltAI
         TeamTypes otherTeamType = otherPlayer.getTeam();
         const CvTeam& otherTeam = CvTeamAI::getTeam(otherTeamType);
 
-	    if (!otherPlayer.isAlive())
-	    {
-		    return false;
-	    }
+        if (!otherPlayer.isAlive())
+        {
+            return false;
+        }
 
-	    if (ourTeamType == otherTeamType)
-	    {
-		    return true;
-	    }
+        if (ourTeamType == otherTeamType)
+        {
+            return true;
+        }
 
-	    if (ourTeam.isFreeTrade(otherTeamType))  // open borders or free trade passed
-	    {
-		    if (ourTeam.isVassal(otherTeamType) || otherTeam.isVassal(ourTeamType) || (allowForeignTradeRoutes_ && !otherPlayer.isNoForeignTrade()))
-		    {
-			    return true;
-		    }
-	    }
+        if (ourTeam.isFreeTrade(otherTeamType))  // open borders or free trade passed
+        {
+            if (ourTeam.isVassal(otherTeamType) || otherTeam.isVassal(ourTeamType) || (allowForeignTradeRoutes_ && !otherPlayer.isNoForeignTrade()))
+            {
+                return true;
+            }
+        }
 
-	    return false;
+        return false;
     }
 
     void TradeRouteHelper::setPopulation(int population)
@@ -263,28 +261,28 @@ namespace AltAI
             TeamTypes otherTeamType = otherPlayer->getTeam();
             const CvTeam& otherTeam = CvTeamAI::getTeam(otherTeamType);
 
-    	    if (!otherPlayer->isAlive())
-	        {
-		        continue;
-	        }
+            if (!otherPlayer->isAlive())
+            {
+                continue;
+            }
 
-	        if (ourTeamType == otherTeamType)
-	        {
-		        foundOtherPlayer = true;
+            if (ourTeamType == otherTeamType)
+            {
+                foundOtherPlayer = true;
                 break;
-	        }
+            }
 
-	        if (ourTeam.isFreeTrade(otherTeamType))  // open borders or free trade passed
-	        {
-		        if (ourTeam.isVassal(otherTeamType) || otherTeam.isVassal(ourTeamType) || (allowForeignTradeRoutes_ && !otherPlayer->isNoForeignTrade()))
-		        {
-			        foundOtherPlayer = true;
+            if (ourTeam.isFreeTrade(otherTeamType))  // open borders or free trade passed
+            {
+                if (ourTeam.isVassal(otherTeamType) || otherTeam.isVassal(ourTeamType) || (allowForeignTradeRoutes_ && !otherPlayer->isNoForeignTrade()))
+                {
+                    foundOtherPlayer = true;
                     break;
-		        }
-	        }
+                }
+            }
         }
 
-	    return foundOtherPlayer;
+        return foundOtherPlayer;
     }
 
     bool TradeRouteHelper::needsRecalc() const

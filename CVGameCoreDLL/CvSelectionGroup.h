@@ -8,6 +8,8 @@
 //#include "CvStructs.h"
 #include "LinkedList.h"
 
+#include <string>
+
 class CvPlot;
 class CvArea;
 class FAStarNode;
@@ -159,7 +161,7 @@ public:
 	PlayerTypes getHeadOwner() const;
 	TeamTypes getHeadTeam() const;
 
-	void clearMissionQueue();																																	// Exposed to Python
+	void clearMissionQueue(const std::string& caller = "");																																	// Exposed to Python
 	DllExport int getLengthMissionQueue() const;																											// Exposed to Python
 	MissionData* getMissionFromQueue(int iIndex) const;																							// Exposed to Python
 	void insertAtEndMissionQueue(MissionData mission, bool bStart = true);

@@ -50,7 +50,7 @@ namespace AltAI
                 PlotYield plotYield;
                 for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
                 {
-		            plotYield[yieldType] = civicInfo.getImprovementYieldChanges((ImprovementTypes)i, yieldType);
+                    plotYield[yieldType] = civicInfo.getImprovementYieldChanges((ImprovementTypes)i, yieldType);
                 }
 
                 if (!isEmpty(plotYield))
@@ -204,6 +204,7 @@ namespace AltAI
             const CvCivicInfo& civicInfo = gGlobals.getCivicInfo(requestData.civicType);
 
             node.health = civicInfo.getExtraHealth();
+            node.prereqTech = (TechTypes)civicInfo.getTechPrereq();
 
             getBuildingNode(node, civicInfo, requestData);
             getImprovementNode(node, civicInfo, requestData);
@@ -512,6 +513,11 @@ namespace AltAI
         if (node.health > 0)
         {
             os << " extra healthiness = " << node.health;
+        }
+
+        if (node.prereqTech != NO_TECH)
+        {
+            os << " requires tech: " << gGlobals.getTechInfo(node.prereqTech).getType();
         }
         
         for (size_t i = 0, count = node.nodes.size(); i < count; ++i)

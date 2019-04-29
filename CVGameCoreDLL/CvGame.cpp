@@ -714,7 +714,7 @@ void CvGame::initFreeState()
 					}
 				}
 
-				GET_TEAM((TeamTypes)iJ).setHasTech(((TechTypes)iI), bValid, NO_PLAYER, false, false);
+				GET_TEAM((TeamTypes)iJ).setHasTech(((TechTypes)iI), bValid, NO_PLAYER, false, false, AltAI::INITIAL_TECH);
 				if (bValid && GC.getTechInfo((TechTypes)iI).isMapVisible()) 
 				{ 
 					GC.getMapINLINE().setRevealedPlots((TeamTypes)iJ, true, true); 
@@ -4446,6 +4446,9 @@ void CvGame::setFinalInitialized(bool bNewValue)
 			updatePlotGroups();
 
 			GC.getMapINLINE().updateIrrigated();
+
+            //AltAI
+            GC.getMapINLINE().recalculateIrrigatableAreas();
 
 			for (iI = 0; iI < MAX_TEAMS; iI++)
 			{

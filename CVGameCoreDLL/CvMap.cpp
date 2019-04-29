@@ -36,6 +36,9 @@
 
 // AltAI
 #include "game.h"
+#include "player.h"
+#include "city.h"
+#include "iters.h"
 #include "utils.h"
 #include "sub_area.h"
 #include "irrigatable_area.h"
@@ -1540,12 +1543,31 @@ void CvMap::calculateIrrigatableAreas()
             gDLL->getFAStarIFace()->GeneratePath(pIrrigatableAreaFinder, pPlot->getX_INLINE(), pPlot->getY_INLINE(), -1, -1, false);
             if (IDAndType.second)  // found a freshwater plot in the area?
             {
-                pIrrigatableArea->setIrrigatable();
+                pIrrigatableArea->setHasFreshWaterAccess();
             }
         }
     }
 
     gDLL->getFAStarIFace()->destroy(pIrrigatableAreaFinder);
+
+    // update fresh water data on already revealed plots
+    AltAI::PlayerIter playerIter;
+    while (const CvPlayerAI* player = playerIter())
+    {
+        if (player->isUsingAltAI())
+        {
+            // AltAI Player objects might not be initialised yet -
+            // needed as if loading a scenario - the initially visible plots are added before the irrigatable area calcs are done
+            // in this case the AltAI player will also have been initialised as this call originates from CvGame::setFinalInitialized.
+            // When loading a game, the AltAI player is not created yet as this fn is called from CvMap::read, so we can't call recalcPlotInfo,
+            // but since the call to setPlotRevealed happens after this calculation there is no need to call recalcPlotInfo anyway!
+            boost::shared_ptr<AltAI::Player> pPlayer = GC.getGame().getAltAI()->getPlayer(player->getID());
+            if (pPlayer)
+            {
+                pPlayer->recalcPlotInfo();
+            }
+        }
+    }
 
     GC.getGameINLINE().getAltAI()->logMap(*this);
  //   std::map<int, std::pair<int, int> > irrigatableAreaCounts;

@@ -40,16 +40,16 @@ namespace AltAI
 
     void CivHelper::addTech(TechTypes techType)
     {
-        /*std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nCivHelper adding tech: " << gGlobals.getTechInfo(techType).getType();*/
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nCivHelper adding tech: " << gGlobals.getTechInfo(techType).getType();
         techs_.insert(techType);
     }
 
     // only removes techs we added
     void CivHelper::removeTech(TechTypes techType)
     {
-        /*std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nCivHelper removing tech: " << gGlobals.getTechInfo(techType).getType();*/
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nCivHelper removing tech: " << gGlobals.getTechInfo(techType).getType();
 
         std::set<TechTypes>::iterator iter = techs_.find(techType);
         if (iter != techs_.end())
@@ -99,15 +99,15 @@ namespace AltAI
         return currentCivics_[civicOptionType];
     }
 
-    bool CivHelper::civicIsAvailable(CivicTypes civicType)
+    /*bool CivHelper::civicIsAvailable(CivicTypes civicType)
     {
         return player_.getCvPlayer()->canDoCivics(civicType) || availableCivics_.find(civicType) != availableCivics_.end();
-    }
+    }*/
 
-    void CivHelper::addCivic(CivicTypes civicType)
+    /*void CivHelper::addCivic(CivicTypes civicType)
     {
         availableCivics_.insert(civicType);
-    }
+    }*/
 
     void CivHelper::adoptCivic(CivicTypes civicType)
     {
@@ -120,13 +120,13 @@ namespace AltAI
         }
     }
 
-    void CivHelper::makeAllCivicsAvailable()
+    /*void CivHelper::makeAllCivicsAvailable()
     {
         for (int i = 0, count = gGlobals.getNumCivicInfos(); i < count; ++i)
         {
             availableCivics_.insert((CivicTypes)i);
         }
-    }
+    }*/
 
     const std::vector<CivicTypes>& CivHelper::getCurrentCivics() const
     {

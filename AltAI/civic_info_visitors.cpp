@@ -19,10 +19,10 @@ namespace AltAI
     namespace
     {
         // update CityData with changes resulting from adopting civics
-        class CityOutputUpdater : public boost::static_visitor<>
+        class CityCivicsUpdater : public boost::static_visitor<>
         {
         public:
-            CityOutputUpdater(const CvCity* pCity, CityData& data, bool isAdding) : pCity_(pCity), data_(data), isAdding_(isAdding)
+            CityCivicsUpdater(const CvCity* pCity, CityData& data, bool isAdding) : pCity_(pCity), data_(data), isAdding_(isAdding)
             {
             }
 
@@ -621,9 +621,9 @@ namespace AltAI
 
         if (currentCivic != newCivic)
         {
-            boost::apply_visitor(CityOutputUpdater(pCity, data, false), pPlayerAnalysis->getCivicInfo(currentCivic)->getInfo());
+            boost::apply_visitor(CityCivicsUpdater(pCity, data, false), pPlayerAnalysis->getCivicInfo(currentCivic)->getInfo());
             data.getCivHelper()->adoptCivic(newCivic);
-            boost::apply_visitor(CityOutputUpdater(pCity, data, true), pPlayerAnalysis->getCivicInfo(newCivic)->getInfo());
+            boost::apply_visitor(CityCivicsUpdater(pCity, data, true), pPlayerAnalysis->getCivicInfo(newCivic)->getInfo());
             data.recalcOutputs();
         }
     }

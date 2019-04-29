@@ -8,8 +8,9 @@
 #include <vector>
 
 namespace AltAI
-{
-    class MapAnalysis;
+{    
+    class MilitaryAnalysis;
+    class GreatPeopleAnalysis;
     class UnitAnalysis;
     class UnitInfo;
     class BuildingInfo;
@@ -18,36 +19,40 @@ namespace AltAI
     class ResourceInfo;
     class ProjectInfo;
 
+    class MapAnalysis;
+    class WorkerAnalysis;
+
     class PlayerAnalysis
     {
     public:
-        struct WorkerTechData
-        {
-            WorkerTechData() : techType(NO_TECH) {}
-
-            TechTypes techType;
-            std::set<BonusTypes> newPotentialWorkableBonuses;  // bonus types we could access from planned new cities
-            std::set<BonusTypes> newConnectableBonuses;  // bonus types we could connect (using workers)
-            std::map<BonusTypes, int> newBonusAccessCounts;
-            std::map<ImprovementTypes, std::pair<TotalOutput, int> > newValuedImprovements;
-            std::map<ImprovementTypes, int> newUnvaluedImprovements;
-
-            void debug(std::ostream& os) const;
-        };
-
-        // turns, pop, delta output
-        typedef boost::tuple<int, int, TotalOutput> CityGrowthLadder;
-
         explicit PlayerAnalysis(Player& player);
 
         void init();
         void postCityInit();
+
+        // need to update when first city is founded
+        void analyseSpecialists();
 
         void update(const boost::shared_ptr<IEvent<NullRecv> >& event);
 
         const boost::shared_ptr<MapAnalysis>& getMapAnalysis() const
         {
             return pMapAnalysis_;
+        }
+
+        const boost::shared_ptr<WorkerAnalysis>& getWorkerAnalysis() const
+        {
+            return pWorkerAnalysis_;
+        }
+
+        const boost::shared_ptr<GreatPeopleAnalysis>& getGreatPeopleAnalysis() const
+        {
+            return pGreatPeopleAnalysis_;
+        }
+
+        const boost::shared_ptr<MilitaryAnalysis>& getMilitaryAnalysis() const
+        {
+            return pMilitaryAnalysis_;
         }
 
         ResearchTech getResearchTech(TechTypes ignoreTechType = NO_TECH);
@@ -83,19 +88,24 @@ namespace AltAI
 
         boost::shared_ptr<UnitInfo> getUnitInfo(UnitTypes unitType) const;
         boost::shared_ptr<BuildingInfo> getBuildingInfo(BuildingTypes buildingType) const;
+        boost::shared_ptr<BuildingInfo> getSpecialBuildingInfo(BuildingTypes buildingType) const;
         boost::shared_ptr<ProjectInfo> getProjectInfo(ProjectTypes projectType) const;
         boost::shared_ptr<TechInfo> getTechInfo(TechTypes techType) const;
         boost::shared_ptr<CivicInfo> getCivicInfo(CivicTypes civicType) const;
         boost::shared_ptr<ResourceInfo> getResourceInfo(BonusTypes bonusType) const;
 
         SpecialistTypes getBestSpecialist(OutputTypes outputType) const;
+        SpecialistTypes getBestSpecialist(const std::vector<OutputTypes>& outputTypes) const;
+        std::vector<SpecialistTypes> getBestSpecialists(const std::vector<OutputTypes>& outputTypes, size_t count) const;
+        std::vector<SpecialistTypes> getMixedSpecialistTypes() const;
 
         int getPlayerUnitProductionModifier(UnitTypes unitType) const;
         int getPlayerBuildingProductionModifier(BuildingTypes buildingType) const;
 
-        void analyseCities();
-        void analyseCity(const CvCity* pCity);
-        std::vector<CityGrowthLadder> getCityGrowthLadder(IDInfo city) const;
+        std::vector<UnitTypes> getSpecialBuildingUnits(BuildingTypes buildingType) const;
+
+        int getUnitLevel(int experience) const;
+        int getRequiredUnitExperience(int level) const;
 
         // save/load functions
         void write(FDataStreamBase* pStream) const;
@@ -103,12 +113,13 @@ namespace AltAI
 
     private:
         void updateTechDepths_();
-
         bool sanityCheckTech_(TechTypes techType) const;
-        std::map<TechTypes, WorkerTechData> getWorkerTechData_();
 
         Player& player_;
         boost::shared_ptr<MapAnalysis> pMapAnalysis_;
+        boost::shared_ptr<MilitaryAnalysis> pMilitaryAnalysis_;
+        boost::shared_ptr<WorkerAnalysis> pWorkerAnalysis_;
+        boost::shared_ptr<GreatPeopleAnalysis> pGreatPeopleAnalysis_;
         int timeHorizon_;
         std::vector<int> techDepths_;
 
@@ -121,7 +132,7 @@ namespace AltAI
         void analyseTechs_();
         void analyseCivics_();
         void analyseResources_();
-        void analyseSpecialists_();        
+        void analyseExperienceLevels_();
 
         std::map<UnitTypes, boost::shared_ptr<UnitInfo> > unitsInfo_;
         std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> > buildingsInfo_;
@@ -135,8 +146,10 @@ namespace AltAI
         std::map<BuildingTypes, int> buildingProductionModifiersMap_;
 
         std::map<OutputTypes, SpecialistTypes> bestSpecialistTypesMap_;
+        std::vector<SpecialistTypes> mixedSpecialistTypes_;
+        std::map<BuildingTypes, std::vector<UnitTypes> > unitSpecialBuildingsMap_;
 
-        typedef std::map<IDInfo, std::vector<CityGrowthLadder> > CityOutputsMap;
-        CityOutputsMap cityOutputsMap_;
+        std::map<int, int> levelExperienceMap_;  // level -> exp
+        std::map<int, int> experienceLevelsMap_;  // exp -> level
     };
 }

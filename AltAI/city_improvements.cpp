@@ -15,13 +15,15 @@
 #include "./tech_info_visitors.h"
 #include "./city_simulator.h"
 #include "./irrigatable_area.h"
+#include "./civ_helper.h"
 #include "./city_log.h"
 #include "./civ_log.h"
+#include "./error_log.h"
 
-#include "CvDLLEngineIFaceBase.h"
-#include "CvDLLFAStarIFaceBase.h"
-#include "CvGameCoreUtils.h"
-#include "FAStarNode.h"
+#include "../CvGameCoreDLL/CvDLLEngineIFaceBase.h"
+#include "../CvGameCoreDLL/CvDLLFAStarIFaceBase.h"
+#include "../CvGameCoreDLL/CvGameCoreUtils.h"
+#include "../CvGameCoreDLL/FAStarNode.h"
 
 namespace AltAI
 {
@@ -47,14 +49,14 @@ namespace AltAI
             }
         }
 
-        struct PlotDataFinder
+        struct PlotImprovementDataFinder
         {
-            explicit PlotDataFinder(const CityImprovementManager::PlotImprovementData& plotData) : coords(boost::get<0>(plotData)) {}
-            explicit PlotDataFinder(XYCoords coords_) : coords(coords_) {}
+            explicit PlotImprovementDataFinder(const PlotImprovementData& plotData) : coords(plotData.coords) {}
+            explicit PlotImprovementDataFinder(XYCoords coords_) : coords(coords_) {}
 
-            bool operator() (const CityImprovementManager::PlotImprovementData& other) const
+            bool operator() (const PlotImprovementData& other) const
             {
-                return boost::get<0>(other) == coords;
+                return other.coords == coords;
             }
 
             const XYCoords coords;
@@ -66,65 +68,79 @@ namespace AltAI
             typedef typename P Pred;
             PlotImprovementDataAdaptor(P pred_) : pred(pred_) {}
 
-            bool operator () (const CityImprovementManager::PlotImprovementData& p1, const CityImprovementManager::PlotImprovementData& p2) const
+            bool operator () (const PlotImprovementData& p1, const PlotImprovementData& p2) const
             {
-                return pred(boost::get<3>(p1), boost::get<3>(p2));
+                return pred(p1.yield, p2.yield);
             }
             P pred;
         };
+
+        struct PlotImprovementRankOrder
+        {
+            bool operator() (const PlotImprovementData& p1, const PlotImprovementData& p2) const
+            {
+                if (p1.simulationData.firstTurnWorked == p2.simulationData.firstTurnWorked)
+                {
+                    MixedOutputOrderFunctor<PlotYield> mixedF(makeYieldP(YIELD_FOOD), OutputUtils<PlotYield>::getDefaultWeights());
+                    return mixedF(p1.yield, p2.yield);
+                }
+                else
+                {
+                    if (p1.simulationData.firstTurnWorked == -1)
+                    {
+                        return false;
+                    }
+                    else if (p2.simulationData.firstTurnWorked == -1)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        return p1.simulationData.firstTurnWorked < p2.simulationData.firstTurnWorked;
+                    }
+                }
+            }
+        };
     }
 
-    CityImprovementManager::CityImprovementManager(IDInfo city, bool includeUnclaimedPlots) : city_(city), includeUnclaimedPlots_(includeUnclaimedPlots)
+    CityImprovementManager::~CityImprovementManager()
+    {
+        //ErrorLog::getLog(CvPlayerAI::getPlayer(city_.eOwner))->getStream() << "\ndelete CityImprovementManager at: " << this;
+    }
+
+    CityImprovementManager::CityImprovementManager(IDInfo city, bool includeUnclaimedPlots)
+        : city_(city), includeUnclaimedPlots_(includeUnclaimedPlots)
     {
     }
 
-    void CityImprovementManager::calcImprovements(const std::vector<YieldTypes>& yieldTypes, int targetSize, int lookAheadDepth)
+    void CityImprovementManager::calcImprovements_(const CityDataPtr& pCityData, const std::vector<YieldTypes>& yieldTypes, int targetSize, int lookAheadDepth)
     {
         const CvCity* pCity = ::getCity(city_);
 
         PlayerTypes playerType = pCity->getOwner();
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
 
         std::vector<ConditionalPlotYieldEnchancingBuilding> conditionalEnhancements = GameDataAnalysis::getInstance()->getConditionalPlotYieldEnhancingBuildings(playerType, pCity);
         
-        DotMapItem dotMapItem(XYCoords(pCity->getX(), pCity->getY()), pCity->plot()->getYield());
-        boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(::getCity(city_)->getOwner())->getAnalysis()->getMapAnalysis();
-        std::set<XYCoords> pinnedIrrigationPlots;
+        //DotMapItem dotMapItem(XYCoords(pCity->getX(), pCity->getY()), pCity->plot()->getYield());
+        boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(playerType)->getAnalysis()->getMapAnalysis();
+        const CvMap& theMap = gGlobals.getMap();
 
-        CityPlotIter iter(pCity);
+        std::set<XYCoords> pinnedIrrigationPlots, sharedCoords = pMapAnalysis->getCitySharedPlots(city_);
 
-        while (IterPlot pLoopPlot = iter())
+        DotMapItem dotMapItem(pCity->plot()->getCoords(), pCityData->getCityPlotData().plotYield);
+
+        for (PlotDataList::const_iterator plotIter(pCityData->getPlotOutputs().begin()), plotEndIter(pCityData->getPlotOutputs().end()); plotIter != plotEndIter; ++plotIter)
         {
-            if (!pLoopPlot.valid())
+            if (plotIter->isActualPlot() && plotIter->ableToWork)
             {
-                continue;
-            }
-
-            PlayerTypes plotOwner = pLoopPlot->getOwner();
-            XYCoords plotCoords(pLoopPlot->getX(), pLoopPlot->getY());
-
-            if ((plotOwner == city_.eOwner || plotOwner == NO_PLAYER && includeUnclaimedPlots_) && plotCoords != dotMapItem.coords)
-            {
-                SharedPlotItemPtr sharedPlotPtr = pMapAnalysis->getSharedPlot(city_, plotCoords);
-
-                if (sharedPlotPtr)
-                {
-                    if (sharedPlotPtr->assignedImprovement.first.eOwner == NO_PLAYER)
-                    {
-                        // assign this shared plot to us to manage
-                        sharedPlotPtr->assignedImprovement.first = city_;
-                    }
-                    else if (!(sharedPlotPtr->assignedImprovement.first == city_))
-                    {
-                        continue;
-                    }
-                }
-
-                DotMapItem::DotMapPlotData plotData(pLoopPlot, playerType, lookAheadDepth);
+                DotMapItem::DotMapPlotData plotData(*plotIter, playerType, lookAheadDepth);
 
                 if (!plotData.possibleImprovements.empty())
                 {
                     // todo - allow global buildings which change yield to be counted here (e.g. colossus)
-                    PlotYield extraYield = getExtraConditionalYield(dotMapItem.coords, XYCoords(pLoopPlot->getX(), pLoopPlot->getY()), conditionalEnhancements);
+                    // this seems to include potential buildings - probably should just be actual
+                    PlotYield extraYield = getExtraConditionalYield(dotMapItem.coords, plotIter->coords, conditionalEnhancements);
                     if (!isEmpty(extraYield))
                     {
                         for (size_t i = 0, count = plotData.possibleImprovements.size(); i < count; ++i)
@@ -132,18 +148,81 @@ namespace AltAI
                             plotData.possibleImprovements[i].first += extraYield;
                         }
                     }
+                    const bool isSharedPlot = sharedCoords.find(plotIter->coords) != sharedCoords.end();
+                    bool isImpOwnedPlot = true;
 
-                    for (size_t i = 0, count = improvements_.size(); i < count; ++i)
+                    if (isSharedPlot)
                     {
-                        XYCoords coords = boost::get<0>(improvements_[i]);
-                        if (coords == plotCoords)
+                        IDInfo impCity = pMapAnalysis->getImprovementOwningCity(city_, plotIter->coords);
+                        // check for shared plots this city doesn't own the improvement setting for and pin them to their current improvement
+                        if (impCity != IDInfo() && impCity != city_)
                         {
-                            if (boost::get<6>(improvements_[i]) & IrrigationChainPlot) // mark plot as pinned if it needs to keep irrigation
+                            ImprovementTypes selectedImprovement = plotIter->improvementType;
+                            if (selectedImprovement == NO_IMPROVEMENT)
                             {
-                                pinnedIrrigationPlots.insert(coords);
+                                std::pair<bool, PlotImprovementData*> foundImprovement = pPlayer->getCity(impCity.iID).getCityImprovementManager()->findImprovement(plotIter->coords);
+                                if (foundImprovement.first)
+                                {
+                                    selectedImprovement = foundImprovement.second->improvement;
+                                }
+                            }
+
+                            for (size_t j = 0, count = plotData.possibleImprovements.size(); j < count; ++j)
+                            {
+                                if (plotData.possibleImprovements[j].second == selectedImprovement)
+                                {
+                                    plotData.workedImprovement = j;
+                                    break;
+                                }
+                            }
+                            plotData.isPinned = true;
+                            isImpOwnedPlot = false;
+#ifdef ALTAI_DEBUG
+                            {   // debug
+                                std::ostream& os = CityLog::getLog(pCity)->getStream();
+                                os << "\nMarked shared plot: " << plotIter->coords << " as pinned with improvement: "
+                                    << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo((ImprovementTypes)plotData.getWorkedImprovement()).getType());
+                            }
+#endif
+                        }
+                    }
+
+                    if (isImpOwnedPlot)
+                    {
+                        if (plotIter->bonusType == NO_BONUS &&
+                                // keep any plot worked long enough to upgrade
+                                getBaseImprovement(plotIter->improvementType) != plotIter->improvementType)
+                                // mark towns and villages as probably want to keep them
+                                //(improvementIsFinalUpgrade(plotIter->improvementType) || nextImprovementIsFinalUpgrade(plotIter->improvementType)))
+                        {
+                            for (size_t j = 0, count = plotData.possibleImprovements.size(); j < count; ++j)
+                            {
+                                if (getBaseImprovement(plotData.possibleImprovements[j].second) == getBaseImprovement(plotIter->improvementType))
+                                {
+                                    plotData.workedImprovement = j;
+                                    break;
+                                }
+                            }
+                            plotData.isPinned = true;
+#ifdef ALTAI_DEBUG
+                            {   // debug
+                                std::ostream& os = CityLog::getLog(pCity)->getStream();
+                                os << "\nMarked plot: " << plotIter->coords << " as pinned with upgraded improvement: "
+                                    << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo(plotIter->improvementType).getType());
+                            }
+#endif
+                        }
+
+                        std::vector<PlotImprovementData>::iterator impIter = std::find_if(improvements_.begin(), improvements_.end(), PlotImprovementDataFinder(plotIter->coords));
+
+                        if (impIter != improvements_.end())
+                        {                        
+                            if (impIter->flags & PlotImprovementData::IrrigationChainPlot) // mark plot as pinned if it needs to keep irrigation
+                            {
+                                pinnedIrrigationPlots.insert(plotIter->coords);
                                 for (size_t j = 0, count = plotData.possibleImprovements.size(); j < count; ++j)
                                 {
-                                    if (plotData.possibleImprovements[j].second == boost::get<2>(improvements_[i]))
+                                    if (plotData.possibleImprovements[j].second == impIter->improvement)
                                     {
                                         plotData.workedImprovement = j;
                                         break;
@@ -153,122 +232,133 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                                 {   // debug
                                     std::ostream& os = CityLog::getLog(pCity)->getStream();
-                                    os << "\nMarked plot: " << coords << " as pinned with improvement: "
+                                    os << "\nMarked plot: " << impIter->coords << " as pinned with improvement: "
                                         << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo((ImprovementTypes)plotData.getWorkedImprovement()).getType());
                                 }
 #endif
-                            }
-                            else if (pLoopPlot->getBonusType(::getCity(city_)->getTeam()) == NO_BONUS &&
-                                // mark towns and villages as probably want to keep them
-                                (improvementIsFinalUpgrade(pLoopPlot->getImprovementType()) || nextImprovementIsFinalUpgrade(pLoopPlot->getImprovementType())))
-                            {
-                                for (size_t j = 0, count = plotData.possibleImprovements.size(); j < count; ++j)
-                                {
-                                    if (getBaseImprovement(plotData.possibleImprovements[j].second) == getBaseImprovement(pLoopPlot->getImprovementType()))
-                                    {
-                                        plotData.workedImprovement = j;
-                                        break;
-                                    }
-                                }
-                                plotData.isPinned = true;
-#ifdef ALTAI_DEBUG
-                                {   // debug
-                                    std::ostream& os = CityLog::getLog(pCity)->getStream();
-                                    os << "\nMarked plot: " << coords << " as pinned with upgraded improvement: "
-                                        << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo(pLoopPlot->getImprovementType()).getType());
-                                }
-#endif
-                            }
-                            break;
+                            }                            
                         }
                     }
-                    dotMapItem.plotData.insert(plotData);
                 }
+#ifdef ALTAI_DEBUG
+                {   // debug
+                    std::ostream& os = CityLog::getLog(pCity)->getStream();
+                    plotData.debug(os);
+                }
+#endif
+                dotMapItem.plotData.insert(plotData);
             }
         }
-
-        //markFeaturesToKeep_(dotMapItem);
 
         DotMapOptimiser optMixed(dotMapItem, YieldWeights(), YieldWeights());
 
         //optMixed.optimise(yieldTypes, std::min<int>(dotMapItem.plotData.size(), targetSize));
-        optMixed.optimise(yieldTypes, targetSize);
+        optMixed.optimise(yieldTypes, std::min<int>(targetSize, dotMapItem.plotData.size()));
         //optMixed.optimise(yieldTypes, std::min<int>(dotMapItem.plotData.size(), 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel())));
 
 #ifdef ALTAI_DEBUG
         {
             std::ostream& os = CityLog::getLog(pCity)->getStream();
-            os << "\nPop = " << pCity->getPopulation() << ", happy = " << pCity->happyLevel() << ", unhappy = " << pCity->unhappyLevel() << " target = " << targetSize;
-            for (size_t i = 0, count = yieldTypes.size(); i < count; ++i)
+            os << "\nPop = " << pCity->getPopulation() << ", happy = " << pCity->happyLevel() << ", unhappy = " << pCity->unhappyLevel() << " target = " << std::min<int>(targetSize, dotMapItem.plotData.size());
+            /*for (size_t i = 0, count = yieldTypes.size(); i < count; ++i)
             {
                 os << " yieldTypes[" << i << "] = " << yieldTypes[i];
-            }
+            }*/
         }
-        //dotMapItem.debugOutputs(CityLog::getLog(pCity)->getStream());
+        dotMapItem.debugOutputs(CityLog::getLog(pCity)->getStream());
 #endif
 
         improvements_.clear();
+        improvementsDelta_ = TotalOutput();
+
         for (DotMapItem::PlotDataConstIter ci(dotMapItem.plotData.begin()), ciEnd(dotMapItem.plotData.end()); ci != ciEnd; ++ci)
         {
             ImprovementTypes improvementType = ci->getWorkedImprovement();
 
             if (improvementType != NO_IMPROVEMENT)
             {
-                FeatureTypes featureRemovedByImprovement = GameDataAnalysis::doesBuildTypeRemoveFeature(
-                    GameDataAnalysis::getBuildTypeForImprovementType(improvementType), ci->featureType) ? ci->featureType : NO_FEATURE;
-
-                improvements_.push_back(boost::make_tuple(ci->coords, featureRemovedByImprovement, getBaseImprovement(improvementType), ci->getPlotYield(), TotalOutput(), Not_Built, None));
+                ImprovementTypes baseImprovement = getBaseImprovement(improvementType);
+                bool buildRemovesFeature = GameDataAnalysis::doesBuildTypeRemoveFeature(
+                    GameDataAnalysis::getBuildTypeForImprovementType(baseImprovement), ci->featureType);
 
                 const CvPlot* pPlot = gGlobals.getMap().plot(ci->coords.iX, ci->coords.iY);
-                ImprovementTypes currentImprovement = pPlot->getImprovementType();
 
-                ImprovementState improvementState = getBaseImprovement(currentImprovement) == getBaseImprovement(improvementType) ? Built : Not_Built;
+                if (baseImprovement == getBaseImprovement(pPlot->getImprovementType()))  // already built and selected
+                {
+                    improvements_.push_back(PlotImprovementData(ci->coords, pPlot->getFeatureType(), improvementType, pPlot->getYield(), 
+                        PlotImprovementData::Built, PlotImprovementData::None));
+                }
+                else
+                {
+                    PlotYield plotYield = baseImprovement == improvementType ?
+                        ci->getPlotYield() : getYield(pMapAnalysis->getPlotInfoNode(pPlot), city_.eOwner, baseImprovement, 
+                        buildRemovesFeature ? NO_FEATURE : ci->featureType, pPlot->getRouteType());
+#ifdef ALTAI_DEBUG
+                    /*if (isEmpty(plotYield))
+                    {
+                        std::ostream& os = CityLog::getLog(pCity)->getStream();
+                        os << "\nempty plot yield for imp at: " << ci->coords;
+                    }*/
+#endif
+                    improvements_.push_back(PlotImprovementData(ci->coords, 
+                        buildRemovesFeature ? ci->featureType : NO_FEATURE, baseImprovement, 
+                        plotYield, PlotImprovementData::Not_Built, PlotImprovementData::None));
+                }
+                
+                //ImprovementTypes currentImprovement = pPlot->getImprovementType();
+
+                /*PlotImprovementData::ImprovementState improvementState = 
+                    getBaseImprovement(currentImprovement) == getBaseImprovement(improvementType) ? PlotImprovementData::Built : PlotImprovementData::Not_Built;*/
 
                 if (ci->improvementMakesBonusValid)
                 {
-                    boost::get<6>(*improvements_.rbegin()) |= ImprovementMakesBonusValid;
+                    improvements_.rbegin()->flags |= PlotImprovementData::ImprovementMakesBonusValid;
                 }
 
                 if (!ci->isSelected && !ci->improvementMakesBonusValid)  // always mark bonuses as selected if we can build the appropriate improvement
                 {
-                    boost::get<5>(*improvements_.rbegin()) = Not_Selected;
+                    improvements_.rbegin()->state = PlotImprovementData::Not_Selected;
+                    if (sharedCoords.find(ci->coords) != sharedCoords.end())
+                    {
+#ifdef ALTAI_DEBUG
+                        {
+                            std::ostream& os = CityLog::getLog(pCity)->getStream();
+                            os << "\n unused shared coord: " << ci->coords;
+                        }
+#endif
+                    }
                 }
-                else
+                /*else
                 {
-                    boost::get<5>(*improvements_.rbegin()) = improvementState;
-                }
+                    improvements_.rbegin()->state = improvementState;
+                }*/
 
                 if (pinnedIrrigationPlots.find(ci->coords) != pinnedIrrigationPlots.end())
                 {
-                    boost::get<6>(*improvements_.rbegin()) |= IrrigationChainPlot;
+                    improvements_.rbegin()->flags |= PlotImprovementData::IrrigationChainPlot;
                 }
             }
         }
 
-        // don't care about this as this flag indicates a simulation
-        if (!includeUnclaimedPlots_)
-        {
-            markPlotsWhichNeedIrrigation_();
-            markPlotsWhichNeedRoute_();
-            markPlotsWhichNeedTransport_();
-            markPlotsWhichNeedFeatureRemoved_();
-        }
+        // no longer distinguish if simulation
+        markPlotsWhichNeedIrrigation_();
+        markPlotsWhichNeedRoute_();
+        markPlotsWhichNeedTransport_();
+        markPlotsWhichNeedFeatureRemoved_();
     }
 
     void CityImprovementManager::markPlotsWhichNeedIrrigation_()
     {
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
-            if (boost::get<5>(improvements_[i]) == Built)
-            {
-                XYCoords coords = boost::get<0>(improvements_[i]);
-                ImprovementTypes improvementType = boost::get<2>(improvements_[i]);
-                const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(improvementType);
+            //if (improvements_[i].state == PlotImprovementData::Built)
+            //{
+                const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(improvements_[i].improvement);
                 const PlotYield irrigatedYieldChange = const_cast<CvImprovementInfo&>(improvementInfo).getIrrigatedYieldChangeArray();
                 if (!isEmpty(irrigatedYieldChange))
                 {
-                    const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
-                    if (!pPlot->isIrrigated())
+                    const CvPlot* pPlot = gGlobals.getMap().plot(improvements_[i].coords.iX, improvements_[i].coords.iY);
+                    if (!pPlot->isIrrigated() && !pPlot->isFreshWater())
                     {
                         const int irrigatableAreaID = pPlot->getIrrigatableArea();
                         if (irrigatableAreaID != FFreeList::INVALID_INDEX)
@@ -276,12 +366,12 @@ namespace AltAI
                             boost::shared_ptr<IrrigatableArea> pIrrigatableArea = gGlobals.getMap().getIrrigatableArea(irrigatableAreaID);
                             if (pIrrigatableArea->hasFreshWaterAccess())
                             {
-                                boost::get<6>(improvements_[i]) |= NeedsIrrigation;
+                                improvements_[i].flags |= PlotImprovementData::NeedsIrrigation;
                             }
                         }
                     }
                 }
-            }
+            //}
         }
     }
 
@@ -292,15 +382,20 @@ namespace AltAI
 
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
-            if (boost::get<5>(improvements_[i]) == Built && (boost::get<6>(improvements_[i]) & ImprovementMakesBonusValid))
+            if (improvements_[i].flags & PlotImprovementData::ImprovementMakesBonusValid)
             {
-                XYCoords coords = boost::get<0>(improvements_[i]);
+                XYCoords coords = improvements_[i].coords;
                 const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
+                if (pPlot->getOwner() == NO_PLAYER)
+                {
+                    continue;
+                }
 
                 // todo - deal with plots on other subareas which need routes (needs consideration of forts and check if there are other cities in that sub area)
+                //check for plot group as it appears we can be called on city capture before plot groups are properly setup?
                 if (citySubArea == pPlot->getSubArea() && !pPlot->isConnectedTo(pCity))
                 {
-                    boost::get<6>(improvements_[i]) |= NeedsRoute;
+                    improvements_[i].flags |= PlotImprovementData::NeedsRoute;
                 }
             }
         }
@@ -310,9 +405,9 @@ namespace AltAI
     {
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
-            if (boost::get<5>(improvements_[i]) == Built)
+            if (improvements_[i].state == PlotImprovementData::Built)
             {
-                XYCoords coords = boost::get<0>(improvements_[i]);
+                XYCoords coords = improvements_[i].coords;
                 const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
                 FeatureTypes featureType = pPlot->getFeatureType();
                 if (featureType != NO_FEATURE)
@@ -322,7 +417,7 @@ namespace AltAI
                         BuildTypes buildType = GameDataAnalysis::getBuildTypeToRemoveFeature(featureType);
                         if (buildType != NO_BUILD)
                         {
-                            boost::get<6>(improvements_[i]) |= RemoveFeature;
+                            improvements_[i].flags |= PlotImprovementData::RemoveFeature;
                         }
                     }
                 }
@@ -337,48 +432,49 @@ namespace AltAI
 
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
-            if (boost::get<5>(improvements_[i]) == Not_Built)
+            if (improvements_[i].state == PlotImprovementData::Not_Built)
             {
-                XYCoords coords = boost::get<0>(improvements_[i]);
+                XYCoords coords = improvements_[i].coords;
                 const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
 
                 // todo - deal with plots on other subareas which need routes (needs consideration of forts and check if there are other cities in that sub area)
-                if (citySubArea != pPlot->getSubArea())
+                if (!pPlot->isWater() && citySubArea != pPlot->getSubArea())
                 {
-                    boost::get<6>(improvements_[i]) |= WorkerNeedsTransport;
+                    improvements_[i].flags |= PlotImprovementData::WorkerNeedsTransport;
                 }
             }
         }
     }
 
-    boost::tuple<XYCoords, FeatureTypes, ImprovementTypes> CityImprovementManager::getBestImprovementNotBuilt(TotalOutputWeights outputWeights, bool whichMakesBonusValid, 
-        bool simulatedOnly, const std::vector<boost::shared_ptr<PlotCond> >& conditions) const
+    boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, int> CityImprovementManager::getBestImprovementNotBuilt(bool whichMakesBonusValid, bool selectedOnly, const std::vector<PlotCondPtr >& conditions) const
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CityLog::getLog(::getCity(city_))->getStream();
         os << "\nTurn = " << gGlobals.getGame().getGameTurn();
-        logImprovements();
+        //logImprovements();
+        for (size_t i = 0, count = conditions.size(); i < count; ++i)
+        {
+            os << "\n\twith condition: ";
+            conditions[i]->log(os);
+        }
 #endif
 
-        int bestImprovementValue = 0, bestSimulatedImprovementValue = 0;
-        int bestImprovementIndex = NO_IMPROVEMENT, bestSimulatedImprovementIndex = NO_IMPROVEMENT;
-        YieldValueFunctor valueF(makeYieldW(4, 2, 1));
-        TotalOutputValueFunctor simValueF(outputWeights);
+        int bestImprovementIndex = NO_IMPROVEMENT;
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner);
 
-        boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner);
-
+        // improvements are in order of selection
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
-            if (boost::get<2>(improvements_[i]) != NO_IMPROVEMENT)
+            if (improvements_[i].improvement != NO_IMPROVEMENT)
             {
-                const XYCoords coords = boost::get<0>(improvements_[i]);
+                const XYCoords coords = improvements_[i].coords;
                 const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
                 BonusTypes bonusType = pPlot->getBonusType(::getCity(city_)->getTeam());
-                ImprovementTypes currentImprovementType = pPlot->getImprovementType(), plannedImprovementType = boost::get<2>(improvements_[i]);
+                ImprovementTypes currentImprovementType = pPlot->getImprovementType(), plannedImprovementType = improvements_[i].improvement;
                 bool hasFort = currentImprovementType != NO_IMPROVEMENT && gGlobals.getImprovementInfo(currentImprovementType).isActsAsCity();
                 bool plotNeedsBonusImprovement = bonusType != NO_BONUS && (getBaseImprovement(currentImprovementType) != getBaseImprovement(plannedImprovementType) || hasFort);
 
-                if (plotNeedsBonusImprovement && !(boost::get<6>(improvements_[i]) & ImprovementMakesBonusValid))
+                if (plotNeedsBonusImprovement && !(improvements_[i].flags & PlotImprovementData::ImprovementMakesBonusValid))
                 {
                     if (whichMakesBonusValid)
                     {
@@ -422,11 +518,11 @@ namespace AltAI
                 }
 
 #ifdef ALTAI_DEBUG
-                os << "\nChecking plot: " << coords << " for planned improvement: " << gGlobals.getImprovementInfo(plannedImprovementType).getType();
+                os << "\nChecking plot: " << coords << " for planned improvement: " << i << " " << gGlobals.getImprovementInfo(plannedImprovementType).getType();
                 logImprovement(os, improvements_[i]);
 #endif
 
-                bool valid = boost::get<5>(improvements_[i]) == Not_Built || boost::get<5>(improvements_[i]) == Not_Selected;
+                bool valid = improvements_[i].isSelectedAndNotBuilt();
                 if (valid)
                 {
                     for (size_t j = 0, count = conditions.size(); j < count; ++j)
@@ -437,44 +533,25 @@ namespace AltAI
 
                 if (valid)
                 {
-                    if (boost::get<4>(improvements_[i]) != TotalOutput() && simValueF(boost::get<4>(improvements_[i])) > bestSimulatedImprovementValue)
+                    if (!selectedOnly || (selectedOnly && improvements_[i].simulationData.numTurnsWorked > 0))
                     {
-#ifdef ALTAI_DEBUG
-                        os << "\nSelected simulated improvement: " << i << " at: " << coords << " value = " << simValueF(boost::get<4>(improvements_[i]));
-#endif
-                        bestSimulatedImprovementIndex = i;
-                        bestSimulatedImprovementValue = simValueF(boost::get<4>(improvements_[i]));
-                    }
-
-                    if (!simulatedOnly && valueF(boost::get<3>(improvements_[i])) > bestImprovementValue)
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nSelected improvement: " << i << " at: " << coords << " value = " << valueF(boost::get<3>(improvements_[i]));
-#endif
                         bestImprovementIndex = i;
-                        bestImprovementValue = valueF(boost::get<3>(improvements_[i]));
-                    }
-                }
-                else
-                {
-#ifdef ALTAI_DEBUG
-                    os << " - validity check failed ";
-#endif
+                    }                    
+                    break;
                 }
             }
         }
         
-        if (bestSimulatedImprovementIndex != NO_IMPROVEMENT)
+        if (bestImprovementIndex != NO_IMPROVEMENT)
         {
-            return boost::make_tuple(boost::get<0>(improvements_[bestSimulatedImprovementIndex]), boost::get<1>(improvements_[bestSimulatedImprovementIndex]), getBaseImprovement(boost::get<2>(improvements_[bestSimulatedImprovementIndex])));
-        }
-        else if (bestImprovementIndex != NO_IMPROVEMENT)
-        {
-            return boost::make_tuple(boost::get<0>(improvements_[bestImprovementIndex]), boost::get<1>(improvements_[bestImprovementIndex]), getBaseImprovement(boost::get<2>(improvements_[bestImprovementIndex])));
+            return boost::make_tuple(improvements_[bestImprovementIndex].coords, 
+                improvements_[bestImprovementIndex].removedFeature, 
+                getBaseImprovement(improvements_[bestImprovementIndex].improvement),
+                improvements_[bestImprovementIndex].flags);
         }
         else
         {
-            return boost::make_tuple(XYCoords(), NO_FEATURE, NO_IMPROVEMENT);
+            return boost::make_tuple(XYCoords(-1, -1), NO_FEATURE, NO_IMPROVEMENT, 0);
         }
     }
 
@@ -482,7 +559,7 @@ namespace AltAI
     {
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
-            if (boost::get<0>(improvements_[i]) == coords)
+            if (improvements_[i].coords == coords)
             {
                 const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
                 BonusTypes bonusType = pPlot->getBonusType(::getCity(city_)->getTeam());
@@ -490,11 +567,11 @@ namespace AltAI
 
                 bool hasFort = currentImprovementType != NO_IMPROVEMENT && gGlobals.getImprovementInfo(currentImprovementType).isActsAsCity();
 
-                bool plotNeedsBonusImprovement = bonusType != NO_BONUS && (currentImprovementType != getBaseImprovement(boost::get<2>(improvements_[i])) || hasFort);
+                bool plotNeedsBonusImprovement = bonusType != NO_BONUS && (currentImprovementType != getBaseImprovement(improvements_[i].improvement) || hasFort);
 
                 if (!plotNeedsBonusImprovement)
                 {
-                    if (plotIsWorkedAndImproved(pPlot) || improvementIsUpgradeOf(currentImprovementType, getBaseImprovement(boost::get<2>(improvements_[i]))))
+                    if (plotIsWorkedAndImproved(pPlot) || improvementIsUpgradeOf(currentImprovementType, getBaseImprovement(improvements_[i].improvement)))
                     {
                         break;
                     }
@@ -503,63 +580,24 @@ namespace AltAI
                 {
 #ifdef ALTAI_DEBUG
                     std::ostream& os = CityLog::getLog(::getCity(city_))->getStream();
-                    os << "\nFound plot at: " << coords << " which needs bonus improvement: " << gGlobals.getImprovementInfo(getBaseImprovement(boost::get<2>(improvements_[i]))).getType();
+                    os << "\nFound plot at: " << coords << " which needs bonus improvement: "
+                       << gGlobals.getImprovementInfo(getBaseImprovement(improvements_[i].improvement)).getType();
                     if (hasFort)
                     {
                         os << " (currently has fort)";
                     }
 #endif
                 }
-                return getBaseImprovement(boost::get<2>(improvements_[i]));
+                return getBaseImprovement(improvements_[i].improvement);
             }
         }
         return NO_IMPROVEMENT;
     }
 
-    int CityImprovementManager::getRank(XYCoords coords, TotalOutputWeights outputWeights) const
-    {
-        TotalOutputValueFunctor simValueF(outputWeights);
-        YieldValueFunctor valueF(makeYieldW(4, 2, 1));
-        std::multimap<int, XYCoords, std::greater<int> > simulatedImprovementsMap, improvementsMap;
-
-        for (size_t i = 0, count = improvements_.size(); i < count; ++i)
-        {
-            if (boost::get<4>(improvements_[i]) != TotalOutput())
-            {
-                simulatedImprovementsMap.insert(std::make_pair(simValueF(boost::get<4>(improvements_[i])), boost::get<0>(improvements_[i])));
-            }
-            else
-            {
-                improvementsMap.insert(std::make_pair(valueF(boost::get<3>(improvements_[i])), boost::get<0>(improvements_[i])));
-            }
-        }
-
-        int rank = 0;
-        for (std::multimap<int, XYCoords, std::greater<int> >::const_iterator ci(simulatedImprovementsMap.begin()), ciEnd(simulatedImprovementsMap.end()); ci != ciEnd; ++ci)
-        {
-            if (ci->second == coords)
-            {
-                return rank;
-            }
-            else
-            {
-                ++rank;
-            }
-        }
-
-        for (std::multimap<int, XYCoords, std::greater<int> >::const_iterator ci(improvementsMap.begin()), ciEnd(improvementsMap.end()); ci != ciEnd; ++ci)
-        {
-            if (ci->second == coords)
-            {
-                return rank;
-            }
-            else
-            {
-                ++rank;
-            }
-        }
-
-        return improvements_.size();
+    int CityImprovementManager::getRank(XYCoords coords) const
+    {        
+        std::vector<PlotImprovementData>::const_iterator ci = std::find_if(improvements_.begin(), improvements_.end(), PlotImprovementDataFinder(coords));        
+        return std::distance(improvements_.begin(), ci);
     }
 
     int CityImprovementManager::getNumImprovementsNotBuilt() const
@@ -567,7 +605,7 @@ namespace AltAI
         int improvementCount = 0;
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
-            if (boost::get<5>(improvements_[i]) != Built && boost::get<5>(improvements_[i]) != Not_Selected)
+            if (improvements_[i].state != PlotImprovementData::Built && improvements_[i].state != PlotImprovementData::Not_Selected)
             {
                 ++improvementCount;
             }
@@ -575,222 +613,120 @@ namespace AltAI
         return improvementCount;
     }
 
-    PlotYield CityImprovementManager::getProjectedYield(int citySize, YieldPriority yieldP, YieldWeights yieldW) const
+    int CityImprovementManager::getNumImprovementsBuilt() const
     {
-        MixedOutputOrderFunctor<PlotYield> mixedF(yieldP, yieldW);
-        std::vector<PlotImprovementData> improvements(improvements_);
-
-        std::sort(improvements.begin(), improvements.end(), PlotImprovementDataAdaptor<MixedOutputOrderFunctor<PlotYield> >(mixedF));
-        
-        const CvCity* pCity = ::getCity(city_);
-        PlotYield cityPlotYield = pCity->plot()->getYield();
-
-        PlotYield plotYield = cityPlotYield;
-        int surplusFood = cityPlotYield[YIELD_FOOD];
-        const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-
-#ifdef ALTAI_DEBUG
-        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(city_.eOwner));
-        {
-            std::ostream& os = pCivLog->getStream();
-            os << "\nyield = " << plotYield;
-        }
-#endif
-
-        std::vector<PlotImprovementData>::const_iterator ci(improvements.begin()), ciEnd(improvements.end());
-        int count = 0;
-        while (ci != ciEnd && count < citySize)
-        {
-            ++count;
-            PlotYield thisYield = boost::get<3>(*ci++);
-            surplusFood += thisYield[YIELD_FOOD] - foodPerPop;
-            if (surplusFood < 0)
-            {
-                break;
-            }
-            else
-            {
-#ifdef ALTAI_DEBUG
-                {
-                    std::ostream& os = pCivLog->getStream();
-                    os << "\nyield = " << thisYield;
-                }
-#endif
-                plotYield += thisYield;
-            }
-        }
-        return plotYield;
-    }
-
-    TotalOutput CityImprovementManager::simulateImprovements(TotalOutputWeights outputWeights, const std::string& logLabel)
-    {
-        const CvCity* pCity = ::getCity(city_);
-        CitySimulator simulator(pCity);
-
-#ifdef ALTAI_DEBUG
-        {
-            std::ostream& os = CityLog::getLog(pCity)->getStream();
-            os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " label = " << logLabel;
-        }
-#endif
-        const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
-        boost::shared_ptr<MapAnalysis> pMapAnalysis = player->getAnalysis()->getMapAnalysis();
-
-        std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
-        const int targetSize = 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel());
-        calcImprovements(yieldTypes, targetSize);
-        if (!includeUnclaimedPlots_)
-        {
-            pMapAnalysis->assignSharedPlotImprovements(city_);
-        }
-
-        PlotsAndImprovements plotsAndImprovements;
-
+        int improvementCount = 0;
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
-            XYCoords coords = boost::get<0>(improvements_[i]);
-            const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
-            if (!improvementIsUpgradeOf(pPlot->getImprovementType(), boost::get<2>(improvements_[i])))
+            if (improvements_[i].state == PlotImprovementData::Built)
             {
-#ifdef ALTAI_DEBUG
-                {
-                    std::ostream& os = CityLog::getLog(pCity)->getStream();
-                    os << "\nAdding improvement to simulation list: ";
-                    logImprovement(os, improvements_[i]);
-                }
-#endif
-                plotsAndImprovements.push_back(std::make_pair(coords, 
-                    std::vector<std::pair<FeatureTypes, ImprovementTypes> >(1, std::make_pair(boost::get<1>(improvements_[i]), boost::get<2>(improvements_[i])))));
+                ++improvementCount;
             }
         }
+        return improvementCount;
+    } 
 
-#ifdef ALTAI_DEBUG
-        {   // debug
-            std::ostream& os = CityLog::getLog(pCity)->getStream();
-            os << "\nImprovements to simulate:";
-
-            for (size_t i = 0, count = plotsAndImprovements.size(); i < count; ++i)
-            {
-                os << "\n" << plotsAndImprovements[i].first;
-                for (size_t j = 0, count = plotsAndImprovements[i].second.size(); j < count; ++j)
-                {
-                    os << gGlobals.getImprovementInfo(plotsAndImprovements[i].second[j].second).getType();
-                }
-            }
-        }
-#endif
-
-        CityDataPtr pCityData(new CityData(pCity, includeUnclaimedPlots_));
-        //PlotImprovementSimulationResults simulatorResults(simulator.evaluateImprovements(plotsAndImprovements, pCityData, 20, false));
-
-        //std::vector<boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, TotalOutput> > bestSimulatedImprovements = simulator.getBestImprovements(outputWeights, simulatorResults);
-
-        PlotImprovementsProjections projections = simulator.getImprovementProjections(plotsAndImprovements, pCityData, 20, false);
-
-        std::vector<boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, TotalOutput> > bestProjectedImprovements;
-        if (!projections.empty() && !projections[0].second.empty())
-        {
-            TotalOutputValueFunctor valueF(outputWeights);
-            ProjectionLadder base = boost::get<2>(projections[0].second[0]);
-            TotalOutput baseOutput = base.getOutput();
-
-            for (size_t i = 1, plotCount = projections.size(); i < plotCount; ++i)
-            {
-                int thisPlotBestValue = 0;
-                size_t bestPlotIndex = MAX_INT;
-                for (size_t j = 0, improvementCount = projections[i].second.size(); j < improvementCount; ++j)
-                {
-                    int thisPlotValue = valueF(boost::get<2>(projections[i].second[j]).getOutput() - baseOutput);
-                    if (thisPlotValue > thisPlotBestValue)
-                    {
-                        thisPlotBestValue = thisPlotValue;
-                        bestPlotIndex = j;
-                    }
-                }
-                if (bestPlotIndex != MAX_INT)
-                {
-                    bestProjectedImprovements.push_back(boost::make_tuple(projections[i].first, boost::get<0>(projections[i].second[bestPlotIndex]),
-                        boost::get<1>(projections[i].second[bestPlotIndex]), boost::get<2>(projections[i].second[bestPlotIndex]).getOutput() - baseOutput));
-                }
-            }
-        }
-
-#ifdef ALTAI_DEBUG
-		{   // debug
-            std::ostream& os = CityLog::getLog(pCity)->getStream();
-            /*os << "\nBest improvements:";
-
-            for (size_t i = 0, count = bestSimulatedImprovements.size(); i < count; ++i)
-            {
-                ImprovementTypes improvementType = boost::get<2>(bestSimulatedImprovements[i]);
-                os << "\n" << boost::get<0>(bestSimulatedImprovements[i]) << " " <<
-                    (improvementType != NO_IMPROVEMENT ? gGlobals.getImprovementInfo(boost::get<2>(bestSimulatedImprovements[i])).getType() : " (none) ")
-                   << ", delta = " << boost::get<3>(bestSimulatedImprovements[i]);
-            }*/
-
-            os << "\nBest projected improvements:";
-
-            for (size_t i = 0, count = bestProjectedImprovements.size(); i < count; ++i)
-            {
-                ImprovementTypes improvementType = boost::get<2>(bestProjectedImprovements[i]);
-                os << "\n" << boost::get<0>(bestProjectedImprovements[i]) << " " <<
-                    (improvementType != NO_IMPROVEMENT ? gGlobals.getImprovementInfo(boost::get<2>(bestProjectedImprovements[i])).getType() : " (none) ")
-                   << ", delta = " << boost::get<3>(bestProjectedImprovements[i]);
-            }
-        }
-#endif
-
-		//TotalOutput baseOutput;
-  //      for (size_t i = 0, count = bestSimulatedImprovements.size(); i < count; ++i)
-  //      {
-  //          XYCoords coords = boost::get<0>(bestSimulatedImprovements[i]);
-		//	if (coords == XYCoords(pCity->getX(), pCity->getY()))
-		//	{
-		//		baseOutput = boost::get<3>(bestSimulatedImprovements[i]);
-		//	}
-		//	else
-		//	{
-		//		for (size_t j = 0, count = improvements_.size(); j < count; ++j)
-		//		{
-		//			if (boost::get<0>(improvements_[j]) == coords)
-		//			{
-		//				// update TotalOutput
-		//				boost::get<4>(improvements_[j]) = boost::get<3>(bestSimulatedImprovements[i]);
-		//				break;
-		//			}
-		//		}
-		//	}
-  //      }
-
-        TotalOutput baseOutput;
-        for (size_t i = 0, count = bestProjectedImprovements.size(); i < count; ++i)
-        {
-            XYCoords coords = boost::get<0>(bestProjectedImprovements[i]);
-			if (coords == XYCoords(pCity->getX(), pCity->getY()))
-			{
-				baseOutput = boost::get<3>(bestProjectedImprovements[i]);
-			}
-			else
-			{
-				for (size_t j = 0, count = improvements_.size(); j < count; ++j)
-				{
-					if (boost::get<0>(improvements_[j]) == coords)
-					{
-						// update TotalOutput
-						boost::get<4>(improvements_[j]) = boost::get<3>(bestProjectedImprovements[i]);
-						break;
-					}
-				}
-			}
-        }
-
-		return baseOutput;
-    }
-
-    bool CityImprovementManager::updateImprovements(const CvPlot* pPlot, ImprovementTypes improvementType)
+    void CityImprovementManager::simulateImprovements(const CityDataPtr& pCityData, int lookAheadDepth, const std::string& logLabel)
     {
         const CvCity* pCity = ::getCity(city_);
-        XYCoords coords(pPlot->getX(), pPlot->getY());
+        const PlayerPtr& player = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());        
+
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player->getCvPlayer())->getStream();
+        os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " label = " << logLabel;
+#endif
+        std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
+        const int targetSize = std::min<int>(20, 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel()));
+        calcImprovements_(pCityData, yieldTypes, targetSize, lookAheadDepth);
+
+        {
+            std::vector<TechTypes> techs;
+            if (lookAheadDepth > 0)
+            {
+                techs = player->getAnalysis()->getTechsWithDepth(lookAheadDepth);
+                for (size_t i = 0, count = techs.size(); i < count; ++i)
+                {
+                    player->getCivHelper()->addTech(techs[i]);
+                }
+            }
+
+            CityDataPtr pSimulationCityData = CityDataPtr(pCityData->clone());
+            std::vector<IProjectionEventPtr> events;
+
+            ConstructItem constructItem;
+            ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 30, events, constructItem, __FUNCTION__, false, true);
+
+            // add all imps
+            {
+                pSimulationCityData = CityDataPtr(pCityData->clone());
+
+                for (size_t i = 0, count = improvements_.size(); i < count; ++i)
+                {
+                    XYCoords coords = improvements_[i].coords;
+                    const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
+                    if (!improvementIsUpgradeOf(pPlot->getImprovementType(), improvements_[i].improvement) && improvements_[i].state != PlotImprovementData::Built)
+                    {
+                        PlotDataListIter simulatedPlotIter = pSimulationCityData->findPlot(coords);
+                        if (simulatedPlotIter->controlled)
+                        {
+                            updateCityOutputData(*pSimulationCityData, *simulatedPlotIter, improvements_[i].removedFeature, simulatedPlotIter->routeType, getBaseImprovement(improvements_[i].improvement));
+                        }
+                    }
+                }
+
+                events.clear();
+                ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 30, events, constructItem, __FUNCTION__, false, true);
+
+                {
+#ifdef ALTAI_DEBUG
+                    std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
+                    os << "\nWorked plots data:";
+#endif
+                    for (size_t i = 0, count = improvements_.size(); i < count; ++i)
+                    {
+                        std::pair<int, int> workedData = ladder.getWorkedTurns(improvements_[i].coords);
+                        improvements_[i].simulationData.firstTurnWorked = workedData.first;
+                        improvements_[i].simulationData.numTurnsWorked = workedData.second;
+#ifdef ALTAI_DEBUG
+                        os << "\n\tplot: " << improvements_[i].coords;
+                        if (workedData.first != -1)
+                        {
+                            os << " imp = " << gGlobals.getImprovementInfo(improvements_[i].improvement).getType();
+                            os << " first worked turn: " << workedData.first << " for: " << workedData.second << " turns";                            
+                        }
+                        else
+                        {
+                            os << " not worked";
+                        }
+#endif
+                    }
+                    improvementsDelta_ = ladder.getOutput() - base.getOutput();
+#ifdef ALTAI_DEBUG
+                    os << "\nTotal delta: " << improvementsDelta_;
+#endif
+                }
+            }
+
+            for (size_t i = 0, count = techs.size(); i < count; ++i)
+            {
+                player->getCivHelper()->removeTech(techs[i]);
+            }
+        }
+
+        std::sort(improvements_.begin(), improvements_.end(), PlotImprovementRankOrder());
+#ifdef ALTAI_DEBUG
+        logImprovements(os);
+#endif
+    }
+
+    bool CityImprovementManager::updateImprovements(const CvPlot* pPlot, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType, bool simulated)
+    {
+        const CvCity* pCity = ::getCity(city_);
+        const PlayerPtr& player = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
+        boost::shared_ptr<MapAnalysis> pMapAnalysis = player->getAnalysis()->getMapAnalysis();
+        std::set<XYCoords> sharedCoords = pMapAnalysis->getCitySharedPlots(city_);
+
+        XYCoords coords(pPlot->getCoords());
         bool foundPlot = false, foundCorrectImprovement = false;
 
         bool markPlotAsPartOfIrrigationChain = false;
@@ -802,92 +738,124 @@ namespace AltAI
             // we also want to mark the final plot (this one) if it's part of the chain - do that from here
             markPlotAsPartOfIrrigationChain = true;  
         }
+        const bool isSharedPlot = sharedCoords.find(coords) != sharedCoords.end();
 
-        for (size_t i = 0, count = improvements_.size(); i < count; ++i)
+        std::pair<bool, PlotImprovementData*> foundImprovement = findImprovement(coords);
+
+        if (foundImprovement.first)  // found an entry for these coordinates
         {
-            if (coords == boost::get<0>(improvements_[i]))
+            foundCorrectImprovement = getBaseImprovement(improvementType) == getBaseImprovement(foundImprovement.second->improvement);
+            if (foundCorrectImprovement)
             {
-                foundPlot = true;
-                foundCorrectImprovement = getBaseImprovement(improvementType) == getBaseImprovement(boost::get<2>(improvements_[i]));
-                if (foundCorrectImprovement)
-                {
-                    boost::get<5>(improvements_[i]) = Built;
-                    if (markPlotAsPartOfIrrigationChain)
-                    {
-                        boost::get<6>(improvements_[i]) |= IrrigationChainPlot;
-                    }
-#ifdef ALTAI_DEBUG
-                    {
-                        boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity);
-                        std::ostream& os = pCityLog->getStream();
-                        os << "\nFound built improvement: " << (improvementType == NO_IMPROVEMENT ? "(none) " : gGlobals.getImprovementInfo(improvementType).getType())
-                           << " at: " << pPlot->getX() << ", " << pPlot->getY();
-                    }
-#endif
-                }
-                else
-                {
-#ifdef ALTAI_DEBUG
-                    {
-                        boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity);
-                        std::ostream& os = pCityLog->getStream();
-                        os << "\nFailed to match built improvement: " << (improvementType == NO_IMPROVEMENT ? "(none) " : gGlobals.getImprovementInfo(improvementType).getType())
-                           << " at: " << pPlot->getX() << ", " << pPlot->getY();
-                    }
-#endif
-                    boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getAnalysis()->getMapAnalysis();
-
-                    PlotYield thisYield = getYield(pMapAnalysis->getPlotInfoNode(pPlot), pPlot->getOwner(), improvementType, pPlot->getFeatureType(), pPlot->getRouteType());
-                    improvements_[i] = boost::make_tuple(coords, pPlot->getFeatureType(), improvementType, thisYield, TotalOutput(), Built, markPlotAsPartOfIrrigationChain ? IrrigationChainPlot : 0);
-                    
-                }
-
-#ifdef ALTAI_DEBUG
+                foundImprovement.second->state = PlotImprovementData::Built;
                 if (markPlotAsPartOfIrrigationChain)
-                {   // debug
-                    std::ostream& os = CityLog::getLog(pCity)->getStream();
-                    os << "\nMarked plot: " << coords << " as part of irrigation chain with improvement: "
-                        << (improvementType == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo(improvementType).getType());
+                {
+                    foundImprovement.second->flags |= PlotImprovementData::IrrigationChainPlot;
+                }
+#ifdef ALTAI_DEBUG
+                {
+                    boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity);
+                    std::ostream& os = pCityLog->getStream();
+                    os << "\nFound built improvement: " << (improvementType == NO_IMPROVEMENT ? "(none) " : gGlobals.getImprovementInfo(improvementType).getType())
+                        << " at: " << pPlot->getCoords() << " with yield = " << foundImprovement.second->yield;
                 }
 #endif
-                break;
+                if (isSharedPlot && !simulated)
+                {
+                    IDInfo impCity = pMapAnalysis->getImprovementOwningCity(city_, coords);
+                    if (impCity == IDInfo())
+                    {
+                        pMapAnalysis->setImprovementOwningCity(city_, coords);
+#ifdef ALTAI_DEBUG
+                        {
+                            boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*player->getCvPlayer());
+                            //boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity);
+                            std::ostream& os = pCivLog->getStream();
+                            os << "\nSetting city: " << safeGetCityName(pCity) << " as shared improvement owner: " << (improvementType == NO_IMPROVEMENT ? "(none) " : gGlobals.getImprovementInfo(improvementType).getType())
+                                << " at: " << pPlot->getCoords() << " with yield = " << foundImprovement.second->yield;
+                        }
+#endif
+                    }
+                }
+            }
+            else if (improvementType != NO_IMPROVEMENT)
+            {
+#ifdef ALTAI_DEBUG                    
+                {
+                    boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity);
+                    std::ostream& os = pCityLog->getStream();
+                    os << "\nFailed to match built improvement: " << (improvementType == NO_IMPROVEMENT ? "(none) " : gGlobals.getImprovementInfo(improvementType).getType())
+                        << " at: " << pPlot->getCoords() << " to: " << 
+                        (foundImprovement.second->improvement== NO_IMPROVEMENT ? "(none) " : gGlobals.getImprovementInfo(foundImprovement.second->improvement).getType());
+                }
+#endif                    
+
+                PlotYield thisYield = getYield(pMapAnalysis->getPlotInfoNode(pPlot), pPlot->getOwner(), improvementType, featureType, routeType);
+#ifdef ALTAI_DEBUG
+                {
+                    boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity);
+                    std::ostream& os = pCityLog->getStream();
+                    os <<  " current yield = " << thisYield;
+                }
+#endif
+                *foundImprovement.second = PlotImprovementData(coords, featureType, improvementType, 
+                    thisYield, PlotImprovementData::Built, markPlotAsPartOfIrrigationChain ? PlotImprovementData::IrrigationChainPlot : 0);                    
+            }
+            else // improvement was pillaged or otherwise destroyed
+            {
+                foundImprovement.second->state = PlotImprovementData::Not_Built;
             }
         }
-
-        if (!foundPlot)
+        else  // add a new entry for this improvement
         {
-            boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getAnalysis()->getMapAnalysis();
+            PlotYield thisYield = getYield(pMapAnalysis->getPlotInfoNode(pPlot), pPlot->getOwner(), improvementType, featureType, routeType);
+            improvements_.push_back(PlotImprovementData(coords, featureType, improvementType, 
+                thisYield, PlotImprovementData::Built, markPlotAsPartOfIrrigationChain ? PlotImprovementData::IrrigationChainPlot : 0));
+#ifdef ALTAI_DEBUG                    
+            {
+                boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity);
+                std::ostream& os = pCityLog->getStream();
+                os << "\nAdding unexpected improvement: " << (improvementType == NO_IMPROVEMENT ? "(none) " : gGlobals.getImprovementInfo(improvementType).getType())
+                    << " at: " << pPlot->getCoords();
+            }
+#endif      
+        }
 
-            PlotYield thisYield = getYield(pMapAnalysis->getPlotInfoNode(pPlot), pPlot->getOwner(), improvementType, pPlot->getFeatureType(), pPlot->getRouteType());
-            improvements_.push_back(
-                boost::make_tuple(coords, pPlot->getFeatureType(), improvementType, thisYield, TotalOutput(), CityImprovementManager::Built, markPlotAsPartOfIrrigationChain ? IrrigationChainPlot : 0));
+        if (markPlotAsPartOfIrrigationChain && !simulated)
+        {
+            pMapAnalysis->markIrrigationChainSourcePlot(coords, improvementType);
 
-#ifdef ALTAI_DEBUG
-            if (markPlotAsPartOfIrrigationChain)
+#ifdef ALTAI_DEBUG       
             {   // debug
                 std::ostream& os = CityLog::getLog(pCity)->getStream();
                 os << "\nAdded plot: " << coords << " as part of irrigation chain with improvement: "
-                    << (improvementType == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo(improvementType).getType());
+                   << (improvementType == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo(improvementType).getType());
             }
-#endif
+#endif           
         }
 
-        if (markPlotAsPartOfIrrigationChain)
-        {
-            boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(::getCity(city_)->getOwner())->getAnalysis()->getMapAnalysis();
-            pMapAnalysis->markIrrigationChainSourcePlot(coords, improvementType);
-        }
         return foundCorrectImprovement;
     }
 
-    const std::vector<CityImprovementManager::PlotImprovementData>& CityImprovementManager::getImprovements() const
+    const std::vector<PlotImprovementData>& CityImprovementManager::getImprovements() const
     {
         return improvements_;
     }
 
-    std::vector<CityImprovementManager::PlotImprovementData>& CityImprovementManager::getImprovements()
+    std::vector<PlotImprovementData>& CityImprovementManager::getImprovements()
     {
         return improvements_;
+    }
+
+    TotalOutput CityImprovementManager::getImprovementsDelta() const
+    {
+        return improvementsDelta_;
+    }
+
+    std::pair<bool, PlotImprovementData*> CityImprovementManager::findImprovement(XYCoords coords)
+    {
+        std::vector<PlotImprovementData>::iterator iter = std::find_if(improvements_.begin(), improvements_.end(), PlotImprovementDataFinder(coords));
+        return std::make_pair(iter != improvements_.end(), &*iter);
     }
 
     void CityImprovementManager::markFeaturesToKeep_(DotMapItem& dotMapItem) const
@@ -937,12 +905,15 @@ namespace AltAI
         }
     }
 
-    XYCoords CityImprovementManager::getIrrigationChainPlot(XYCoords destination, ImprovementTypes improvementType)
+    XYCoords CityImprovementManager::getIrrigationChainPlot(XYCoords destination)
     {
-        //std::ostream& os = CityLog::getLog(::getCity(city_))->getStream();
         // we presume that this plot has freshwater access since we checked when the plot's PlotInfo was built using IrrigatableArea (but we may not control it)
         const CvPlot* pPlot = gGlobals.getMap().plot(destination.iX, destination.iY);
 
+#ifdef ALTAI_DEBUG
+        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(pPlot->getOwner()));
+        std::ostream& os = pCivLog->getStream();
+#endif
         TeamTypes teamType = ::getCity(city_)->getTeam();
         int subAreaID = pPlot->getSubArea();
         int irrigatableAreaID = pPlot->getIrrigatableArea();
@@ -950,9 +921,11 @@ namespace AltAI
         FAStar* pIrrigationPathFinder = gDLL->getFAStarIFace()->create();
         CvMap& theMap = gGlobals.getMap();
         gDLL->getFAStarIFace()->Initialize(pIrrigationPathFinder, theMap.getGridWidth(), theMap.getGridHeight(), theMap.isWrapX(), theMap.isWrapY(),
-            NULL, stepHeuristic, irrigationStepCost, irrigationStepValid, NULL, NULL, NULL);
+            NULL, stepHeuristic, irrigationStepCost, irrigationStepValid, irrigationStepAdd, NULL, NULL);
 
         std::map<int, XYCoords> pathCostMap;
+        int lowestCost = MAX_INT, shortestLength = MAX_INT;
+        XYCoords bestCoords(-1, -1);
 
         for (int i = 1; i <= MAX_IRRIGATION_CHAIN_SEARCH_RADIUS; ++i)
         {
@@ -965,17 +938,33 @@ namespace AltAI
                 {
                     if ((pLoopPlot->isFreshWater() && pLoopPlot->getNonObsoleteBonusType(teamType) == NO_BONUS) || pLoopPlot->isIrrigated())
                     {
-                        int cost = MAX_INT;
+                        gDLL->getFAStarIFace()->ForceReset(pIrrigationPathFinder);
+                        int cost = MAX_INT, length = MAX_INT;
                         XYCoords buildCoords;
 #ifdef ALTAI_DEBUG
-                        //os << "\nChecking plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
+                        os << "\nChecking potential irrigation source plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
 #endif
-                        boost::tie(cost, buildCoords) = getPathAndCost_(pIrrigationPathFinder, XYCoords(pLoopPlot->getX(), pLoopPlot->getY()), destination, pPlot->getOwner());
+                        boost::tie(cost, length, buildCoords) = getPathAndCost_(pIrrigationPathFinder, pLoopPlot->getCoords(), destination, pPlot->getOwner());
 
-                        if (cost != MAX_INT)
+                        if (cost == lowestCost)
                         {
-                            // duplicates will be ignored in favour of the first entry with that cost (TODO - rethink this, or at least detect duplicates and log them?)
-                            pathCostMap.insert(std::make_pair(cost, buildCoords));
+                            if (cost != MAX_INT && length < shortestLength)
+                            {
+                                shortestLength = length;
+                                bestCoords = buildCoords;
+#ifdef ALTAI_DEBUG
+                                os << " c=" << cost << " l=" << length << " " << bestCoords;
+#endif
+                            }
+                        }
+                        else if (cost < lowestCost)
+                        {
+                            lowestCost = cost;
+                            shortestLength = length;
+                            bestCoords = buildCoords;
+#ifdef ALTAI_DEBUG
+                            os << " c=" << cost << " l=" << length << " " << bestCoords;
+#endif
                         }
                     }
                 }
@@ -983,19 +972,20 @@ namespace AltAI
         }
         gDLL->getFAStarIFace()->destroy(pIrrigationPathFinder);
 
-        return pathCostMap.empty() ? XYCoords(-1, -1) : pathCostMap.begin()->second;
+        return bestCoords;
     }
 
-    ImprovementTypes CityImprovementManager::getSubstituteImprovement(XYCoords coords)
+    ImprovementTypes CityImprovementManager::getSubstituteImprovement(const CityDataPtr& pCityData, XYCoords coords)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(city_.eOwner))->getStream();
 #endif
         const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
 
-        DotMapItem::DotMapPlotData plotData(pPlot, city_.eOwner, 0);
+        PlotDataListConstIter plotIter = pCityData->findPlot(coords);
+        DotMapItem::DotMapPlotData plotData(*plotIter, city_.eOwner, 0);
 
-        std::vector<PlotImprovementData>::iterator iter = std::find_if(improvements_.begin(), improvements_.end(), PlotDataFinder(coords));
+        std::vector<PlotImprovementData>::iterator iter = std::find_if(improvements_.begin(), improvements_.end(), PlotImprovementDataFinder(coords));
         if (iter != improvements_.end())
         {
             bool hasIrrigation = false;
@@ -1009,9 +999,9 @@ namespace AltAI
                 }
             }
 
-            if (!hasIrrigation && boost::get<6>(*iter) & IrrigationChainPlot)
+            if (!hasIrrigation && iter->flags & PlotImprovementData::IrrigationChainPlot)
             {
-                boost::get<6>(*iter) &= ~IrrigationChainPlot;
+                iter->flags &= ~PlotImprovementData::IrrigationChainPlot;
             }
         }
 
@@ -1067,7 +1057,7 @@ namespace AltAI
             }
 
             PlayerTypes plotOwner = pLoopPlot->getOwner();
-            XYCoords plotCoords(pLoopPlot->getX(), pLoopPlot->getY());
+            XYCoords plotCoords(pLoopPlot->getCoords());
 
             if (plotOwner == city_.eOwner)
             {
@@ -1086,7 +1076,7 @@ namespace AltAI
                         {
                             bestRouteValue = thisRoutesValue;
                             bestRouteType = routeYieldChanges[i].first;
-                            bestCoords = XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
+                            bestCoords = pLoopPlot->getCoords();
                         }
                     }
                 }
@@ -1096,10 +1086,11 @@ namespace AltAI
         return std::make_pair(bestCoords, bestRouteType);
     }
 
-    std::pair<int, XYCoords> CityImprovementManager::getPathAndCost_(FAStar* pIrrigationPathFinder, XYCoords start, XYCoords destination, PlayerTypes playerType) const
+    boost::tuple<int, int, XYCoords> CityImprovementManager::getPathAndCost_(FAStar* pIrrigationPathFinder, XYCoords start, XYCoords destination, PlayerTypes playerType) const
     {
         if (gDLL->getFAStarIFace()->GeneratePath(pIrrigationPathFinder, start.iX, start.iY, destination.iX, destination.iY, false, playerType))
         {
+            int totalCost = 0, totalLength = 0;
 #ifdef ALTAI_DEBUG
             boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(playerType));
             std::ostream& os = pCivLog->getStream();
@@ -1109,19 +1100,21 @@ namespace AltAI
             XYCoords buildCoords;
             while (pNode)
             {
+                totalCost += pNode->m_iData1;
+                ++totalLength;
 #ifdef ALTAI_DEBUG
-                os << " (" << pNode->m_iX << ", " << pNode->m_iY << ")";
+                os << " (" << pNode->m_iX << ", " << pNode->m_iY << ")" << " cost = " << pNode->m_iData1;
 #endif
                 const CvPlot* pBuildPlot = gGlobals.getMap().plot(pNode->m_iX, pNode->m_iY);
                 if (pBuildPlot->isIrrigationAvailable(true))
                 {
-                    return std::make_pair(pNode->m_iData2, XYCoords(pNode->m_iX, pNode->m_iY));
+                    return boost::make_tuple(totalCost, totalLength, XYCoords(pNode->m_iX, pNode->m_iY));
                 }
                 
                 pNode = pNode->m_pParent;
             }
         }
-        return std::make_pair(MAX_INT, XYCoords());
+        return boost::make_tuple(MAX_INT, MAX_INT, XYCoords(-1, -1));
     }
 
     void CityImprovementManager::write(FDataStreamBase* pStream) const
@@ -1136,25 +1129,23 @@ namespace AltAI
         readImprovements(pStream, improvements_);
     }
 
-    void CityImprovementManager::writeImprovements(FDataStreamBase* pStream, const std::vector<CityImprovementManager::PlotImprovementData>& improvements)
+    void CityImprovementManager::writeImprovements(FDataStreamBase* pStream, const std::vector<PlotImprovementData>& improvements)
     {
         size_t count = improvements.size();
         pStream->Write(count);
         for (size_t i = 0; i < count; ++i)
         {
-            XYCoords coords = boost::get<0>(improvements[i]);
-            pStream->Write(coords.iX);
-            pStream->Write(coords.iY);
-            pStream->Write(boost::get<1>(improvements[i]));
-            pStream->Write(boost::get<2>(improvements[i]));
-            boost::get<3>(improvements[i]).write(pStream);
-            boost::get<4>(improvements[i]).write(pStream);
-            pStream->Write(boost::get<5>(improvements[i]));
-            pStream->Write(boost::get<6>(improvements[i]));
+            pStream->Write(improvements[i].coords.iX);
+            pStream->Write(improvements[i].coords.iY);
+            pStream->Write(improvements[i].removedFeature);
+            pStream->Write(improvements[i].improvement);
+            improvements[i].yield.write(pStream);
+            pStream->Write(improvements[i].state);
+            pStream->Write(improvements[i].flags);
         }
     }
 
-    void CityImprovementManager::readImprovements(FDataStreamBase* pStream, std::vector<CityImprovementManager::PlotImprovementData>& improvements)
+    void CityImprovementManager::readImprovements(FDataStreamBase* pStream, std::vector<PlotImprovementData>& improvements)
     {
         size_t count = 0;
         pStream->Read(&count);
@@ -1175,16 +1166,13 @@ namespace AltAI
             PlotYield plotYield;
             plotYield.read(pStream);
 
-            TotalOutput totalOutput;
-            totalOutput.read(pStream);
-
-            ImprovementState improvementState;
+            PlotImprovementData::ImprovementState improvementState;
             pStream->Read((int*)&improvementState);
 
             int improvementFlags = 0;
             pStream->Read(&improvementFlags);
 
-            improvements.push_back(boost::make_tuple(coords, featureType, improvementType, plotYield, totalOutput, improvementState, improvementFlags));
+            improvements.push_back(PlotImprovementData(coords, featureType, improvementType, plotYield, improvementState, improvementFlags));
         }
     }
 
@@ -1194,20 +1182,26 @@ namespace AltAI
         std::ostream& os = CityLog::getLog(::getCity(city_))->getStream();
         os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " CityImprovementManager::logImprovements: ";
 
+        logImprovements(os);
+#endif
+    }
+
+    void CityImprovementManager::logImprovements(std::ostream& os) const
+    {
         for (size_t i = 0, count = improvements_.size(); i < count; ++i)
         {
             logImprovement(os, improvements_[i]);
+            os << " rank = " << getRank(improvements_[i].coords);
         }
-#endif
     }
 
     // static
     void CityImprovementManager::logImprovement(std::ostream& os, const PlotImprovementData& improvement)
     {
 #ifdef ALTAI_DEBUG
-        os << "\n" << boost::get<0>(improvement);
-        FeatureTypes featureType = boost::get<1>(improvement);
-        ImprovementTypes improvementType = boost::get<2>(improvement);
+        os << "\n" << improvement.coords;
+        FeatureTypes featureType = improvement.removedFeature;
+        ImprovementTypes improvementType = improvement.improvement;
 
         if (improvementType == NO_IMPROVEMENT)
         {
@@ -1223,93 +1217,91 @@ namespace AltAI
             os << " (" << gGlobals.getFeatureInfo(featureType).getType() << ")";
         }
 
-        os << " yield = " << boost::get<3>(improvement);
+        os << " yield = " << improvement.yield;
 
-        TotalOutput totalOutput = boost::get<4>(improvement);
-        if (totalOutput != TotalOutput())
+        os << " first turn worked: " << improvement.simulationData.firstTurnWorked;
+        if (improvement.simulationData.firstTurnWorked >= 0)
         {
-            os << " simulated output = " << totalOutput;
+            os << " for: " << improvement.simulationData.numTurnsWorked << " turns ";
         }
 
-        ImprovementState state = boost::get<5>(improvement);
+        PlotImprovementData::ImprovementState state = improvement.state;
         switch (state)
         {
-        case Not_Set:
+        case PlotImprovementData::Not_Set:
             os << " state = unknown";
             break;
-        case Not_Built:
+        case PlotImprovementData::Not_Built:
             os << " state = not built";
             break;
-        case Being_Built:
+        case PlotImprovementData::Being_Built:
             os << " state = being built";
             break;
-        case Built:
+        case PlotImprovementData::Built:
             os << " state = built";
             break;
-        case Not_Selected:
+        case PlotImprovementData::Not_Selected:
             os << " state = not selected";
             break;
         default:
             os << " bad state?";
         }
 
-        int flags = boost::get<6>(improvement);
+        int flags = improvement.flags;
 
         if (flags)
         {
             os << " flags = ";
         }
         
-        if (flags & IrrigationChainPlot)
+        if (flags & PlotImprovementData::IrrigationChainPlot)
         {
             os << " irrigation chain, ";
         }
-        if (flags & NeedsIrrigation)
+        if (flags & PlotImprovementData::NeedsIrrigation)
         {
             os << " needs irrigation, ";
         }
-        if (flags & NeedsRoute)
+        if (flags & PlotImprovementData::NeedsRoute)
         {
             os << " needs route, ";
         }
-        if (flags & KeepFeature)
+        if (flags & PlotImprovementData::KeepFeature)
         {
             os << " keep feature, ";
         }
-        if (flags & RemoveFeature)
+        if (flags & PlotImprovementData::RemoveFeature)
         {
             os << " remove feature, ";
         }
-        if (flags & KeepExistingImprovement)
+        if (flags & PlotImprovementData::KeepExistingImprovement)
         {
             os << " keep existing, ";
         }
-        if (flags & ImprovementMakesBonusValid)
+        if (flags & PlotImprovementData::ImprovementMakesBonusValid)
         {
             os << " makes bonus valid, ";
         }
-        if (flags & WorkerNeedsTransport)
+        if (flags & PlotImprovementData::WorkerNeedsTransport)
         {
             os << " worker needs transport, ";
         }
-
-        //os << " rank = " << getRank(boost::get<0>(improvement), gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner)->getCity(city_.iID).getPlotAssignmentSettings().outputWeights);
 #endif
     }
 
-    std::vector<CityImprovementManager::PlotImprovementData> 
-            findNewImprovements(const std::vector<CityImprovementManager::PlotImprovementData>& baseImprovements, const std::vector<CityImprovementManager::PlotImprovementData>& newImprovements)
+    std::vector<PlotImprovementData> 
+            findNewImprovements(const std::vector<PlotImprovementData>& baseImprovements, const std::vector<PlotImprovementData>& newImprovements)
     {
-        std::vector<CityImprovementManager::PlotImprovementData> delta;
+        std::vector<PlotImprovementData> delta;
 
         for (size_t i = 0, count = newImprovements.size(); i < count; ++i)
         {
-            if (boost::get<2>(newImprovements[i]) != NO_IMPROVEMENT)
+            if (newImprovements[i].improvement != NO_IMPROVEMENT)
             {
-                std::vector<CityImprovementManager::PlotImprovementData>::const_iterator ci = std::find_if(baseImprovements.begin(), baseImprovements.end(), PlotDataFinder(newImprovements[i]));
+                std::vector<PlotImprovementData>::const_iterator ci = std::find_if(baseImprovements.begin(), baseImprovements.end(), PlotImprovementDataFinder(newImprovements[i]));
                 if (ci != baseImprovements.end())
                 {
-                    if (boost::get<2>(*ci) != boost::get<2>(newImprovements[i])) // new type of improvement
+                    if (ci->improvement != newImprovements[i].improvement) // new type of improvement
                     {
                         delta.push_back(newImprovements[i]);
                     }

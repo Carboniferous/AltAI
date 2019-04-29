@@ -163,11 +163,14 @@ namespace AltAI
 
     BuildTypes GameDataAnalysis::getBuildTypeForImprovementType(ImprovementTypes improvementType)
     {
-        for (int i = 0, count = gGlobals.getNumBuildInfos(); i < count; ++i)
+        if (improvementType != NO_IMPROVEMENT)
         {
-            if (gGlobals.getBuildInfo((BuildTypes)i).getImprovement() == improvementType)
+            for (int i = 0, count = gGlobals.getNumBuildInfos(); i < count; ++i)
             {
-                return (BuildTypes)i;
+                if (gGlobals.getBuildInfo((BuildTypes)i).getImprovement() == improvementType)
+                {
+                    return (BuildTypes)i;
+                }
             }
         }
 
@@ -176,11 +179,14 @@ namespace AltAI
 
     BuildTypes GameDataAnalysis::getBuildTypeForRouteType(RouteTypes routeType)
     {
-        for (int i = 0, count = gGlobals.getNumBuildInfos(); i < count; ++i)
+        if (routeType != NO_ROUTE)
         {
-            if (gGlobals.getBuildInfo((BuildTypes)i).getRoute() == routeType)
+            for (int i = 0, count = gGlobals.getNumBuildInfos(); i < count; ++i)
             {
-                return (BuildTypes)i;
+                if (gGlobals.getBuildInfo((BuildTypes)i).getRoute() == routeType)
+                {
+                    return (BuildTypes)i;
+                }
             }
         }
 
@@ -208,6 +214,31 @@ namespace AltAI
         }
 
         return bonusBuildsMap;
+    }
+
+    GameDataAnalysis::ResourcesBuildMap GameDataAnalysis::getResourcesBuildMap_()
+    {
+        ResourcesBuildMap resourcesBuildMap;
+
+        for (int i = 0, bonusCount = gGlobals.getNumBonusInfos(); i < bonusCount; ++i)
+        {
+            for (int j = 0, improvementCount = gGlobals.getNumImprovementInfos(); j < improvementCount; ++j)
+            {
+                const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo((ImprovementTypes)j);
+                if (improvementInfo.isImprovementBonusMakesValid((BonusTypes)i))
+                {
+                    BuildTypes buildType = getBuildTypeForImprovementType((ImprovementTypes)j);
+                    if (buildType != NO_BUILD)
+                    {
+                        // assumes only only type of build/improvement can access resource
+                        resourcesBuildMap.insert(std::make_pair((BonusTypes)i, buildType));
+                        break;
+                    }
+                }
+            }
+        }
+
+        return resourcesBuildMap;
     }
 
     std::vector<BonusTypes> GameDataAnalysis::getBonusTypesForBuildType(BuildTypes buildType)
@@ -267,6 +298,11 @@ namespace AltAI
 
     bool GameDataAnalysis::isBadFeature(FeatureTypes featureType)
     {
+        if (featureType == NO_FEATURE)
+        {
+            return false;
+        }
+
         const CvFeatureInfo& featureInfo = gGlobals.getFeatureInfo(featureType);
 
         return (featureInfo.getYieldChange(YIELD_FOOD) + featureInfo.getYieldChange(YIELD_PRODUCTION)) <= 0 || featureInfo.getHealthPercent() < 0;
@@ -286,6 +322,18 @@ namespace AltAI
             }
         }
 
+        return NO_TECH;
+    }
+
+    TechTypes GameDataAnalysis::getTechTypeForResourceBuild(BonusTypes bonusType)
+    {
+        static ResourcesBuildMap resourcesBuildMap = getResourcesBuildMap_();
+
+        ResourcesBuildMap::const_iterator ci = resourcesBuildMap.find(bonusType);
+        if (ci != resourcesBuildMap.end())
+        {
+            return getTechTypeForBuildType(ci->second);
+        }
         return NO_TECH;
     }
 

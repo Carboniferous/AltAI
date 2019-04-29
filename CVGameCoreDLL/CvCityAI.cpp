@@ -169,7 +169,8 @@ void CvCityAI::AI_doTurn()
 		}
 	}
 	
-    if (!isHuman())
+    // AltAI - handle assigning shared plots separately
+    if (!isHuman() && !GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
 	{
 	    AI_stealPlots();
 	}
@@ -195,7 +196,12 @@ void CvCityAI::AI_doTurn()
 
 	AI_doHurry();
 
-	AI_doEmphasize();
+    // don't want to use emphasis at all if using AltAI as interferes with its plot logic
+    // ok for human use (although that's not relevant to this call)
+    if (!GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+	    AI_doEmphasize();
+    }
 }
 
 
@@ -4727,6 +4733,11 @@ void CvCityAI::AI_setEmphasize(EmphasizeTypes eIndex, bool bNewValue)
 
 	if (AI_isEmphasize(eIndex) != bNewValue)
 	{
+        // AltAI
+        if (GET_PLAYER(m_eOwner).isUsingAltAI())
+        {
+            GC.getGame().getAltAI()->getPlayer(m_eOwner)->logEmphasis(getIDInfo(), eIndex, bNewValue);
+        }
 		m_pbEmphasize[eIndex] = bNewValue;
 
 		if (GC.getEmphasizeInfo(eIndex).isAvoidGrowth())

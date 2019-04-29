@@ -12,6 +12,13 @@
 #include "CvDLLInterfaceIFaceBase.h"
 #include "CvEventReporter.h"
 
+// AltAI headers
+#include "AltAI.h"
+#include "game.h"
+#include "player.h"
+#include "city.h"
+
+
 // Public Functions...
 
 CvDeal::CvDeal()
@@ -694,8 +701,14 @@ bool CvDeal::startTrade(TradeData trade, PlayerTypes eFromPlayer, PlayerTypes eT
 	switch (trade.m_eItemType)
 	{
 	case TRADE_TECHNOLOGIES:
-		GET_TEAM(GET_PLAYER(eToPlayer).getTeam()).setHasTech(((TechTypes)trade.m_iData), true, eToPlayer, true, true);
+		GET_TEAM(GET_PLAYER(eToPlayer).getTeam()).setHasTech(((TechTypes)trade.m_iData), true, eToPlayer, true, true, AltAI::TRADE_TECH);        
 		GET_TEAM(GET_PLAYER(eToPlayer).getTeam()).setNoTradeTech(((TechTypes)trade.m_iData), true);
+
+        // AltAI
+        if (GET_PLAYER(eFromPlayer).isUsingAltAI())
+        {
+            GC.getGame().getAltAI()->getPlayer(eFromPlayer)->gaveTech((TechTypes)trade.m_iData, eToPlayer);
+        }
 
 		for (iI = 0; iI < MAX_PLAYERS; iI++)
 		{

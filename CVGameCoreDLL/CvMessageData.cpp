@@ -4,6 +4,7 @@
 #include "CvDLLUtilityIFaceBase.h"
 #include "CvDLLInterfaceIFaceBase.h"
 #include "CvEventReporter.h"
+#include "AltAI.h"
 
 CvMessageData* CvMessageData::createMessage(GameMessageTypes eType)
 {
@@ -368,7 +369,7 @@ void CvNetResearch::Execute()
 		CvPlayer& kPlayer = GET_PLAYER(m_ePlayer);
 		if (m_iDiscover > 0)
 		{
-			GET_TEAM(kPlayer.getTeam()).setHasTech(m_eTech, true, m_ePlayer, true, true);
+			GET_TEAM(kPlayer.getTeam()).setHasTech(m_eTech, true, m_ePlayer, true, true, AltAI::RESEARCH_TECH);
 
 			if (m_iDiscover > 1)
 			{

@@ -20,10 +20,11 @@ namespace AltAI
         return copy;
     }
 
-    void CultureHelper::advanceTurn(CityData& data, bool includeUnclaimedPlots)
+    void CultureHelper::advanceTurns(CityData& data, int nTurns)
     {
         const int cultureOutput = data.getOutput()[OUTPUT_CULTURE];
-        cityCulture_ += cultureOutput / 100;
+        const bool includeUnclaimedPlots = data.includeUnclaimedPlots_;
+        cityCulture_ += (nTurns * cultureOutput) / 100;
 
         CultureLevelTypes oldCultureLevel = cultureLevel_;
 
@@ -43,14 +44,14 @@ namespace AltAI
         bool plotOwnersChanged = false;
         std::vector<std::pair<PlayerTypes, XYCoords> > changedPlotsData;
 
-        updatePlot_(data.getCityPlotOutput(), culturalLevelChange, data.getCity(), cultureOutput);
+        updatePlot_(data.getCityPlotData(), culturalLevelChange, data.getCity(), cultureOutput, nTurns);
 
         PlotDataListIter iter(data.getPlotOutputs().begin()), endIter(data.getPlotOutputs().end());
         while (iter != endIter)
         {
             if (iter->isActualPlot())
             {
-                bool thisPlotChanged = updatePlot_(*iter, culturalLevelChange, data.getCity(), cultureOutput);
+                bool thisPlotChanged = updatePlot_(*iter, culturalLevelChange, data.getCity(), cultureOutput, nTurns);
 
                 if (thisPlotChanged)
                 {
@@ -79,7 +80,7 @@ namespace AltAI
         {
             if (iter->isActualPlot())
             {
-                bool thisPlotChanged = updatePlot_(*iter, culturalLevelChange, data.getCity(), cultureOutput);
+                bool thisPlotChanged = updatePlot_(*iter, culturalLevelChange, data.getCity(), cultureOutput, nTurns);
 
                 if (thisPlotChanged)
                 {
@@ -108,7 +109,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             // debug
             //{
-            //    boost::shared_ptr<CityLog> pLog = CityLog::getLog(data.pCity);
+            //    boost::shared_ptr<CityLog> pLog = CityLog::getLog(data.getCity());
             //    pLog->logCultureData(data);
             //}
 #endif
@@ -127,19 +128,41 @@ namespace AltAI
         }
     }
 
+    int CultureHelper::getTurnsToNextLevel(CityData& data) const
+    {
+        const int cultureRate = data.getOutput()[OUTPUT_CULTURE];
+        if (cultureRate == 0 || cultureLevel_ == gGlobals.getNumCultureLevelInfos())
+        {
+            return MAX_INT;
+        }
+
+        const int nextCultureLevel = gGlobals.getGame().getCultureThreshold((CultureLevelTypes)(1 + cultureLevel_));
+        int minTurns = (100 * (nextCultureLevel - cityCulture_) ) / cultureRate;
+        if ((100 * cityCulture_) + (minTurns * cultureRate) < (100 * nextCultureLevel))
+        {
+            ++minTurns;
+        }
+        return std::max<int>(1,  minTurns);
+    }
+
+    CultureLevelTypes CultureHelper::getCultureLevel() const
+    {
+        return cultureLevel_;
+    }
+
     bool CultureHelper::checkCulturalLevel_()
     {
         const CvGameAI& theGame = gGlobals.getGame();
 
         CultureLevelTypes level = NO_CULTURELEVEL;
         for (int i = (gGlobals.getNumCultureLevelInfos() - 1); i > 0; --i)
-		{
-			if (cityCulture_ >= theGame.getCultureThreshold((CultureLevelTypes)i))
-			{
-				level = (CultureLevelTypes)i;
+        {
+            if (cityCulture_ >= theGame.getCultureThreshold((CultureLevelTypes)i))
+            {
+                level = (CultureLevelTypes)i;
                 break;
-			}
-		}
+            }
+        }
 
         if (level != cultureLevel_)
         {
@@ -152,15 +175,14 @@ namespace AltAI
         }
     }
 
-    bool CultureHelper::updatePlot_(PlotData& plotData, bool culturalLevelChange, const CvCity* pCity, int cultureOutput)
+    bool CultureHelper::updatePlot_(PlotData& plotData, bool culturalLevelChange, const CvCity* pCity, int cultureOutput, int nTurns)
     {
         typedef PlotData::CultureData::CultureSourcesMap CultureSourcesMap;
         typedef CultureSourcesMap::iterator Iter;
 
         bool ownerChanged = false;
 
-        const int cityX = pCity->getX(), cityY = pCity->getY();
-        const int range = std::max<int>(1, plotDistance(cityX, cityY, plotData.coords.iX, plotData.coords.iY));
+        const int range = std::max<int>(1, plotDistance(pCity->getX(), pCity->getY(), plotData.coords.iX, plotData.coords.iY));
 
         CultureSourcesMap& cultureSourcesMap(plotData.cultureData.cultureSourcesMap);
 
@@ -197,7 +219,7 @@ namespace AltAI
         {
             for (size_t sourceIndex = 0, sourceCount = iter->second.second.size(); sourceIndex < sourceCount; ++sourceIndex)
             {
-                iter->second.first += iter->second.second[sourceIndex].range * CITY_FREE_CULTURE_GROWTH_FACTOR_ + iter->second.second[sourceIndex].output + 1;
+                iter->second.first += (iter->second.second[sourceIndex].range * CITY_FREE_CULTURE_GROWTH_FACTOR_) + (iter->second.second[sourceIndex].output * nTurns) + 1;
             }
         }
 

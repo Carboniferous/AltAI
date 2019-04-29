@@ -7,7 +7,7 @@
 
 namespace AltAI
 {
-    MaintenanceHelper::MaintenanceHelper(const CvCity* pCity) : coords_(pCity->getX(), pCity->getY()), player_(CvPlayerAI::getPlayer(pCity->getOwner()))
+    MaintenanceHelper::MaintenanceHelper(const CvCity* pCity) : coords_(pCity->plot()->getCoords()), player_(CvPlayerAI::getPlayer(pCity->getOwner()))
     {
         population_ = pCity->getPopulation();
         cityModifier_ = pCity->getMaintenanceModifier();
@@ -24,17 +24,6 @@ namespace AltAI
 
         init_();
     }
-
-   /* MaintenanceHelper::MaintenanceHelper(const MaintenanceHelper& other)
-        : coords_(other.coords_), player_(other.player_), cityModifier_(other.cityModifier_), population_(other.population_),
-          numCities_(other.numCities_), numVassalCitiesModifier_(other.numVassalCitiesModifier_),
-          MAX_DISTANCE_CITY_MAINTENANCE_(other.MAX_DISTANCE_CITY_MAINTENANCE_), distanceMaintenancePercent_(other.distanceMaintenancePercent_),
-          distanceHandicapMaintenancePercent_(other.distanceHandicapMaintenancePercent_), distanceMaintenanceModifier_(other.distanceMaintenanceModifier_),
-          maxPlotDistance_(other.maxPlotDistance_), numCitiesMaintenancePercent_(other.numCitiesMaintenancePercent_),
-          numCitiesHandicapMaintenancePercent_(other.numCitiesHandicapMaintenancePercent_), maxNumCitiesMaintenance_(other.maxNumCitiesMaintenance_),
-          numCitiesMaintenanceModifier_(other.numCitiesMaintenanceModifier_)
-    {
-    }*/
 
     MaintenanceHelperPtr MaintenanceHelper::clone() const
     {
@@ -106,14 +95,14 @@ namespace AltAI
         CvCity* pLoopCity;
         while (pLoopCity = iter())
         {
-            int iTempMaintenance = calcCityDistanceMaintenance_(XYCoords(pLoopCity->getX(), pLoopCity->getY()));
+            int iTempMaintenance = calcCityDistanceMaintenance_(pLoopCity->plot()->getCoords());
 
-		    iWorstCityMaintenance = std::max<int>(iWorstCityMaintenance, iTempMaintenance);
+            iWorstCityMaintenance = std::max<int>(iWorstCityMaintenance, iTempMaintenance);
 
             if (governmentCentres_.find(pLoopCity->getIDInfo()) != governmentCentres_.end())
             {
-            	iBestCapitalMaintenance = std::min<int>(iBestCapitalMaintenance, iTempMaintenance);
-		    }
+                iBestCapitalMaintenance = std::min<int>(iBestCapitalMaintenance, iTempMaintenance);
+            }
         }
 
         return std::min<int>(iWorstCityMaintenance, iBestCapitalMaintenance);
@@ -127,14 +116,14 @@ namespace AltAI
         // int iTempMaintenance = 100 * std::min<int>(maxPlotDistance_, plotDistance(xCoord, yCoord, pLoopCity->getX(), pLoopCity->getY()));
         // and later divide by MAX_DISTANCE_CITY_MAINTENANCE_, not maxPlotDistance_
         int iMaintenance = 100 * MAX_DISTANCE_CITY_MAINTENANCE_ * plotDistance(coords_.iX, coords_.iY, otherCityCoords.iX, otherCityCoords.iY);
-		iMaintenance *= (population_ + 7);
-		iMaintenance /= 10;
+        iMaintenance *= (population_ + 7);
+        iMaintenance /= 10;
 
         applyPercentModifier(iMaintenance, distanceMaintenanceModifier_);
         applyPercentModifier(iMaintenance, distanceMaintenancePercent_);
         applyPercentModifier(iMaintenance, distanceHandicapMaintenancePercent_);
 
-		iMaintenance /= maxPlotDistance_;
+        iMaintenance /= maxPlotDistance_;
 
         return iMaintenance;
     }
@@ -147,9 +136,9 @@ namespace AltAI
         applyPercentModifier(iNumCitiesPercent, numCitiesHandicapMaintenancePercent_);
 
         int iNumCitiesMaintenance = std::min<int>((numCities_ + numVassalCitiesModifier_) * iNumCitiesPercent, maxNumCitiesMaintenance_);
-	    applyPercentModifier(iNumCitiesMaintenance, numCitiesMaintenanceModifier_);
+        applyPercentModifier(iNumCitiesMaintenance, numCitiesMaintenanceModifier_);
 
-	    return iNumCitiesMaintenance;
+        return iNumCitiesMaintenance;
     }
 
     int MaintenanceHelper::calcColonyMaintenance_() const

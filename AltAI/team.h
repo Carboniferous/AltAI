@@ -1,7 +1,7 @@
 #pragma once
 
-#include "CvGameCoreDLL.h"
-#include "CvStructs.h"
+#include "../CvGameCoreDLL/CvGameCoreDLL.h"
+#include "../CvGameCoreDLL/CvStructs.h"
 
 #include "boost/shared_ptr.hpp"
 
@@ -10,6 +10,7 @@ class CvTeam;
 namespace AltAI
 {
     class Player;
+    typedef boost::shared_ptr<Player> PlayerPtr;
     class IPlotEvent;
 
     class Team
@@ -23,12 +24,14 @@ namespace AltAI
         {
         }
 
-        void addPlayer(const boost::shared_ptr<Player>& pPlayer);
+        void addPlayer(const PlayerPtr& pPlayer);
 
-        void pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pPlotEvent);
+        //void pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pPlotEvent);
+        void updatePlotRevealed(const CvPlot* pPlot, bool isNew);
+        void updatePlotBonus(const CvPlot* pPlot, BonusTypes revealedBonusType);
 
     private:
         const CvTeam* pTeam_;
-        std::vector<boost::shared_ptr<Player> > players_;
+        std::vector<PlayerPtr > players_;
     };
 }

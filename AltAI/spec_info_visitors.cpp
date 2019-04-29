@@ -14,11 +14,25 @@ namespace AltAI
 {
     namespace
     {
-        SpecialistTypes getBestSpecialistHelper(PlayerTypes playerType, MixedTotalOutputOrderFunctor valueF,
-            YieldModifier yieldModifier, CommerceModifier commerceModifier, CommerceModifier commercePercent)
+        template <typename P>
+            struct SpecialistDataAdaptor
         {
-            TotalOutput bestOutput;
-            SpecialistTypes bestSpecialist = NO_SPECIALIST;
+            typedef typename P Pred;
+            SpecialistDataAdaptor(P pred_) : pred(pred_) {}
+
+            bool operator () (const std::pair<SpecialistTypes, TotalOutput>& p1, const std::pair<SpecialistTypes, TotalOutput>& p2) const
+            {
+                return pred(p1.second, p2.second);
+            }
+            P pred;
+        };
+
+        template <typename P>
+            std::vector<SpecialistTypes> getBestSpecialistHelper(PlayerTypes playerType, P valueF,
+                YieldModifier yieldModifier, CommerceModifier commerceModifier, CommerceModifier commercePercent, size_t selectionCount)
+        {
+            std::vector<SpecialistTypes> bestSpecialists;
+            std::vector<std::pair<SpecialistTypes, TotalOutput> > specialistOutputs;
 
             for (size_t i = 0, count = gGlobals.getNumSpecialistInfos(); i < count; ++i)
             {
@@ -73,14 +87,17 @@ namespace AltAI
                 }
 
                 TotalOutput thisOutput = makeOutput(yieldAndCommerce.first, yieldAndCommerce.second, yieldModifier, commerceModifier, commercePercent);
-                if (valueF(thisOutput, bestOutput))
-                {
-                    bestOutput = thisOutput;
-                    bestSpecialist = (SpecialistTypes)i;
-                }
+                specialistOutputs.push_back(std::make_pair((SpecialistTypes)i, thisOutput));
             }
 
-            return bestSpecialist;
+            std::sort(specialistOutputs.begin(), specialistOutputs.end(), SpecialistDataAdaptor<P>(valueF));
+
+            for (size_t i = 0; i < selectionCount && i < specialistOutputs.size(); ++i)
+            {
+                bestSpecialists.push_back(specialistOutputs[i].first);
+            }
+
+            return bestSpecialists;
         }
     }
 
@@ -115,7 +132,7 @@ namespace AltAI
         {
             result_type result;
 
-            boost::shared_ptr<Player> player = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
+            PlayerPtr player = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
             for (size_t i = 0, count = node.civicsExtraCommerce.size(); i < count; ++i)
             {
                 if (player->getCivHelper()->isInCivic(node.civicsExtraCommerce[i].first))
@@ -172,19 +189,20 @@ namespace AltAI
         return boost::apply_visitor(YieldAndCommerceVisitor(playerType), specInfo.getInfo());
     }
 
-    SpecialistTypes getBestSpecialist(const Player& player, const City& city, MixedTotalOutputOrderFunctor valueF)
+    template <typename P>
+        SpecialistTypes getBestSpecialist(const Player& player, YieldModifier yieldModifier, CommerceModifier commerceModifier, P valueF)
     {
         TotalOutput bestOutput;
         SpecialistTypes bestSpecialist = NO_SPECIALIST;
 
-        YieldModifier yieldModifier = makeYield(100, 100, 100) + city.getCityData()->getModifiersHelper()->getTotalYieldModifier(*city.getCityData());
-        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100), // city.getCityData()->getCommerceModifier(),
-            commercePercent = city.getCityData()->getCommercePercent();
+        CommerceModifier commercePercent = player.getCommercePercentages();
 
-        return getBestSpecialistHelper(player.getPlayerID(), valueF, yieldModifier, commerceModifier, commercePercent);
+        std::vector<SpecialistTypes> bestSpecialists = getBestSpecialistHelper(player.getPlayerID(), valueF, yieldModifier, commerceModifier, commercePercent, 1);
+        return (bestSpecialists.empty() ? NO_SPECIALIST : bestSpecialists[0]);
     }
 
-    SpecialistTypes getBestSpecialist(const Player& player, MixedTotalOutputOrderFunctor valueF)
+    template <typename P>
+        SpecialistTypes getBestSpecialist(const Player& player, P valueF)
     {
         TotalOutput bestOutput;
         SpecialistTypes bestSpecialist = NO_SPECIALIST;
@@ -195,6 +213,27 @@ namespace AltAI
             commercePercent[commerceType] = player.getCvPlayer()->getCommercePercent((CommerceTypes)commerceType);
         }
 
-        return getBestSpecialistHelper(player.getPlayerID(), valueF, makeYield(100, 100, 100), makeCommerce(100, 100, 100, 100), commercePercent);
+        std::vector<SpecialistTypes> bestSpecialists = getBestSpecialistHelper(player.getPlayerID(), valueF, makeYield(100, 100, 100), makeCommerce(100, 100, 100, 100), commercePercent, 1);
+        return (bestSpecialists.empty() ? NO_SPECIALIST : bestSpecialists[0]);
     }
+
+    template <typename P>
+        std::vector<SpecialistTypes> getBestSpecialists(const Player& player, YieldModifier yieldModifier, CommerceModifier commerceModifier, size_t count, P valueF)
+    {
+        TotalOutput bestOutput;
+        SpecialistTypes bestSpecialist = NO_SPECIALIST;
+
+        CommerceModifier commercePercent = player.getCommercePercentages();
+
+        return getBestSpecialistHelper(player.getPlayerID(), valueF, yieldModifier, commerceModifier, commercePercent, count);
+    }
+
+    template SpecialistTypes getBestSpecialist<MixedTotalOutputOrderFunctor>(const Player&, YieldModifier, CommerceModifier, MixedTotalOutputOrderFunctor);
+    template SpecialistTypes getBestSpecialist<MixedTotalOutputOrderFunctor>(const Player&, MixedTotalOutputOrderFunctor);
+
+    template SpecialistTypes getBestSpecialist<MixedWeightedOutputOrderFunctor<TotalOutput> >(const Player&, YieldModifier, CommerceModifier, MixedWeightedOutputOrderFunctor<TotalOutput>);
+    template SpecialistTypes getBestSpecialist<MixedWeightedOutputOrderFunctor<TotalOutput> >(const Player&, MixedWeightedOutputOrderFunctor<TotalOutput>);
+
+    template std::vector<SpecialistTypes> 
+        getBestSpecialists<MixedWeightedOutputOrderFunctor<TotalOutput> >(const Player&, YieldModifier, CommerceModifier, size_t, MixedWeightedOutputOrderFunctor<TotalOutput>);
 }

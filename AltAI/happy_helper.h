@@ -47,6 +47,7 @@ namespace AltAI
         void changePlayerHappiness(int change);
 
         void setNoUnhappiness(bool newState);
+        bool isNoUnhappiness() const;
 
     private:
         void setOvercrowdingPercentAnger_();

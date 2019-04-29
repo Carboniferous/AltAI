@@ -13,7 +13,7 @@
 #include "./civ_log.h"
 #include "./iters.h"
 
-#include "CvPlayerAI.h"
+#include "../CvGameCoreDLL/CvPlayerAI.h"
 
 namespace AltAI
 {
@@ -24,7 +24,7 @@ namespace AltAI
 
     void Game::addPlayer(CvPlayer* player)
     {
-        PlayerMap::iterator playerIter = players_.insert(std::make_pair(player->getID(), boost::shared_ptr<Player>(new Player(player)))).first;
+        PlayerMap::iterator playerIter = players_.insert(std::make_pair(player->getID(), PlayerPtr(new Player(player)))).first;
 
         TeamMap::iterator teamIter(teams_.find(player->getTeam()));
 
@@ -52,14 +52,14 @@ namespace AltAI
         return init_;
     }
 
-    boost::shared_ptr<Player> Game::getPlayer(PlayerTypes playerType) const
+    PlayerPtr Game::getPlayer(PlayerTypes playerType) const
     {
         PlayerMap::const_iterator iter(players_.find(playerType));
         if (iter == players_.end())
         {
             std::ostream& os = ErrorLog::getLog(CvPlayerAI::getPlayer(playerType))->getStream();
             os << "Player: " << playerType << " not found?\n";
-            return boost::shared_ptr<Player>();
+            return PlayerPtr();
         }
 
         return iter->second;
@@ -93,8 +93,8 @@ namespace AltAI
 
         // TODO check that at least one plot in the area has fresh water if it is irrigatable
         for (int plotIndex = 0, plotCount = map.numPlots(); plotIndex < plotCount; ++plotIndex)
-	    {
-		    CvPlot* pPlot = map.plotByIndex(plotIndex);
+        {
+            CvPlot* pPlot = map.plotByIndex(plotIndex);
             int irrigatableAreaID = pPlot->getIrrigatableArea();
             if (irrigatableAreaID != FFreeList::INVALID_INDEX)
             {
@@ -131,12 +131,12 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                 os << "\n";
                 for (int plotIndex = 0, plotCount = map.numPlots(); plotIndex < plotCount; ++plotIndex)
-	            {
-		            CvPlot* pPlot = map.plotByIndex(plotIndex);
+                {
+                    CvPlot* pPlot = map.plotByIndex(plotIndex);
                     int irrigatableAreaID = pPlot->getIrrigatableArea();
                     if (irrigatableAreaID == ci->first)
                     {
-                        os << XYCoords(pPlot->getX(), pPlot->getY()) << ", ";
+                        os << pPlot->getCoords() << ", ";
                     }
                 }
                 os << "\n";

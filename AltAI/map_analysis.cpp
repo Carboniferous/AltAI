@@ -3,11 +3,13 @@
 #include <fstream>
 
 #include "./map_analysis.h"
+#include "./player_analysis.h"
 #include "./gamedata_analysis.h"
-#include "./plot_events.h"
+#include "./helper_fns.h"
 #include "./plot_info_visitors.h"
 #include "./plot_info_visitors_streams.h"
 #include "./building_info_visitors.h"
+#include "./game.h"
 #include "./player.h"
 #include "./city.h"
 #include "./unit.h"
@@ -203,31 +205,31 @@ namespace AltAI
         bool couldFoundAtPlot(const CvPlot* pPlot, const Player& player)
         {
             if (pPlot->isImpassable())
-        	{
-		        return false;
-	        }
+            {
+                return false;
+            }
 
-	        if (pPlot->getFeatureType() != NO_FEATURE)
-	        {
-		        if (GC.getFeatureInfo(pPlot->getFeatureType()).isNoCity())
-		        {
-			        return false;
-		        }
-	        }
+            if (pPlot->getFeatureType() != NO_FEATURE)
+            {
+                if (GC.getFeatureInfo(pPlot->getFeatureType()).isNoCity())
+                {
+                    return false;
+                }
+            }
 
             PlayerTypes plotOwner = pPlot->getRevealedOwner(player.getTeamID(), false);
             if (plotOwner != NO_PLAYER && plotOwner != player.getPlayerID())
-	        {
-		        return false;
-	        }
+            {
+                return false;
+            }
 
-	        bool validPlot = false;
+            bool validPlot = false;
             const CvTerrainInfo& terrainInfo = gGlobals.getTerrainInfo(pPlot->getTerrainType());
 
             if (terrainInfo.isFound() || terrainInfo.isFoundCoast() || (terrainInfo.isFoundFreshWater() && pPlot->isFreshWater()))
-	        {
-		        validPlot = true;
-	        }
+            {
+                validPlot = true;
+            }
 
             // note we aren't bothering with canFoundCitiesOnWater() python callback
             if (pPlot->isWater())
@@ -235,20 +237,20 @@ namespace AltAI
                 return false;
             }
 
-	    	int range = gGlobals.getMIN_CITY_RANGE();
+            int range = gGlobals.getMIN_CITY_RANGE();
 
-		    for (int iDX = -range; iDX <= range; iDX++)
-		    {
-			    for (int iDY = -range; iDY <= range; iDY++)
-			    {
-				    const CvPlot* pLoopPlot = plotXY(pPlot->getX(), pPlot->getY(), iDX, iDY);
+            for (int iDX = -range; iDX <= range; iDX++)
+            {
+                for (int iDY = -range; iDY <= range; iDY++)
+                {
+                    const CvPlot* pLoopPlot = plotXY(pPlot->getX(), pPlot->getY(), iDX, iDY);
 
-				    if (pLoopPlot && pLoopPlot->isCity() && pLoopPlot->area() == pPlot->area())
+                    if (pLoopPlot && pLoopPlot->isCity() && pLoopPlot->getPlotCity()->wasRevealed(player.getTeamID(), false) && pLoopPlot->area() == pPlot->area())
                     {
                         return false;
-    				}
-	    		}
-		    }
+                    }
+                }
+            }
 
             return validPlot;
         }
@@ -265,12 +267,10 @@ namespace AltAI
     // save/load functions
     void MapAnalysis::write(FDataStreamBase* pStream) const
     {
-        writeComplexSet(pStream, citiesImprovements_);
     }
 
     void MapAnalysis::read(FDataStreamBase* pStream)
     {
-        readComplexSet(pStream, citiesImprovements_);
     }
 
     // getters
@@ -279,7 +279,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
 #endif
-        XYCoords coords(pPlot->getX(), pPlot->getY());
+        XYCoords coords(pPlot->getCoords());
         KeyInfoMap::const_iterator keyIter = keyInfoMap_.find(coords);
 
         if (keyIter != keyInfoMap_.end())
@@ -292,12 +292,12 @@ namespace AltAI
                 int key = plotInfo.getKey();
                 if (key != keyIter->second)
                 {
-                    os << "\n(getPlotInfoNode): Inconsistent plot keys for coords: " << coords << " keys = " << key << ", " << keyIter->second
+                    os << "\n(getPlotInfoNode): Inconsistent plot keys for coords: " << coords << " keys: stored = " << keyIter->second << ", calculated = " << key
                        << "\n" << iter->second << "\n" << plotInfo.getInfo();
                 }
                 else if (!(iter->second == plotInfo.getInfo()))
                 {
-                    os << "\n(getPlotInfoNode): Inconsistent plot info for coords: " << coords << " keys = " << key << ", " << keyIter->second
+                    os << "\n(getPlotInfoNode): Inconsistent plot info for coords: " << coords << " keys: stored = " << keyIter->second << ", calculated = " << key
                        << "\n" << iter->second << "\n" << plotInfo.getInfo();
                 }
 #endif
@@ -309,31 +309,77 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         os << "\nPlotInfo missing for coords: " << coords;
 #endif
-        return addPlotInfo_(pPlot).second->second;
+        return updatePlotInfo_(pPlot, false).second->second;
     }
 
-    const MapAnalysis::PlotValues& MapAnalysis::getPlotValues() const
+    const MapAnalysis::PlotValues& MapAnalysis::getPlotValues()
     {
+        // need to update dot map once we've processed the complete set of plot updates
+        processUpdatedPlots_();
+
         return plotValues_;
     }
 
-    SharedPlotItemPtr MapAnalysis::getSharedPlot(IDInfo city, XYCoords coords) const
+    bool MapAnalysis::plotValuesDirty() const
     {
-        SharedPlots::const_iterator ci = sharedPlots_.find(CitySharedPlots(city));
+        return !updatedPlots_.empty();
+    }
 
-        if (ci != sharedPlots_.end())
+    IDInfo MapAnalysis::getSharedPlot(IDInfo city, XYCoords coords) const
+    {
+        CitySharedPlotsMap::const_iterator citySharedPlotsIter = citySharedPlots_.find(city);
+        if (citySharedPlotsIter != citySharedPlots_.end())
         {
-            bool found = false;
-            for (CitySharedPlots::SharedPlotsConstIter plotsIter(ci->sharedPlots.begin()), endIter(ci->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
+            SharedPlots::const_iterator sharedPlotsIter = sharedPlots_.find(coords);
+            if (sharedPlotsIter != sharedPlots_.end())
             {
-                if ((*plotsIter)->coords == coords)
-                {
-                    return *plotsIter;
-                }
+                return sharedPlotsIter->second.assignedCity;
             }
         }
 
-        return SharedPlotItemPtr();
+        return city;
+    }
+
+    IDInfo MapAnalysis::getImprovementOwningCity(IDInfo city, XYCoords coords) const
+    {
+        CitySharedPlotsMap::const_iterator citySharedPlotsIter = citySharedPlots_.find(city);
+        if (citySharedPlotsIter != citySharedPlots_.end())
+        {
+            SharedPlots::const_iterator sharedPlotsIter = sharedPlots_.find(coords);
+            if (sharedPlotsIter != sharedPlots_.end())
+            {
+                return sharedPlotsIter->second.assignedImprovementCity;
+            }
+        }
+
+        return IDInfo();
+    }
+
+    IDInfo MapAnalysis::setImprovementOwningCity(IDInfo city, XYCoords coords)
+    {
+        CitySharedPlotsMap::iterator citySharedPlotsIter = citySharedPlots_.find(city);
+        if (citySharedPlotsIter != citySharedPlots_.end())
+        {
+            SharedPlots::iterator sharedPlotsIter = sharedPlots_.find(coords);
+            if (sharedPlotsIter != sharedPlots_.end())
+            {
+                IDInfo oldImpCity = sharedPlotsIter->second.assignedImprovementCity;
+                sharedPlotsIter->second.assignedImprovementCity = city;
+                return oldImpCity;
+            }
+        }
+        return IDInfo();
+    }
+
+    std::set<XYCoords> MapAnalysis::getCitySharedPlots(IDInfo city) const
+    {
+        CitySharedPlotsMap::const_iterator citySharedPlotsIter = citySharedPlots_.find(city);
+        if (citySharedPlotsIter != citySharedPlots_.end())
+        {
+            return citySharedPlotsIter->second.sharedPlots;
+        }
+
+        return std::set<XYCoords>();
     }
 
     const CvCity* MapAnalysis::getWorkingCity(IDInfo city, XYCoords coords) const
@@ -342,20 +388,8 @@ namespace AltAI
         {
             return gGlobals.getMap().plot(coords.iX, coords.iY)->getWorkingCity();
         }
-
-        CitySharedPlots thisCity(city);
-        SharedPlots::const_iterator ci(sharedPlots_.find(thisCity));
-        if (ci != sharedPlots_.end())
-        {
-            for (CitySharedPlots::SharedPlotsConstIter plotsIter(ci->sharedPlots.begin()), endIter(ci->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
-            {
-                if ((*plotsIter)->coords == coords)
-                {
-                    return getCity((*plotsIter)->assignedCity);
-                }
-            }
-        }
-        return getCity(city);
+        
+        return ::getCity(getSharedPlot(city, coords));
     }
 
     int MapAnalysis::getControlledResourceCount(BonusTypes bonusType) const
@@ -370,7 +404,7 @@ namespace AltAI
             {
                 for (size_t i = 0, count = bi->second.size(); i < count; ++i)
                 {
-                    if (bi->second[i].second == player_.getPlayerID())
+                    if (boost::get<1>(bi->second[i]) == player_.getPlayerID())
                     {
                         ++resourceCount;
                     }
@@ -408,7 +442,7 @@ namespace AltAI
         return accessibleSubAreas;
     }
 
-    std::vector<CvPlot*> MapAnalysis::getResourcePlots(const std::vector<BonusTypes>& bonusTypes, int subArea) const
+    std::vector<CvPlot*> MapAnalysis::getResourcePlots(int subArea, const std::vector<BonusTypes>& bonusTypes, PlayerTypes playerType) const
     {
         std::vector<CvPlot*> resourcePlots;
         const CvMap& theMap = gGlobals.getMap();
@@ -416,16 +450,35 @@ namespace AltAI
         ResourcesMapConstIter ci = resourcesMap_.find(subArea);
         if (ci != resourcesMap_.end())
         {
-            for (size_t i = 0, count = bonusTypes.size(); i < count; ++i)
+            if (!bonusTypes.empty())
             {
-                std::map<BonusTypes, ResourceData::ResourcePlotData>::const_iterator bi(ci->second.subAreaResourcesMap.find(bonusTypes[i]));
-                if (bi != ci->second.subAreaResourcesMap.end())
+                for (size_t i = 0, count = bonusTypes.size(); i < count; ++i)
                 {
-                    for (size_t i = 0, count = bi->second.size(); i < count; ++i)
+                    std::map<BonusTypes, ResourceData::ResourcePlotData>::const_iterator bi(ci->second.subAreaResourcesMap.find(bonusTypes[i]));
+                    if (bi != ci->second.subAreaResourcesMap.end())
                     {
-                        if (bi->second[i].second == player_.getPlayerID())
+                        for (size_t i = 0, count = bi->second.size(); i < count; ++i)
                         {
-                            resourcePlots.push_back(theMap.plot(bi->second[i].first.iX, bi->second[i].first.iY));
+                            if (boost::get<1>(bi->second[i]) == playerType)
+                            {
+                                XYCoords coords = boost::get<0>(bi->second[i]);
+                                resourcePlots.push_back(theMap.plot(coords.iX, coords.iY));
+                            }              
+                        }
+                    }
+                }
+            }
+            else  // report all bonuses
+            {
+                for (std::map<BonusTypes, ResourceData::ResourcePlotData>::const_iterator ri(ci->second.subAreaResourcesMap.begin()),
+                    riEnd(ci->second.subAreaResourcesMap.end()); ri != riEnd; ++ri)
+                {
+                    for (size_t i = 0, count = ri->second.size(); i < count; ++i)
+                    {
+                        if (boost::get<1>(ri->second[i]) == playerType)
+                        {
+                            XYCoords coords = boost::get<0>(ri->second[i]);
+                            resourcePlots.push_back(theMap.plot(coords.iX, coords.iY));
                         }              
                     }
                 }
@@ -434,6 +487,155 @@ namespace AltAI
 
         // todo - check for duplicates
         return resourcePlots;
+    }
+
+    const CvPlot* MapAnalysis::getClosestCity(const CvPlot* pPlot, int subArea, bool includeActsAsCity) const
+    {
+        const CvMap& theMap = gGlobals.getMap();
+        const bool isWaterSubArea = theMap.getSubArea(subArea)->isWater();
+        const TeamTypes teamType = player_.getTeamID();
+
+        int bestStepDistance = MAX_INT;
+        const CvPlot* pClosestCityPlot = (const CvPlot*)0;
+
+        TeamCityIter cityIter(teamType);
+        while (CvCity* pCity = cityIter())
+        {
+            bool mayBeReachable = false;
+            if (isWaterSubArea)
+            {
+                // try and account for coastal cities
+                // this won't always work for units in impassable areas, as the unit may be in an impassable sub area (e.g. sub under ice)
+                // which doesn't border the city (a city could border an impassable sub area directly though)
+                std::vector<int> borderingSubAreas = getBorderingSubAreas(teamType, pCity->plot());
+                if (std::find(borderingSubAreas.begin(), borderingSubAreas.end(), subArea) != borderingSubAreas.end())
+                {
+                    mayBeReachable = true;
+                }
+            }
+            else
+            {
+                mayBeReachable = pCity->plot()->getSubArea() == subArea;
+            }
+
+            if (mayBeReachable)
+            {
+                int thisStepDistance = stepDistance(pPlot->getX(), pPlot->getY(), pCity->getX(), pCity->getY());
+                if (thisStepDistance < bestStepDistance)
+                {
+                    bestStepDistance = thisStepDistance;
+                    pClosestCityPlot = pCity->plot();
+                }
+            }
+        }
+
+        if (includeActsAsCity)
+        {
+            std::set<int> subAreasToSearch;
+            if (isWaterSubArea)
+            {   
+                std::vector<int> borderingAreas = getAreasBorderingArea(pPlot->getArea());
+                for (size_t i = 0; i < borderingAreas.size(); ++i)
+                {
+                    std::vector<int> subAreas = getSubAreasInArea(borderingAreas[i]);
+                    for (size_t j = 0; j < subAreas.size(); ++j)
+                    {
+                        boost::shared_ptr<SubArea> pBorderSubArea = theMap.getSubArea(subAreas[j]);
+                        if (!pBorderSubArea->isImpassable() && !pBorderSubArea->isWater())
+                        {
+                            subAreasToSearch.insert(subAreas[j]);
+                        }
+                    }                        
+                }
+            }
+            else
+            {
+                subAreasToSearch.insert(subArea);
+            }
+
+            for (std::set<int>::const_iterator searchIter(subAreasToSearch.begin()), searchEndIter(subAreasToSearch.end()); searchIter != searchEndIter; ++searchIter)
+            {
+                std::map<int /* sub area id */, std::set<XYCoords> >::const_iterator fortIter = impAsCityMap_.find(*searchIter);
+                if (fortIter != impAsCityMap_.end())
+                {
+                    for (std::set<XYCoords>::const_iterator ci(fortIter->second.begin()), ciEnd(fortIter->second.end()); ci != ciEnd; ++ci)
+                    {
+                        const CvPlot* pLoopPlot = theMap.plot(ci->iX, ci->iY);
+                        TeamTypes plotTeam = pLoopPlot->getRevealedTeam(teamType, false);
+
+                        if (plotTeam != NO_TEAM && plotTeam != teamType)
+                        {
+                            continue;  // only consider friendly forts
+                        }
+
+                        bool mayBeReachable = true;
+                        if (isWaterSubArea)
+                        {
+                            // try and account for coastal cities
+                            // this won't always work for units in impassable areas, as the unit may be in an impassable sub area (e.g. sub under ice)
+                            // which doesn't border the city (a city could border an impassable sub area directly though)
+                            std::vector<int> borderingSubAreas = getBorderingSubAreas(teamType, pLoopPlot);
+                            if (std::find(borderingSubAreas.begin(), borderingSubAreas.end(), subArea) == borderingSubAreas.end())
+                            {
+                                mayBeReachable = false;
+                            }
+                        }
+
+                        if (mayBeReachable)
+                        {
+                            int thisStepDistance = stepDistance(pPlot->getX(), pPlot->getY(), ci->iX, ci->iY);
+                            if (thisStepDistance < bestStepDistance)
+                            {
+                                bestStepDistance = thisStepDistance;
+                                pClosestCityPlot = pLoopPlot;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return pClosestCityPlot;
+    }
+
+    const std::map<int /* sub area id */, std::set<XYCoords> >& MapAnalysis::getUnrevealedBorderMap() const
+    {
+        return unrevealedBorderMap_;
+    }
+
+    std::vector<int /* area id */> MapAnalysis::getAreasBorderingArea(int areaId) const
+    {
+        std::vector<int /* area id */> knownNeighbourAreas;
+
+        AreaMapConstIter areaIter(revealedAreaDataMap_.find(areaId));
+        if (areaIter != revealedAreaDataMap_.end())
+        {
+            std::copy(areaIter->second.borderingAreas.begin(), areaIter->second.borderingAreas.end(), std::back_inserter(knownNeighbourAreas));
+        }
+
+        return knownNeighbourAreas;
+    }
+
+    std::vector<int /* sub area id */ > MapAnalysis::getSubAreasInArea(int areaId) const
+    {
+        std::vector<int /* area id */> knownSubAreas;
+        std::map<int /* area id */, std::set<int /* sub area id */> >::const_iterator iter(areaSubAreaMap_.find(areaId));
+        if (iter != areaSubAreaMap_.end())
+        {
+             std::copy(iter->second.begin(), iter->second.end(), std::back_inserter(knownSubAreas));
+        }
+        return knownSubAreas;
+    }
+
+    std::map<int /* sub area id */, std::vector<IDInfo> > MapAnalysis::getSubAreaCityMap() const
+    {
+        std::map<int /* sub area id */, std::vector<IDInfo> > citySubAreaMap;
+        CityIter iter(*player_.getCvPlayer());
+        while (CvCity* pCity = iter())
+        {
+            citySubAreaMap[pCity->plot()->getSubArea()].push_back(pCity->getIDInfo());
+        }
+        return citySubAreaMap;
     }
 
     // initialisation functions
@@ -454,69 +656,34 @@ namespace AltAI
         std::vector<XYCoords> cities;
         
         for (int i = 0, count = theMap.numPlots(); i < count; ++i)
-	    {
+        {
             theMap.plotByIndex(i)->setFoundValue(playerType, 0);
 
-		    const CvPlot* pPlot = theMap.plotByIndex(i);
+            const CvPlot* pPlot = theMap.plotByIndex(i);
             if (pPlot->isRevealed(teamType, false))
             {
                 if (pPlot->isCity() && pPlot->getPlotCity()->getOwner() == playerType)
                 {
-                    cities.push_back(XYCoords(pPlot->getX(), pPlot->getY()));
+                    cities.push_back(pPlot->getCoords());
+                    addCity(pPlot->getPlotCity());
                 }
-                updatePlotRevealed(pPlot);
+                else if (pPlot->isCity(true, teamType))
+                {
+                    impAsCityMap_[pPlot->getSubArea()].insert(pPlot->getCoords());
+                }
+                updatePlotRevealed(pPlot, true);
+                updatePlotInfo(pPlot, true, __FUNCTION__);
             }
         }
 
 #ifdef ALTAI_DEBUG
+        os << "Player: " << player_.getPlayerID() << " knows: " << revealedAreaDataMap_.size() << " areas\n";
+        for (AreaMapConstIter ci(revealedAreaDataMap_.begin()), ciEnd(revealedAreaDataMap_.end()); ci != ciEnd; ++ci)
         {
-            os << "Player: " << player_.getPlayerID() << " knows: " << revealedAreaDataMap_.size() << " areas\n";
-            for (AreaMapConstIter ci(revealedAreaDataMap_.begin()), ciEnd(revealedAreaDataMap_.end()); ci != ciEnd; ++ci)
-            {
-                os << "Area: " << ci->first << " knows: " << ci->second.knownTileCount << " plots (out of " << gGlobals.getMap().getArea(ci->first)->getNumTiles() << ")\n";
-            }
+            os << "Area: " << ci->first << " knows: " << ci->second.knownTileCount << " plots (out of " << gGlobals.getMap().getArea(ci->first)->getNumTiles() << ")\n";
         }
 #endif
 
-        /*PlotGroupIter iter(player_.getCvPlayer());
-        for (CvPlotGroup* pPlotGroup = iter(); pPlotGroup != NULL; pPlotGroup = iter())
-        {
-            if (pPlotGroup->getOwner() == playerType)
-            {
-                PlotGroupPlotIter plotIter(pPlotGroup);
-                std::vector<XYCoords> coords;
-                for (CLLNode<XYCoords>* pNode = plotIter(); pNode != NULL; pNode = plotIter())
-                {
-                    coords.push_back(pNode->m_data);
-                }
-                plotGroupCounts_.insert(std::make_pair(pPlotGroup->getID(), coords));
-            }
-        }*/
-
-        std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
-        for (CitiesImprovements::iterator iter(citiesImprovements_.begin()), endIter(citiesImprovements_.end()); iter != endIter; ++iter)
-        {
-            const CvCity* pCity = getCity(iter->getCity());
-            const int targetSize = 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel());
-            iter->calcImprovements(yieldTypes, targetSize);
-        }
-
-//#ifdef ALTAI_DEBUG
-//        {
-//            std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-//            os << "Player: " << player_.getPlayerID() << " has: " << plotGroupCounts_.size() << " plot groups\n";
-//            for (std::map<int, std::vector<XYCoords> >::const_iterator ci(plotGroupCounts_.begin()), ciEnd(plotGroupCounts_.end()); ci != ciEnd; ++ci)
-//            {
-//                os << "PlotGroup: " << ci->first << " has: " << ci->second.size() << " plots\n";
-//                for (int i = 0, count = ci->second.size(); i < count; ++i)
-//                {
-//                    os << ci->second[i] << " ";
-//                    if (!((i + 1) % 10)) os << "\n";
-//                }
-//                os << "\n";
-//            }
-//        }
-//#endif
 #ifdef ALTAI_DEBUG
         debugPlotValueMap(plotValues_, os);
 #endif
@@ -531,21 +698,24 @@ namespace AltAI
         const CvMap& theMap = gGlobals.getMap();
         TeamTypes teamType = player_.getTeamID();
 
+        updateKeysValueYields_();
+
+        // need to update dot map once we've processed the complete set of plot updates
+        processUpdatedPlots_();
+
         previousPlotValues_ = plotValues_;
         plotValues_.plotValueMap.clear();
         plotValues_.keysValueMap.clear();
 
         for (int i = 0, count = theMap.numPlots(); i < count; ++i)
-	    {
-		    const CvPlot* pPlot = theMap.plotByIndex(i);
+        {
+            const CvPlot* pPlot = theMap.plotByIndex(i);
 
             if (pPlot->isRevealed(teamType, false))
             {
                 PlayerTypes owner = pPlot->getRevealedOwner(teamType, false);
 
-                std::pair<int, MapAnalysis::PlotInfoMap::iterator> keyAndIter = updatePlotInfo_(pPlot);
-
-                updateKeysValueMap_(keyAndIter.first, keyAndIter.second->second);
+                std::pair<int, MapAnalysis::PlotInfoMap::iterator> keyAndIter = updatePlotInfo_(pPlot, false, true);
 
                 if (owner == NO_PLAYER || owner == player_.getPlayerID())
                 {
@@ -563,6 +733,22 @@ namespace AltAI
 #endif
     }
 
+    void MapAnalysis::recalcPlotInfo()
+    {
+        PlayerTypes playerType = player_.getPlayerID();
+        TeamTypes teamType = player_.getTeamID();
+        const CvMap& theMap = gGlobals.getMap();
+
+        for (int i = 0, count = theMap.numPlots(); i < count; ++i)
+        {
+            const CvPlot* pPlot = theMap.plotByIndex(i);
+            if (pPlot->isRevealed(teamType, false))
+            {
+                updatePlotRevealed(pPlot, false);
+            }
+        }
+    }
+
     void MapAnalysis::update()
     {
         if (!init_)
@@ -571,159 +757,201 @@ namespace AltAI
         }
     }
 
-    // plot update functions
-    void MapAnalysis::pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pEvent)
-    {
-        if (!init_)
-        {
-            init();
-        }
-
-        pEvent->handle(*this);
-    }
-
-    void MapAnalysis::updatePlotRevealed(const CvPlot* pPlot)
+    void MapAnalysis::updatePlotInfo(const CvPlot* pPlot, bool isNew, const std::string& caller)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nupdatePlotRevealed(): updating plot: " << XYCoords(pPlot->getX(), pPlot->getY());
+        os << "\nupdatePlotInfo(): plot: " << pPlot->getCoords() << " is new = " << isNew << " caller = " << caller
+            << " owner = " << pPlot->getRevealedOwner(player_.getTeamID(), false)
+            << ", turn = " << gGlobals.getGame().getGameTurn();
 #endif
-        const XYCoords coords(pPlot->getX(), pPlot->getY());
-        const int areaID = pPlot->getArea();
-        const int subAreaID = pPlot->getSubArea();
+        std::pair<int, MapAnalysis::PlotInfoMap::iterator> keyAndIter = updatePlotInfo_(pPlot, isNew);
+        
+        updatedPlots_.insert(pPlot);
 
-        int knownAreaCount = updateAreaCounts_(areaID);
-        int knownSubAreaCount = updateSubAreaCounts_(subAreaID);
-
-        updateAreaBorders_(pPlot, areaID, subAreaID);
-
-        if (gGlobals.getMap().getArea(areaID)->getNumTiles() == knownAreaCount)
+        if (pPlot->isCity())
         {
-            updateAreaComplete_(areaID);
-        }
-
-        if (gGlobals.getMap().getSubArea(subAreaID)->getNumTiles() == knownSubAreaCount)
-        {
-            updateSubAreaComplete_(subAreaID);
-        }
-
-        std::pair<int, MapAnalysis::PlotInfoMap::iterator> keyAndIter = addPlotInfo_(pPlot);
-
-        updateKeysValueMap_(keyAndIter.first, keyAndIter.second->second);
-
-        PlayerTypes owner = pPlot->getRevealedOwner(player_.getTeamID(), false);
-        // consider plots we or nobody owns
-        if (owner == NO_PLAYER || owner == player_.getPlayerID())
-        {
-            addDotMapPlot_(pPlot, keyAndIter.second->second);
-        }
-
-        // update resource data
-        updateResourceData_(pPlot);
-
-        // build data for shared plots - can we do this from addCity?
-        if (pPlot->isCity() && owner == player_.getPlayerID())
-        {
-            const CvCity* pCity = pPlot->getPlotCity();
-            CitySharedPlots citySharedPlots(pCity->getIDInfo());
-
-            // iterate over all plots within city's workable radius
-            for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
+            std::map<IDInfo, XYCoords>::iterator seenCitiesIter = seenCities_.find(pPlot->getPlotCity()->getIDInfo());
+            if (seenCitiesIter != seenCities_.end())
             {
-                CultureRangePlotIter plotIter(pPlot, (CultureLevelTypes)i);
-                while (IterPlot pLoopPlot = plotIter())
+                if (seenCitiesIter->second != pPlot->getCoords())
                 {
-                    if (pLoopPlot.valid() && pLoopPlot->isRevealed(player_.getTeamID(), false) && pLoopPlot->getOwner() == player_.getPlayerID())
-                    {
-                        SharedPlotItemPtr sharedPlot(new SharedPlotItem());
-                        sharedPlot->coords = XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
-
-                        for (int j = 1; j <= CITY_PLOTS_RADIUS; ++j)
-                        {
-                            CultureRangePlotIter loopPlotIter(pLoopPlot, (CultureLevelTypes)j);
-                            while (IterPlot pCityLoopPlot = loopPlotIter())
-                            {
-                                if (pCityLoopPlot.valid() && pCityLoopPlot->getOwner() == player_.getPlayerID())
-                                {
-                                    const CvCity* pLoopCity = pCityLoopPlot->getPlotCity();
-                                    if (pLoopCity && !(pLoopCity->getIDInfo() == citySharedPlots.city))
-                                    {
-                                        sharedPlot->possibleCities.push_back(pLoopCity->getIDInfo());
-                                    }
-                                }
-                            }
-                        }
-
-                        if (!sharedPlot->possibleCities.empty())
-                        {
-                            sharedPlot->possibleCities.push_back(citySharedPlots.city); // add ourselves if we have at least one other city
-                            sharedPlot->assignedCity = pLoopPlot->getWorkingCity() ? pLoopPlot->getWorkingCity()->getIDInfo() : IDInfo();
-                            citySharedPlots.sharedPlots.push_back(sharedPlot);
-                        }
-                    }
+                    ErrorLog::getLog(*player_.getCvPlayer())->getStream() << "\nInconsistent city coords for city: " << seenCitiesIter->first
+                       << " stored coords = " << seenCitiesIter->second << ", new coords = " << pPlot->getCoords();
                 }
             }
-            sharedPlots_.insert(citySharedPlots);
-
-            citiesImprovements_.insert(CityImprovementManager(pCity->getIDInfo()));
+            else
+            {                
+                addCity(pPlot->getPlotCity());
+            }
         }
+        else if (pPlot->isCity(true, player_.getTeamID()))
+        {
+            impAsCityMap_[pPlot->getSubArea()].insert(pPlot->getCoords());
+        }
+    }
+
+    void MapAnalysis::updatePlotRevealed(const CvPlot* pPlot, bool isNew)
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nupdatePlotRevealed(): updating plot: " << pPlot->getCoords() << " owner = " << pPlot->getRevealedOwner(player_.getTeamID(), false)
+            << ", turn = " << gGlobals.getGame().getGameTurn();
+        PlotInfo plotInfo(pPlot, player_.getPlayerID());
+        os << "\n" << plotInfo.getInfo();
+#endif
+        const XYCoords coords(pPlot->getCoords());
+
+        if (isNew)
+        {
+            const int areaID = pPlot->getArea();
+            const int subAreaID = pPlot->getSubArea();
+
+            int knownAreaCount = updateAreaCounts_(areaID), totalAreaCount = gGlobals.getMap().getArea(areaID)->getNumTiles();
+            int knownSubAreaCount = updateSubAreaCounts_(subAreaID), totalSubAreaCount = gGlobals.getMap().getSubArea(subAreaID)->getNumTiles();
+
+#ifdef ALTAI_DEBUG
+            os << "\nNow know " << knownAreaCount << " out of " << totalAreaCount << " for area: " << areaID;
+            os << "\nNow know " << knownSubAreaCount << " out of " << totalSubAreaCount << " for subarea: " << subAreaID;
+#endif
+            areaSubAreaMap_[areaID].insert(subAreaID);
+            updateAreaBorders_(pPlot, areaID, subAreaID);        
+
+            if (totalAreaCount == knownAreaCount)
+            {
+                updateAreaComplete_(areaID);
+            }
+
+            if (totalSubAreaCount == knownSubAreaCount)
+            {
+                updateSubAreaComplete_(subAreaID);
+            }
+        }
+
+        updateResourceData_(pPlot);
     }
 
     void MapAnalysis::updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nUpdating feature type for plot : " << XYCoords(pPlot->getX(), pPlot->getY())
+        os << "\nUpdating feature type for plot : " << pPlot->getCoords()
            << " old feature = " << (oldFeatureType == NO_FEATURE ? "NO_FEATURE" : gGlobals.getFeatureInfo(oldFeatureType).getType())
            << " new feature = " << (pPlot->getFeatureType() == NO_FEATURE ? "NO_FEATURE" : gGlobals.getFeatureInfo(pPlot->getFeatureType()).getType());
 #endif
+        updatePlotInfo_(pPlot, false);
+    }
 
-        XYCoords coords(pPlot->getX(), pPlot->getY());
-        // update key for this plot and add to plotInfoMap_ if required
-        const int oldKey = keyInfoMap_[coords];
+    void MapAnalysis::updatePlotImprovement(const CvPlot* pPlot, ImprovementTypes oldImprovementType)
+    {
+        ImprovementTypes newImprovementType = pPlot->getImprovementType();
+        XYCoords plotCoords(pPlot->getCoords());
 
-        std::pair<int, MapAnalysis::PlotInfoMap::iterator> keyAndIter = updatePlotInfo_(pPlot);
-        
-        const int subAreaID = pPlot->getSubArea();
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nUpdating improvement type for plot : " << plotCoords
+           << " old improvement = " << (oldImprovementType == NO_IMPROVEMENT ? "NO_IMPROVEMENT" : gGlobals.getImprovementInfo(oldImprovementType).getType())
+           << " new improvement = " << (newImprovementType == NO_IMPROVEMENT ? "NO_IMPROVEMENT" : gGlobals.getImprovementInfo(newImprovementType).getType());
+#endif
+        if (oldImprovementType != NO_IMPROVEMENT && newImprovementType != oldImprovementType)
+        {
+            if (gGlobals.getImprovementInfo(oldImprovementType).isActsAsCity())
+            {
+                // might not exist if we never controlled the plot and it was never netural either
+                impAsCityMap_[pPlot->getSubArea()].erase(pPlot->getCoords());
+            }
+        }
 
-        updatePlotValueKey_(pPlot, oldKey, keyAndIter.first);
-        updateKeysValueMap_(keyAndIter.first, keyAndIter.second->second);
+        if (newImprovementType == NO_IMPROVEMENT)
+        {
+            // todo handle spies destroying improvments - how is that notifed?
+            if (pPlot->isVisibleEnemyUnit(player_.getPlayerID()))
+            {
+#ifdef ALTAI_DEBUG
+                os << " (improvement was pillaged) ";
+#endif
+            }
+
+            BonusTypes bounsType = pPlot->getBonusType(player_.getTeamID());
+            if (bounsType != NO_BONUS)
+            {
+                const int subAreaId = pPlot->getSubArea();
+                ResourcesMapIter resourceMapIter = resourcesMap_.find(subAreaId);
+                if (resourceMapIter != resourcesMap_.end())
+                {
+                    std::map<BonusTypes, ResourceData::ResourcePlotData>::iterator iter = resourceMapIter->second.subAreaResourcesMap.find(bounsType);
+                    if (iter != resourceMapIter->second.subAreaResourcesMap.end())
+                    {
+                        for (size_t bonusIndex = 0, bonusCount = iter->second.size(); bonusIndex < bonusCount; ++bonusIndex)
+                        {
+                            XYCoords bonusCoords = boost::get<0>(iter->second[bonusIndex]);
+                            if (bonusCoords == plotCoords)
+                            {
+                                boost::get<2>(iter->second[bonusIndex]) = newImprovementType;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        //else
+        //{
+            // conditional riverside improvements are added if possible - although actual imp may depend on changing surrounding ones which compete
+            // otherwise we would have to change the plot key and record the configuration for evey possible riverside imp (although there's only watermills in the standard game)            
+            /*const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(newImprovementType);
+            if (improvementInfo.isRequiresRiverSide())
+            {
+                CardinalPlotIter plotIter(pPlot);
+                while (IterPlot iterPlot = plotIter())
+                {
+                    if (iterPlot.valid())
+                    {
+                        DirectionTypes directionType = directionXY(pPlot, iterPlot);
+                        if (pPlot->isRiverCrossing(directionType))
+                        {
+                            updatePlotInfo_(iterPlot);
+                        }
+                    }
+                }
+            }*/
+        //}
     }
 
     void MapAnalysis::updatePlotBonus(const CvPlot* pPlot, BonusTypes bonusType)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nUpdating bonus type for plot : " << XYCoords(pPlot->getX(), pPlot->getY())
+        os << "\nUpdating bonus type for plot : " << pPlot->getCoords()
            << " bonus = " << (bonusType == NO_BONUS ? "NO_BONUS" : gGlobals.getBonusInfo(bonusType).getType());
 #endif
-
-        XYCoords coords(pPlot->getX(), pPlot->getY());
-        // update key for this plot and add to plotInfoMap_ if required
-        const int oldKey = keyInfoMap_[coords];
-
-        std::pair<int, MapAnalysis::PlotInfoMap::iterator> keyAndIter = updatePlotInfo_(pPlot);
-       
-        updatePlotValueKey_(pPlot, oldKey, keyAndIter.first);
-        updateKeysValueMap_(keyAndIter.first, keyAndIter.second->second);
+        updatePlotInfo_(pPlot, false);
     }
 
-    void MapAnalysis::updatePlotCulture(const CvPlot* pPlot, bool remove)
+    void MapAnalysis::updatePlotCulture(const CvPlot* pPlot, PlayerTypes previousRevealedOwner, PlayerTypes newRevealedOwner)
     {
-        XYCoords coords(pPlot->getX(), pPlot->getY());
+        XYCoords coords(pPlot->getCoords());
 
-        const PlotInfo::PlotInfoNode& plotInfo = getPlotInfoNode(pPlot);
-        const int key = keyInfoMap_[coords];
+        KeyInfoMap::const_iterator keyIter = keyInfoMap_.find(coords);
+
+        if (keyIter == keyInfoMap_.end())
+        {
+            return;
+        }
+
+        const int key = keyIter->second;
         const int subAreaID = pPlot->getSubArea();
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\n " << (remove ? "Removing " : " Adding ") << "plot: (" << pPlot->getX() << ", " << pPlot->getY() << ")";
-#endif
-
-        // ok to use getOwner and not getRevealedOwner as this call is made to teams which can see the plot
-        if (remove && pPlot->getOwner() != NO_PLAYER)
+        os << "\nupdatePlotCulture: " << coords << " with old owner: " << previousRevealedOwner << ", new owner: " << newRevealedOwner;
+#endif      
+        // this is a plot we no longer control (unless it was from a city which was razed, and is now uncontrolled)
+        if ((previousRevealedOwner == player_.getPlayerID() || previousRevealedOwner == NO_PLAYER) && newRevealedOwner != player_.getPlayerID() && newRevealedOwner != NO_PLAYER)
         {
+#ifdef ALTAI_DEBUG
+            os << "\n " << "Removing plot: " << pPlot->getCoords();
+#endif
             removePlotValuePlot_(pPlot);
 
             for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
@@ -743,11 +971,18 @@ namespace AltAI
                 }
             }
         }
-        else
+        else if (newRevealedOwner == player_.getPlayerID())
         {
+#ifdef ALTAI_DEBUG
+            os << "\n Adding plot: " << pPlot->getCoords();
+#endif
+            const PlotInfo::PlotInfoNode& plotInfo = getPlotInfoNode(pPlot);
+            std::vector<IDInfo> possibleWorkingCities;
             // if we are here, means we own the plot (unowned plots should be added through updatePlotRevealed)
             if (hasPossibleYield(plotInfo, player_.getPlayerID()))
             {
+                updatedPlots_.insert(pPlot);
+
                 for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
                 {
                     CultureRangePlotIter plotIter(pPlot, (CultureLevelTypes)i);
@@ -761,9 +996,30 @@ namespace AltAI
                                 const CvCity* pCity = pLoopPlot->getPlotCity();
                                 player_.setCityDirty(pCity->getIDInfo());
                                 player_.getCity(pCity).setFlag(City::NeedsImprovementCalcs);
+                                possibleWorkingCities.push_back(pCity->getIDInfo());
                             }
                         }
                     }
+                }
+
+                // new shared plot
+                if (possibleWorkingCities.size() > 1)
+                {
+                    for (size_t i = 0, count = possibleWorkingCities.size(); i < count; ++i)
+                    {
+                        CitySharedPlotsMap::iterator citySharedPlotsIter = getCitySharedPlots_(possibleWorkingCities[i]);
+                        citySharedPlotsIter->second.sharedPlots.insert(pPlot->getCoords());
+#ifdef ALTAI_DEBUG
+                        os << "\nAdding shared plot: " << pPlot->getCoords() << " for city: " << safeGetCityName(possibleWorkingCities[i]);
+#endif
+                    }
+
+                    MapAnalysis::SharedPlots::iterator sharedPlotsIter = getSharedPlot_(pPlot->getCoords());
+                    sharedPlotsIter->second.possibleCities.insert(possibleWorkingCities.begin(), possibleWorkingCities.end());
+                    // not setting a working city, as I think at this point, the plot will not have been added to the cities' working plots
+#ifdef ALTAI_DEBUG
+                    os << "\nAdding shared plot: " << pPlot->getCoords();
+#endif
                 }
             }
 
@@ -780,8 +1036,8 @@ namespace AltAI
         std::vector<XYCoords> cities;
         
         for (int i = 0, count = theMap.numPlots(); i < count; ++i)
-	    {
-		    const CvPlot* pPlot = theMap.plotByIndex(i);
+        {
+            const CvPlot* pPlot = theMap.plotByIndex(i);
             if (pPlot->isRevealed(teamType, false))
             {
                 BonusTypes bonusType = pPlot->getBonusType(teamType);
@@ -793,15 +1049,39 @@ namespace AltAI
         }
     }
 
+    void MapAnalysis::processUpdatedPlots_()
+    {
+        // need to update dot map once we've processed the complete set of plot updates
+        for (std::set<const CvPlot*>::iterator iter(updatedPlots_.begin()); iter != updatedPlots_.end();)
+        {
+            PlayerTypes owner = (*iter)->getRevealedOwner(player_.getTeamID(), false);
+            // consider plots we or nobody owns
+            if (owner == NO_PLAYER || owner == player_.getPlayerID())
+            {
+                addDotMapPlot_(*iter, getPlotInfoNode(*iter));
+            }
+            else
+            {
+                removePlotValuePlot_(*iter);
+            }
+            updatedPlots_.erase(iter++);
+        }
+    }
+
     void MapAnalysis::removePlotValuePlot_(const CvPlot* pPlot)
     {
+        const XYCoords coords(pPlot->getCoords());
+        KeyInfoMap::const_iterator keyIter = keyInfoMap_.find(coords);
+        if (keyIter == keyInfoMap_.end())
+        {
+            return;
+        }
+        const int key = keyIter->second;
+
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nRemoving plot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " from plot values map.";
-#endif
-
-        const XYCoords coords(pPlot->getX(), pPlot->getY());
-        const int key = keyInfoMap_[coords];
+        os << "\nRemoving plot: " << coords << ", key = " << key << " from plot values map.";
+#endif        
 
         for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
         {
@@ -814,7 +1094,7 @@ namespace AltAI
                     PlotValues::PlotValueMap::iterator subAreaIter = plotValues_.plotValueMap.find(pLoopPlot->getSubArea());
                     if (subAreaIter != plotValues_.plotValueMap.end())
                     {
-                        PlotValues::SubAreaPlotValueMap::iterator plotIter = subAreaIter->second.find(XYCoords(pLoopPlot->getX(), pLoopPlot->getY()));
+                        PlotValues::SubAreaPlotValueMap::iterator plotIter = subAreaIter->second.find(pLoopPlot->getCoords());
                         if (plotIter != subAreaIter->second.end())
                         {
                             std::map<int /* plot key */, std::set<XYCoords> >::iterator plotKeyIter = plotIter->second.find(key);
@@ -824,7 +1104,7 @@ namespace AltAI
                                 if (coordsIter != plotKeyIter->second.end())
                                 {
 #ifdef ALTAI_DEBUG
-                                    os << "\nRemoving entry for plot key: " << key << " for potential city plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
+                                    os << "\nRemoving entry for plot key: " << key << " for potential city plot: " << pLoopPlot->getCoords();
 #endif
                                     plotKeyIter->second.erase(coordsIter);
                                 }
@@ -848,7 +1128,7 @@ namespace AltAI
             if (plotIter != subAreaIter->second.end())
             {
 #ifdef ALTAI_DEBUG
-                os << "\nRemoving entries for potential city plot: " << XYCoords(pPlot->getX(), pPlot->getY());
+                os << "\nRemoving entries for potential city plot: " << pPlot->getCoords();
 #endif
                 subAreaIter->second.erase(plotIter);
             }
@@ -861,81 +1141,136 @@ namespace AltAI
                 plotValues_.plotValueMap.erase(subAreaIter);
             }
         }
+
+//#ifdef ALTAI_DEBUG
+//        debugPlotValueMap(plotValues_, os);
+//#endif
     }
 
     // plot update helper functions
-    std::pair<int, MapAnalysis::PlotInfoMap::iterator> MapAnalysis::addPlotInfo_(const CvPlot* pPlot)
+    std::pair<int, MapAnalysis::PlotInfoMap::iterator> MapAnalysis::updatePlotInfo_(const CvPlot* pPlot, bool isNew, bool forceKeyUpdate)
     {
+        const XYCoords coords(pPlot->getCoords());
         PlotInfo plotInfo(pPlot, player_.getPlayerID());
-        int key = plotInfo.getKey();
-        keyInfoMap_[XYCoords(pPlot->getX(), pPlot->getY())] = key;
+        int oldKey = -1;
+        const int newKey = plotInfo.getKey();
+        MapAnalysis::PlotInfoMap::iterator plotInfoIter;
+        PlayerTypes revealedOwner = pPlot->getRevealedOwner(player_.getTeamID(), false);
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-//        os << "\n(addPlotInfo_): Adding plot info for key value = " << key << ", plot: " << XYCoords(pPlot->getX(), pPlot->getY()) << "\n" << plotInfo.getInfo();
-#endif
+        os << "\n" << plotInfo.getInfo() << "\n";
+#endif        
 
-        PlotInfoMap::iterator iter = plotInfoMap_.find(key);
-        if (iter == plotInfoMap_.end())
+        if (isNew)
         {
-            iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;
-        }
-        else
-        {
-            if (!(plotInfo.getInfo() == iter->second))
+            KeyInfoMap::iterator keyIter = keyInfoMap_.find(coords);
+            if (keyIter != keyInfoMap_.end())
+            {
+                oldKey = keyIter->second;
+#ifdef ALTAI_DEBUG
+                os << "\n(updatePlotInfo_): key already exists for coords: " << coords << " - existing key = " << oldKey << ", new key = " << newKey;
+#endif
+                if (oldKey != newKey)
+                {
+                    keyIter->second = newKey;
+                    keyCoordsMap_[oldKey].erase(coords);
+                    keyCoordsMap_[newKey].insert(coords);
+                    plotInfoMap_.erase(oldKey);
+                    plotInfoIter = plotInfoMap_.insert(std::make_pair(newKey, plotInfo.getInfo())).first;
+                }
+                else
+                {
+                    plotInfoIter = plotInfoMap_.find(newKey);
+                }
+            }
+            else
             {
 #ifdef ALTAI_DEBUG
-                os << "\n(addPlotInfo_): Inconsistent plot keys:\n" << plotInfo.getInfo() << "\n" << iter->second;
+                os << "\n(updatePlotInfo_): adding key: " << newKey << " for coords: " << coords;
 #endif
-                iter->second = plotInfo.getInfo();
+                keyInfoMap_[coords] = newKey;
+                keyCoordsMap_[newKey].insert(coords);
+                plotInfoIter = plotInfoMap_.insert(std::make_pair(newKey, plotInfo.getInfo())).first;
             }
         }
-        return std::make_pair(key, iter);
-    }
-
-    std::pair<int, MapAnalysis::PlotInfoMap::iterator> MapAnalysis::updatePlotInfo_(const CvPlot* pPlot)
-    {
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-//#endif
-        const XYCoords coords(pPlot->getX(), pPlot->getY());
-
-        PlotInfo plotInfo(pPlot, player_.getPlayerID());
-        int key = plotInfo.getKey();
-
-        keyInfoMap_[coords] = key;
-
-        PlotInfoMap::iterator iter = plotInfoMap_.find(key);
-        if (iter == plotInfoMap_.end())
+        else  // updating existing plot
         {
-            iter = plotInfoMap_.insert(std::make_pair(key, plotInfo.getInfo())).first;
+            KeyInfoMap::iterator keyIter = keyInfoMap_.find(coords);
+            if (keyIter == keyInfoMap_.end())  // plot info missing altogether
+            {
+                keyIter = keyInfoMap_.insert(std::make_pair(coords, newKey)).first;
+                keyCoordsMap_[newKey].insert(coords);
+                plotInfoIter = plotInfoMap_.insert(std::make_pair(newKey, plotInfo.getInfo())).first;
 
-//#ifdef ALTAI_DEBUG
-//            os << "\n(updatePlotInfo_): Adding plot info: " << key << ", for coords = " << XYCoords(pPlot->getX(), pPlot->getY())
-//               << "\n" << plotInfo.getInfo();
-//#endif
+#ifdef ALTAI_DEBUG
+                os << "\n(updatePlotInfo_): Missing plot info?: key = " << newKey << ", coords = " << pPlot->getCoords()
+                   << "\n" << plotInfo.getInfo();
+#endif
+            }
+            else  // found existing key for these coords
+            {
+                oldKey = keyIter->second;
+                if (oldKey != newKey)
+                {
+                    KeyCoordsMap::iterator keyCoordsIter = keyCoordsMap_.find(oldKey);
+                    if (keyCoordsIter != keyCoordsMap_.end())
+                    {
+                        keyCoordsIter->second.erase(coords);
+                        if (keyCoordsIter->second.empty())
+                        {
+                            keyCoordsMap_.erase(keyCoordsIter);
+                            plotInfoMap_.erase(oldKey);  // no entries for this key any more
+                        }
+                    }
+                    
+                    keyIter->second = newKey;
+                    keyCoordsMap_[newKey].insert(coords);
+                    plotInfoIter = plotInfoMap_.insert(std::make_pair(newKey, plotInfo.getInfo())).first;
+#ifdef ALTAI_DEBUG
+                    os << "\n(updatePlotInfo_): Updating plot info: key = " << newKey << ", old key = " << oldKey << ", coords = " << pPlot->getCoords();
+#endif
+                }
+                else
+                {
+                    plotInfoIter = plotInfoMap_.find(newKey);
+                }
+            }
         }
-        else
+
+        if (!isNew && oldKey != newKey)
         {
-            iter->second = plotInfo.getInfo();
-
-//#ifdef ALTAI_DEBUG
-//            os << "\n(updatePlotInfo_): Updating plot info: " << key << ", for coords = " << XYCoords(pPlot->getX(), pPlot->getY())
-//               << "\n" << plotInfo.getInfo();
-//#endif
+            if (hasPossibleYield(plotInfo.getInfo(), player_.getPlayerID()) && (revealedOwner == NO_PLAYER || revealedOwner == player_.getPlayerID()))
+            {
+                updatePlotValueKey_(pPlot, oldKey, newKey);
+            }
         }
 
-        return std::make_pair(key, iter);
+        if ((forceKeyUpdate || oldKey != newKey) && (revealedOwner == NO_PLAYER || revealedOwner == player_.getPlayerID()))
+        {
+            updateKeysValueMap_(newKey, plotInfo.getInfo(), oldKey);
+        }
+
+        return std::make_pair(newKey, plotInfoIter);
     }
 
     void MapAnalysis::addDotMapPlot_(const CvPlot* pPlot, const PlotInfo::PlotInfoNode& plotInfo)
     {
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();       
-//#endif
-        const XYCoords coords(pPlot->getX(), pPlot->getY());
+        const XYCoords coords(pPlot->getCoords());
         const int key = keyInfoMap_[coords];
         const TeamTypes teamType = player_.getTeamID();
+
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();       
+#endif
+        PlayerTypes plotOwner = pPlot->getRevealedOwner(player_.getTeamID(), false);
+        if (plotOwner != NO_PLAYER && plotOwner != player_.getPlayerID())
+        {
+#ifdef ALTAI_DEBUG
+            os << "\nSkipping plot for dot map: " << coords << ", owner = " << plotOwner;
+#endif
+            return;
+        }
 
         if (hasPossibleYield(plotInfo, player_.getPlayerID()))
         {
@@ -945,15 +1280,15 @@ namespace AltAI
                 while (IterPlot pLoopPlot = plotIter())
                 {
                     // consider plots we have seen and can theoretically found a city at
-                    if (pLoopPlot.valid() && pLoopPlot->isRevealed(teamType, false) && !pLoopPlot->isCity())
+                    if (pLoopPlot.valid() && pLoopPlot->isRevealed(teamType, false))
                     {
                         if (couldFoundAtPlot(pLoopPlot, player_))
                         {
-//#ifdef ALTAI_DEBUG
-//                            os << "\nAdding plot: " << coords << " with key = " << key << " to plot value map for sub area: " << pLoopPlot->getSubArea()
-//                               << " for potential city: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
-//#endif
-                            plotValues_.plotValueMap[pLoopPlot->getSubArea()][XYCoords(pLoopPlot->getX(), pLoopPlot->getY())][key].insert(coords);
+#ifdef ALTAI_DEBUG
+                            os << "\nAdding plot: " << coords << " with key = " << key << " to plot value map for sub area: " << pLoopPlot->getSubArea()
+                               << " for potential city: " << pLoopPlot->getCoords();
+#endif
+                            plotValues_.plotValueMap[pLoopPlot->getSubArea()][pLoopPlot->getCoords()][key].insert(coords);
                         }
                     }
                 }
@@ -975,15 +1310,15 @@ namespace AltAI
                         if (playerType == NO_PLAYER || playerType == player_.getPlayerID())
                         {
                             const PlotInfo::PlotInfoNode& thisNode = getPlotInfoNode(pLoopPlot);
-                            const int thisKey = keyInfoMap_[XYCoords(pLoopPlot->getX(), pLoopPlot->getY())];
+                            const int thisKey = keyInfoMap_[pLoopPlot->getCoords()];
 
                             if (hasPossibleYield(thisNode, player_.getPlayerID()))
                             {
-//#ifdef ALTAI_DEBUG
-//                                os << "\nAdding plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY()) << " with key = " << thisKey << " to plot value map for sub area: " << pPlot->getSubArea()
-//                                   << " for potential city: " << XYCoords(pPlot->getX(), pPlot->getY());
-//#endif
-                                plotValues_.plotValueMap[pPlot->getSubArea()][XYCoords(pPlot->getX(), pPlot->getY())][thisKey].insert(XYCoords(pLoopPlot->getX(), pLoopPlot->getY()));
+#ifdef ALTAI_DEBUG
+                                os << "\nAdding plot: " << pLoopPlot->getCoords() << " with key = " << thisKey << " to plot value map for sub area: " << pPlot->getSubArea()
+                                   << " for potential city: " << pPlot->getCoords();
+#endif
+                                plotValues_.plotValueMap[pPlot->getSubArea()][pPlot->getCoords()][thisKey].insert(pLoopPlot->getCoords());
                             }
                         }
                     }
@@ -994,13 +1329,13 @@ namespace AltAI
 
     void MapAnalysis::updatePlotValueKey_(const CvPlot* pPlot, int oldKey, int newKey)
     {
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-//        os << "\nUpdating plot keys for plot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " from: " << oldKey << " to: " << newKey;
-//#endif
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nUpdating plot keys for plot: " << pPlot->getCoords() << " from: " << oldKey << " to: " << newKey;
+#endif
         const TeamTypes teamType = player_.getTeamID();
         const PlayerTypes playerType = player_.getPlayerID();
-        const XYCoords coords(pPlot->getX(), pPlot->getY());
+        const XYCoords coords(pPlot->getCoords());
 
         // update plot keys
         for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
@@ -1012,34 +1347,39 @@ namespace AltAI
                 {
                     const PlayerTypes plotOwner = pLoopPlot->getRevealedOwner(teamType, false);
 
-                    if (plotOwner == NO_PLAYER || plotOwner == player_.getPlayerID())
+                    if (plotOwner == NO_PLAYER || plotOwner == player_.getPlayerID())  // could consider vassals' plots here if being v. aggressive
                     {
                         PlotValues::PlotValueMap::iterator subAreaIter = plotValues_.plotValueMap.find(pLoopPlot->getSubArea());
                         if (subAreaIter != plotValues_.plotValueMap.end())
                         {
-                            PlotValues::SubAreaPlotValueMap::iterator plotIter = subAreaIter->second.find(XYCoords(pLoopPlot->getX(), pLoopPlot->getY()));
+                            PlotValues::SubAreaPlotValueMap::iterator plotIter = subAreaIter->second.find(pLoopPlot->getCoords());
 
                             if (plotIter != subAreaIter->second.end())
                             {
                                 PlotValues::PlotKeyCoordsMap::iterator plotKeyIter = plotIter->second.find(oldKey);
+                                bool erased = false;
                                 if (plotKeyIter != plotIter->second.end())
                                 {
-//#ifdef ALTAI_DEBUG
-//                                    os << "\nErasing entry for plot key for potential city plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
-//#endif
-                                    // erase entry for bonus plot with old plot key
+#ifdef ALTAI_DEBUG
+                                    os << "\nErasing entry for plot key:" << oldKey << " for potential city plot: " << pLoopPlot->getCoords();
+#endif
+                                    // erase entry for plot with old plot key
                                     plotKeyIter->second.erase(coords);
 
                                     if (plotKeyIter->second.empty())
                                     {
                                         plotIter->second.erase(plotKeyIter);
                                     }
+                                    erased = true;
                                 }
-//#ifdef ALTAI_DEBUG
-//                                os << "\nAdding entry for plot key for potential city plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
-//#endif
-                                // insert new key - only add if had existing entry (new entries are added separately and should automatically get the correct key)
-                                subAreaIter->second[XYCoords(pLoopPlot->getX(), pLoopPlot->getY())][newKey].insert(coords);
+                                if (erased)
+                                {
+#ifdef ALTAI_DEBUG
+                                    os << "\nAdding entry for plot key: " << newKey << " for potential city plot: " << pLoopPlot->getCoords();
+#endif
+                                    // insert new key - only add if had existing entry (new entries are added separately and should automatically get the correct key)
+                                    subAreaIter->second[pLoopPlot->getCoords()][newKey].insert(coords);
+                                }
                             }
                         }
                     }
@@ -1051,7 +1391,7 @@ namespace AltAI
     void MapAnalysis::updateResourceData_(const CvPlot* pPlot)
     {
         const int subAreaID = pPlot->getSubArea();
-        const XYCoords coords(pPlot->getX(), pPlot->getY());
+        const XYCoords coords(pPlot->getCoords());
         PlayerTypes owner = pPlot->getRevealedOwner(player_.getTeamID(), false);
 
         // update resource data
@@ -1067,31 +1407,50 @@ namespace AltAI
             std::map<BonusTypes, ResourceData::ResourcePlotData>::iterator resourceItemIter = resourceSubAreaIter->second.subAreaResourcesMap.find(bonusType);
             if (resourceItemIter == resourceSubAreaIter->second.subAreaResourcesMap.end())
             {
-                resourceSubAreaIter->second.subAreaResourcesMap.insert(std::make_pair(bonusType, ResourceData::ResourcePlotData(1, std::make_pair(coords, owner))));
+                resourceSubAreaIter->second.subAreaResourcesMap.insert(std::make_pair(bonusType, ResourceData::ResourcePlotData(1, boost::make_tuple(coords, owner, pPlot->getImprovementType()))));
             }
             else
             {
                 bool found = false;
                 for (size_t i = 0, count = resourceItemIter->second.size(); i < count; ++i)
                 {
-                    if (resourceItemIter->second[i].first == coords)
+                    if (boost::get<0>(resourceItemIter->second[i]) == coords)
                     {
                         found = true;
-                        resourceItemIter->second[i].second = owner;
+                        boost::get<1>(resourceItemIter->second[i]) = owner;
                     }
                 }
                 if (!found)
                 {
-                    resourceItemIter->second.push_back(std::make_pair(coords, owner));
+                    resourceItemIter->second.push_back(boost::make_tuple(coords, owner, pPlot->getImprovementType()));
                 }
             }
         }
     }
 
-    void MapAnalysis::updateKeysValueMap_(int key, const PlotInfo::PlotInfoNode& plotInfo)
+    void MapAnalysis::updateKeysValueMap_(int key, const PlotInfo::PlotInfoNode& plotInfo, int oldKey)
     {
+        if (oldKey != -1 && keyCoordsMap_[oldKey].empty())
+        {
+            plotValues_.keysValueMap.erase(oldKey);
+        }
+
         plotValues_.keysValueMap[key] = getYields(plotInfo, player_.getPlayerID(),
             player_.getCvPlayer()->isBarbarian() ? BarbDotMapTechDepth : DotMapTechDepth);
+    }
+
+    void MapAnalysis::updateKeysValueYields_()
+    {
+        for (MapAnalysis::PlotValues::KeysValueMap::iterator keyIter(plotValues_.keysValueMap.begin()), keyEndIter(plotValues_.keysValueMap.end());
+                keyIter != keyEndIter; ++keyIter)
+        {
+            PlotInfoMap::const_iterator plotInfoIter = plotInfoMap_.find(keyIter->first);
+            if (plotInfoIter != plotInfoMap_.end())
+            {
+                keyIter->second = getYields(plotInfoIter->second, player_.getPlayerID(),
+                    player_.getCvPlayer()->isBarbarian() ? BarbDotMapTechDepth : DotMapTechDepth);
+            }
+        }
     }
 
     int MapAnalysis::updateAreaCounts_(int areaID)
@@ -1124,19 +1483,65 @@ namespace AltAI
 
     void MapAnalysis::updateAreaBorders_(const CvPlot* pPlot, int areaID, int subAreaID)
     {
-        AreaMapIter areaIter(revealedAreaDataMap_.find(areaID));
+        AreaMapIter areaIter(revealedAreaDataMap_.find(areaID)), subAreaIter(revealedSubAreaDataMap_.find(subAreaID));
         TeamTypes teamType = player_.getTeamID();
         NeighbourPlotIter iter(pPlot);
+        bool hasUnrevealedNeighbours = false;
+        std::vector<const CvPlot*> possiblePlotsToRemoveFromBorder;
 
         while (IterPlot pLoopPlot = iter())
         {
-            if (pLoopPlot.valid() && pLoopPlot->isRevealed(teamType, false))
+            if (pLoopPlot.valid())
             {
-                int loopPlotAreaID = pLoopPlot->getArea();
-                if (loopPlotAreaID != areaID)
+                if (pLoopPlot->isRevealed(teamType, false))
                 {
-                    areaIter->second.borderingAreas.insert(loopPlotAreaID);
+                    int loopPlotAreaID = pLoopPlot->getArea();
+                    if (loopPlotAreaID != areaID)
+                    {
+                        areaIter->second.borderingAreas.insert(loopPlotAreaID);
+                    }
+
+                    int loopPlotSubAreaID = pLoopPlot->getSubArea();
+                    if (loopPlotSubAreaID != subAreaID)
+                    {
+                        subAreaIter->second.borderingAreas.insert(loopPlotSubAreaID);
+                    }
+
+                    // does this plot have any remaining unrevealed neighbours, if we're adding a new border plot?
+                    if (unrevealedBorderMap_[pLoopPlot->getSubArea()].find(pLoopPlot->getCoords()) != unrevealedBorderMap_[pLoopPlot->getSubArea()].end())
+                    {
+                        possiblePlotsToRemoveFromBorder.push_back(pLoopPlot);
+                    }
                 }
+                else
+                {
+                    hasUnrevealedNeighbours = true;
+                }
+            }
+        }
+
+        if (hasUnrevealedNeighbours)
+        {
+            unrevealedBorderMap_[pPlot->getSubArea()].insert(pPlot->getCoords());
+        }
+        
+        // check this even if we didn't add a new border plot - could be filling in an interior region of border...
+        for (size_t i = 0, count = possiblePlotsToRemoveFromBorder.size(); i < count; ++i)
+        {
+            hasUnrevealedNeighbours = false;
+            NeighbourPlotIter neighbourIter(possiblePlotsToRemoveFromBorder[i]);
+            while (IterPlot pLoopPlot = neighbourIter())
+            {
+                if (pLoopPlot.valid() && !pLoopPlot->isRevealed(teamType, false))
+                {
+                    hasUnrevealedNeighbours = true;
+                    break;
+                }
+            }
+
+            if (!hasUnrevealedNeighbours)
+            {
+                unrevealedBorderMap_[possiblePlotsToRemoveFromBorder[i]->getSubArea()].erase(possiblePlotsToRemoveFromBorder[i]->getCoords());
             }
         }
     }
@@ -1151,10 +1556,36 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             {
                 std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-                os << "Player: " << player_.getPlayerID() << " knows all of area: " << areaID << " (" << iter->second.knownTileCount << ") tiles\n";
+                os << "\nPlayer: " << player_.getPlayerID() << " knows all of area: " << areaID << " (" << iter->second.knownTileCount << ") tiles\n";
             }
 #endif
             // update from Map's area graph
+        }
+    }
+
+    bool MapAnalysis::isAreaComplete(int areaID) const
+    {
+        AreaMapConstIter iter(revealedAreaDataMap_.find(areaID));
+        if (iter != revealedAreaDataMap_.end())
+        {
+            return iter->second.allKnown;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    bool MapAnalysis::isSubAreaComplete(int subAreaID) const
+    {
+        AreaMapConstIter iter(revealedSubAreaDataMap_.find(subAreaID));
+        if (iter != revealedSubAreaDataMap_.end())
+        {
+            return iter->second.allKnown;
+        }
+        else
+        {
+            return false;
         }
     }
 
@@ -1168,7 +1599,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             {
                 std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-                os << "Player: " << player_.getPlayerID() << " knows all of sub area: " << subAreaID << " (" << iter->second.knownTileCount << ") tiles\n";
+                os << "\nPlayer: " << player_.getPlayerID() << " knows all of sub area: " << subAreaID << " (" << iter->second.knownTileCount << ") tiles\n";
             }
 #endif
 
@@ -1181,52 +1612,21 @@ namespace AltAI
         }
     }
 
-    // shared plot functions
-    // analyse all shared plots for this player
-    void MapAnalysis::analyseSharedPlots()
-    {
-        std::set<XYCoords> processedCoords;
-        for (SharedPlots::iterator iter(sharedPlots_.begin()), ciEnd(sharedPlots_.end()); iter != ciEnd; ++iter)
-        {
-            for (CitySharedPlots::SharedPlotsIter plotsIter(iter->sharedPlots.begin()), endIter(iter->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
-            {
-                if (processedCoords.find((*plotsIter)->coords) == processedCoords.end())
-                {
-                    analyseSharedPlot_(iter, plotsIter);
-                    processedCoords.insert((*plotsIter)->coords);
-                }
-            }
-        }
-
-#ifdef ALTAI_DEBUG
-        {
-            std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-            os << "\nCompleted analysis of all shared plots";
-        }
-        debugSharedPlots();
-#endif
-    }
-
     // reanalyse plots shared by these cities
     void MapAnalysis::analyseSharedPlots(const std::set<IDInfo>& cities)
     {
-        std::set<XYCoords> processedCoords;
+        std::set<XYCoords> sharedCoords;
+
         for (std::set<IDInfo>::const_iterator ci(cities.begin()), ciEnd(cities.end()); ci != ciEnd; ++ci)
         {
-            SharedPlots::iterator iter = sharedPlots_.find(CitySharedPlots(*ci));
-
-            if (iter != sharedPlots_.end())
+            CitySharedPlotsMap::const_iterator citySharedPlotsIter = citySharedPlots_.find(*ci);
+            if (citySharedPlotsIter != citySharedPlots_.end())
             {
-                for (CitySharedPlots::SharedPlotsIter plotsIter(iter->sharedPlots.begin()), endIter(iter->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
-                {
-                    if (processedCoords.find((*plotsIter)->coords) == processedCoords.end())
-                    {
-                        analyseSharedPlot_(iter, plotsIter);
-                        processedCoords.insert((*plotsIter)->coords);
-                    }
-                }
+                sharedCoords.insert(citySharedPlotsIter->second.sharedPlots.begin(), citySharedPlotsIter->second.sharedPlots.end());
             }
         }
+
+        analyseSharedPlot_(sharedCoords);
 
 #ifdef ALTAI_DEBUG
         {
@@ -1242,59 +1642,36 @@ namespace AltAI
                 }
             }
         }
-        //debugSharedPlots();
+        debugSharedPlots();
 #endif
     }
 
     void MapAnalysis::reassignUnworkedSharedPlots(IDInfo city)
     {
-        SharedPlots::iterator iter = sharedPlots_.find(CitySharedPlots(city));
-        
-        if (iter != sharedPlots_.end())
+        CitySharedPlotsMap::const_iterator citySharedPlotsIter = citySharedPlots_.find(city);
+        if (citySharedPlotsIter != citySharedPlots_.end())
         {
-            const CvCity* pCity = getCity(city);
             const CvMap& theMap = gGlobals.getMap();
+            const CvCity* pCity = getCity(city);
 
-            for (CitySharedPlots::SharedPlotsConstIter plotsIter(iter->sharedPlots.begin()), endIter(iter->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
+            for (std::set<XYCoords>::const_iterator plotIter(citySharedPlotsIter->second.sharedPlots.begin()), plotEndIter(citySharedPlotsIter->second.sharedPlots.end());
+                plotIter != plotEndIter; ++plotIter)
             {
-                CvPlot* pPlot = theMap.plot((*plotsIter)->coords.iX, (*plotsIter)->coords.iY);
-                if (!pCity->isWorkingPlot(pPlot))  // and can work?
+                SharedPlots::iterator sharedPlotsIter = sharedPlots_.find(*plotIter);
+                if (sharedPlotsIter != sharedPlots_.end())
                 {
-                    for (SharedPlotItem::PossibleCitiesConstIter citiesIter((*plotsIter)->possibleCities.begin()), endIter((*plotsIter)->possibleCities.end()); citiesIter != endIter; ++citiesIter)
+                    CvPlot* pPlot = theMap.plot(sharedPlotsIter->first.iX, sharedPlotsIter->first.iY);
+                    if (!pCity->isWorkingPlot(pPlot) && pCity->canWork(pPlot))
                     {
-                        if (!(*citiesIter == city))
+                        for (SharedPlot::PossibleCitiesIter citiesIter(sharedPlotsIter->second.possibleCities.begin()), citiesEndIter(sharedPlotsIter->second.possibleCities.end());
+                            citiesIter != citiesEndIter; ++citiesIter)
                         {
-                            pPlot->setWorkingCityOverride(getCity(*citiesIter));  // give another city a chance to choose the plot
-                            break;
+                            if (*citiesIter != city)
+                            {
+                                pPlot->setWorkingCityOverride(getCity(*citiesIter));  // give another city a chance to choose the plot
+                                break;
+                            }
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    // assigns the chosen improvements by this city's improvements manager to any shared plots
-    void MapAnalysis::assignSharedPlotImprovements(IDInfo city)
-    {
-        SharedPlots::iterator sharedPlotsIter = sharedPlots_.find(CitySharedPlots(city));
-        CitiesImprovements::iterator improvementsIter = citiesImprovements_.find(CityImprovementManager(city));
-        
-        if (sharedPlotsIter != sharedPlots_.end() && improvementsIter != citiesImprovements_.end())
-        {
-            std::vector<CityImprovementManager::PlotImprovementData>& improvements = improvementsIter->getImprovements();
-
-            // go through each shared plot for this city
-            for (CitySharedPlots::SharedPlotsIter plotsIter(sharedPlotsIter->sharedPlots.begin()), endIter(sharedPlotsIter->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
-            {
-                // try and find the improvement for this shared plot
-                for (size_t i = 0, count = improvements.size(); i < count; ++i)
-                {
-                    if (boost::get<0>(improvements[i]) == (*plotsIter)->coords)
-                    {
-                        // update this plot's improvement info for this city in this shared plot's data
-                        (*plotsIter)->assignedImprovement.second = 
-                            boost::make_tuple(boost::get<2>(improvements[i]), boost::get<1>(improvements[i]), boost::get<3>(improvements[i]), boost::get<6>(improvements[i]));
-                        break;
                     }
                 }
             }
@@ -1303,237 +1680,171 @@ namespace AltAI
 
     IDInfo MapAnalysis::setWorkingCity(const CvPlot* pPlot, const CvCity* pOldCity, const CvCity* pNewCity)
     {
-        XYCoords coords(pPlot->getX(), pPlot->getY());
+        XYCoords coords(pPlot->getCoords());
 
         if (!pNewCity)
         {
 #ifdef ALTAI_DEBUG
             std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-            os << "\nAbout to clear plot override.";
+            os << "\nTurn: " << gGlobals.getGame().getGameTurn() << " - about to clear plot override back to: " << safeGetCityName(pOldCity)
+                << " for plot: " << coords;
+#endif
+        }
+        else
+        {
+#ifdef ALTAI_DEBUG
+            std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+            os << "\nTurn: " << gGlobals.getGame().getGameTurn() << " - about to set plot override back from: " << safeGetCityName(pOldCity)
+                << " to: " << safeGetCityName(pNewCity) << " for plot: " << coords;
 #endif
         }
 
         const CvCity* pCity = pNewCity ? pNewCity : pOldCity;
 
-        if (pCity)
-        {
-            CitySharedPlots thisCity(pCity->getIDInfo());
-            SharedPlots::iterator iter(sharedPlots_.find(thisCity));
-            if (iter != sharedPlots_.end())
-            {
-                for (CitySharedPlots::SharedPlotsConstIter plotsIter(iter->sharedPlots.begin()), endIter(iter->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
-                {
-                    if ((*plotsIter)->coords == coords)
-                    {
-                        IDInfo origAssignedCity = (*plotsIter)->assignedCity;
-                        // slightly inefficient, as set this city's entry for the plot's assigned city in this loop whch means another find()
-                        for (SharedPlotItem::PossibleCitiesConstIter citiesIter((*plotsIter)->possibleCities.begin()), endIter((*plotsIter)->possibleCities.end()); citiesIter != endIter; ++citiesIter)
-                        {
-                            setWorkingCity_(*citiesIter, coords, pNewCity ? pNewCity->getIDInfo() : IDInfo());
-                        }
-                        return origAssignedCity;
-                    }
-                }
-            }
-        }
-        return IDInfo();
+        IDInfo assignedCity = getSharedPlot(pCity->getIDInfo(), pPlot->getCoords());
+        setWorkingCity_(coords, pNewCity ? pNewCity->getIDInfo() : IDInfo());
+        
+        return assignedCity;
     }
 
-    void MapAnalysis::analyseSharedPlot_(MapAnalysis::SharedPlots::iterator iter, CitySharedPlots::SharedPlotsIter plotsIter)
+    void MapAnalysis::analyseSharedPlot_(const std::set<XYCoords>& sharedCoords)
     {
-        CvPlot* pPlot = gGlobals.getMap().plot((*plotsIter)->coords.iX, (*plotsIter)->coords.iY);
-        IDInfo origAssignedCity = (*plotsIter)->assignedCity;
-        std::vector<std::pair<IDInfo, std::pair<TotalOutput, TotalOutputWeights> > > deltas;
-        CvCity* pFirstCity = getCity(*(*plotsIter)->possibleCities.begin());
-        CvCity* pOtherCity = (*plotsIter)->possibleCities.size() == 1 ? NULL : getCity(*(*plotsIter)->possibleCities.rbegin());
-
-        for (SharedPlotItem::PossibleCitiesConstIter citiesIter((*plotsIter)->possibleCities.begin()), endIter((*plotsIter)->possibleCities.end()); citiesIter != endIter; ++citiesIter)
-        {
-            CvCity* pCity = getCity(*citiesIter);
-
-            TotalOutput output, baseline;
-            TotalOutputWeights weights;
-            
-            //setWorkingCity_((*plotsIter)->possibleCities[j], (*plotsIter)->coords, (*plotsIter)->possibleCities[j]);
-            pPlot->setWorkingCityOverride(pCity);
-
-            if (pCity && !pCity->isOccupation() && pCity->canWork(pPlot))
-            {
-                {
-                    CityDataPtr pCityData(new CityData(pCity));
-                    CitySimulation simulation(pCity, pCityData);
-                    SimulationOutput simOutput = simulation.simulateAsIs(10);
-
-                    output = *simOutput.cumulativeOutput.rbegin();
-                    weights = makeOutputW(3, 4, 3, 3, 1, 1);//simulation.getCityOptimiser()->getMaxOutputWeights();
 #ifdef ALTAI_DEBUG
-                    {  // debug
-                        CityLog::getLog(pCityData->getCity())->getStream() << "\nPlots with shared plot: " << (*plotsIter)->coords << "\n";
-                        simulation.logPlots(true);
-                    }
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
 #endif
-                }
+        TotalOutputValueFunctor valueF(makeOutputW(1, 1, 1, 1, 1, 1));
 
-                //setWorkingCity_((*plotsIter)->possibleCities[j], (*plotsIter)->coords, IDInfo());
-                pPlot->setWorkingCityOverride(pOtherCity);
-                //plotsIter->assignedCity = IDInfo();
+        for (std::set<XYCoords>::const_iterator coordsIter(sharedCoords.begin()), coordsEndIter(sharedCoords.end()); coordsIter != coordsEndIter; ++coordsIter)
+        {
+            SharedPlots::iterator sharedPlotIter = sharedPlots_.find(*coordsIter);
+            if (sharedPlotIter != sharedPlots_.end())
+            {
+                IDInfo origAssignedCity = sharedPlotIter->second.assignedCity;
+                CvPlot* pPlot = gGlobals.getMap().plot(coordsIter->iX, coordsIter->iY);
+                CvCity* pBestCity = NULL;
+                int worstDelta = 0;
+
+                for (SharedPlot::PossibleCitiesIter citiesIter(sharedPlotIter->second.possibleCities.begin()), citiesEndIter(sharedPlotIter->second.possibleCities.end());
+                    citiesIter != citiesEndIter; ++citiesIter)
                 {
+                    SharedPlot::PossibleCitiesIter assignedCityIter = citiesIter;
+
+                    CvCity* pCity = getCity(*assignedCityIter);
+                    sharedPlotIter->second.assignedCity = *assignedCityIter;
+
                     CityDataPtr pCityData(new CityData(pCity));
-                    CitySimulation simulation(pCity, pCityData);
-                    SimulationOutput simOutput = simulation.simulateAsIs(10);
-                    baseline = *simOutput.cumulativeOutput.rbegin();
-                    //weights = mergeMax(simulation.getCityOptimiser()->getMaxOutputWeights(), weights);
-#ifdef ALTAI_DEBUG
-                    {  // debug
-                        CityLog::getLog(pCityData->getCity())->getStream() << "\nPlots without shared plot: " << (*plotsIter)->coords << "\n";
-                        simulation.logPlots(true);
-                    }
-#endif
-                }
-                deltas.push_back(std::make_pair(*citiesIter, std::make_pair(output - baseline, weights)));
-            }
-            pOtherCity = pFirstCity;
-        }
+                    const City& city = player_.getCity(pCity);
 
-        // todo - if best value is 0, see if another city had a positive component to its value (e.g. increased hammer output, but less science, etc...)
-        int bestCityValue = std::numeric_limits<int>::min();
-        IDInfo bestCity;
-        for (size_t k = 0, count = deltas.size(); k < count; ++k)
-        {
-            const CvCity* pCity = getCity(deltas[k].first);
-            TotalOutputWeights outputWeights = player_.getCity(pCity).getMaxOutputWeights();
-            TotalOutputValueFunctor valueF(deltas[k].second.second);
+                    city.optimisePlots(pCityData, city.getConstructItem());
 
-            if (valueF(deltas[k].second.first) > bestCityValue)
-            {
-                bestCityValue = valueF(deltas[k].second.first);
-                bestCity = deltas[k].first;
-            }
-        }
-        // actually set override
-        CvCity* pBestCity = getCity(bestCity);
-        pPlot->setWorkingCityOverride(pBestCity);  // can be no city
+                    PlotDataListConstIter plotsIter = pCityData->findPlot(pPlot->getCoords());
 
-        // changed working city
-        if (pBestCity && !(pBestCity->getIDInfo() == origAssignedCity))
-        {
-            CitiesImprovements::iterator improvementsIter = citiesImprovements_.find(CityImprovementManager(origAssignedCity));
-            CitiesImprovements::iterator newImprovementsIter = citiesImprovements_.find(CityImprovementManager(bestCity));
-            if (improvementsIter != citiesImprovements_.end() && newImprovementsIter != citiesImprovements_.end())
-            {
-                std::vector<CityImprovementManager::PlotImprovementData>& improvements = improvementsIter->getImprovements();
-
-                // try and find the current improvement for this shared plot
-                for (size_t i = 0, count = improvements.size(); i < count; ++i)
-                {
-                    if (boost::get<0>(improvements[i]) == (*plotsIter)->coords)
+                    if (plotsIter != pCityData->getPlotOutputs().end())
                     {
-                        bool found = false;
-                        std::vector<CityImprovementManager::PlotImprovementData>& newImprovements = newImprovementsIter->getImprovements();
-                        for (size_t j = 0, count = newImprovements.size(); j < count; ++j)
+                        if (plotsIter->isWorked)
                         {
-                            if (boost::get<0>(newImprovements[j]) == (*plotsIter)->coords)
+                            TotalOutput withYield = pCityData->getOutput();
+#ifdef ALTAI_DEBUG
+                            os << "\nPlot: " <<  pPlot->getCoords() << " ";
+                            plotsIter->debugSummary(os);
+                            os << " worked by city: " << narrow(pCity->getName()) << ", total output = " << withYield;
+                            pCityData->debugSummary(os);
+#endif
+                            ++assignedCityIter;
+                            if (assignedCityIter == citiesEndIter)
                             {
-                                found = true;
-                                newImprovements[j] = improvements[i];
-#ifdef ALTAI_DEBUG
-                                {   // debug
-                                    std::ostream& os = CityLog::getLog(pBestCity)->getStream();
-                                    os << "\nAssigned shared plot: " << (*plotsIter)->coords << " with improvement data: ";
-                                    newImprovementsIter->logImprovement(os, newImprovements[j]);
-                                    os << "\n";
-                                    newImprovementsIter->logImprovements();
-                                }
-#endif
-                                break;
+                                assignedCityIter = sharedPlotIter->second.possibleCities.begin();
                             }
-                        }
 
-                        if (!found)
-                        {
-                            newImprovementsIter->getImprovements().push_back(improvements[i]);
-#ifdef ALTAI_DEBUG
-                            {   // debug
-                                std::ostream& os = CityLog::getLog(pBestCity)->getStream();
-                                os << "\nAdded shared plot: " << (*plotsIter)->coords << " with improvement data: ";
-                                newImprovementsIter->logImprovement(os, *newImprovementsIter->getImprovements().rbegin());
-                                os << "\n";
-                                newImprovementsIter->logImprovements();
+                            sharedPlotIter->second.assignedCity = *assignedCityIter;
+                            pCityData = CityDataPtr(new CityData(pCity));
+                            city.optimisePlots(pCityData, city.getConstructItem());
+
+                            TotalOutput withoutYield = pCityData->getOutput();
+
+                            int thisDelta = valueF(withYield) - valueF(withoutYield);
+                            if (thisDelta > worstDelta || !pBestCity)
+                            {
+                                worstDelta = thisDelta;
+                                pBestCity = pCity;
                             }
+#ifdef ALTAI_DEBUG
+                            os << "\nPlot: " <<  pPlot->getCoords() << " when not worked by city: " << narrow(pCity->getName())
+                               << ", total output = " << withoutYield << ", delta value = " << thisDelta;
+                            pCityData->debugSummary(os);
 #endif
                         }
-                        break;
+                        else
+                        {
+#ifdef ALTAI_DEBUG
+                            os << "\nPlot: " <<  pPlot->getCoords() << " not worked by city: " << narrow(pCity->getName());
+#endif
+                        }
                     }
                 }
-            }
-        }
-
-        // call this too - as we may not be called back from CvPlot fn if it thinks the city hasn't changed (and we've been changing the city behind its back)
-        //setWorkingCity(pPlot, getCity(origAssignedCity), getCity(bestCity));
-#ifdef ALTAI_DEBUG
-        {
-            const PlotInfo::PlotInfoNode& plotInfo = getPlotInfoNode(pPlot);
-
-            std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-            os << "\nCoords = " << (*plotsIter)->coords
-                << " (yield = " << getYield(plotInfo, player_.getPlayerID(), pPlot->getImprovementType(), pPlot->getFeatureType(), pPlot->getRouteType()) << ") ";
-            for (size_t k = 0, count = deltas.size(); k < count; ++k)
-            {
-                if (k > 0) os << ", ";
-                const CvCity* pCity = getCity(deltas[k].first);
-                //TotalOutputWeights outputWeights = player_.getCity(pCity).getMaxOutputWeights();
-                TotalOutputValueFunctor valueF(deltas[k].second.second);
-
-                os << " city: " << narrow(pCity->getName()) << " = " << deltas[k].second.first << " value = " << valueF(deltas[k].second.first) << " (weights = " << deltas[k].second.second << ")";
-            }
-            os << " best city = " << (pBestCity ? narrow(pBestCity->getName()) : "NONE") << " current plot setting = "
-                << (pPlot->getWorkingCity() ? narrow(pPlot->getWorkingCity()->getName()) : " none ") << "\n";
-        }
-#endif
-    }
-
-    void MapAnalysis::setWorkingCity_(IDInfo possibleCity, XYCoords coords, IDInfo assignedCity)
-    {
-        CitySharedPlots citySharedPlots(possibleCity);
-        SharedPlots::iterator iter(sharedPlots_.find(citySharedPlots));
-        if (iter != sharedPlots_.end())
-        {
-            for (CitySharedPlots::SharedPlotsIter plotsIter(iter->sharedPlots.begin()), endIter(iter->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
-            {
-                if ((*plotsIter)->coords == coords)
+                if (pBestCity)
                 {
-                    (*plotsIter)->assignedCity = assignedCity;
-                    break;
+#ifdef ALTAI_DEBUG
+                    os << "\nSetting plot override for plot: " << *coordsIter << " to city: " << safeGetCityName(pBestCity);
+#endif
+                
+                    sharedPlotIter->second.assignedCity = pBestCity->getIDInfo();
+                    setWorkingCity_(pPlot->getCoords(), pBestCity->getIDInfo());
+                    pPlot->setWorkingCityOverride(pBestCity);
+                }
+                else
+                {
+                    sharedPlotIter->second.assignedCity = origAssignedCity;
+#ifdef ALTAI_DEBUG
+                    os << "\nNot setting plot override for plot: " << *coordsIter << " current city: "
+                        << safeGetCityName(pPlot->getWorkingCityOverride());
+#endif
                 }
             }
         }
+
     }
 
-    // city improvements functions:
-    void MapAnalysis::calcImprovements(const std::set<IDInfo>& cities)
+    MapAnalysis::CitySharedPlotsMap::iterator MapAnalysis::getCitySharedPlots_(IDInfo city)
     {
-        std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
-        for (std::set<IDInfo>::const_iterator ci(cities.begin()), ciEnd(cities.end()); ci != ciEnd; ++ci)
+        CitySharedPlotsMap::iterator citySharedPlotsIter = citySharedPlots_.find(city);
+        if (citySharedPlotsIter == citySharedPlots_.end())
         {
-            CitiesImprovements::iterator iter(citiesImprovements_.find(CityImprovementManager(*ci)));
-            if (iter != citiesImprovements_.end())
-            {
-                const CvCity* pCity = getCity(iter->getCity());
-                const int targetSize = 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel());
-                iter->calcImprovements(yieldTypes, targetSize);
-            }
+            CitySharedPlots citySharedPlots(city);
+            citySharedPlotsIter = citySharedPlots_.insert(std::make_pair(city, citySharedPlots)).first;
         }
+        return citySharedPlotsIter;
     }
 
-    void MapAnalysis::calcImprovements(IDInfo city)
+    MapAnalysis::SharedPlots::iterator MapAnalysis::getSharedPlot_(XYCoords coords)
     {
-        std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
-        CitiesImprovements::iterator iter(citiesImprovements_.find(CityImprovementManager(city)));
-        if (iter != citiesImprovements_.end())
+        SharedPlots::iterator sharedPlotsIter = sharedPlots_.find(coords);
+        if (sharedPlotsIter == sharedPlots_.end())
         {
-            const CvCity* pCity = getCity(iter->getCity());
-            const int targetSize = 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel());
-            iter->calcImprovements(yieldTypes, targetSize);
+            SharedPlot sharedPlot(coords);
+            sharedPlotsIter = sharedPlots_.insert(std::make_pair(coords, sharedPlot)).first;
+        }
+        return sharedPlotsIter;
+    }
+
+    void MapAnalysis::setWorkingCity_(XYCoords coords, IDInfo assignedCity)
+    {
+        SharedPlots::iterator sharedPlotsIter = sharedPlots_.find(coords);
+        if (sharedPlotsIter != sharedPlots_.end())
+        {
+            if (sharedPlotsIter->second.possibleCities.find(assignedCity) != sharedPlotsIter->second.possibleCities.end())
+            {
+#ifdef ALTAI_DEBUG
+                if (assignedCity != sharedPlotsIter->second.assignedCity)
+                {
+                    std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+                    os << "\nMismatched city overrides for : " << coords
+                        << " have: " << safeGetCityName(sharedPlotsIter->second.assignedCity)
+                        << " setting: " << safeGetCityName(assignedCity);
+                }
+#endif
+                sharedPlotsIter->second.assignedCity = assignedCity;
+            }
         }
     }
 
@@ -1560,30 +1871,29 @@ namespace AltAI
                 {
 //#ifdef ALTAI_DEBUG
 //                    {   // debug
-//                        os << "\nChecking plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
+//                        os << "\nChecking plot: " << pLoopPlot->getCoords();
 //                    }
 //#endif
                     const CvCity* pLoopCity = pLoopPlot->getWorkingCity();
                     if (pLoopCity && pLoopCity->getOwner() == pPlot->getOwner())
                     {
-                        const XYCoords loopCoords(pLoopPlot->getX(), pLoopPlot->getY());
+                        const XYCoords loopCoords(pLoopPlot->getCoords());
 //#ifdef ALTAI_DEBUG
 //                        {   // debug
 //                            os << "\nChecking city: " << narrow(pLoopCity->getName()) << " for: " << coords << " for source of irrigation chain";
 //                        }
 //#endif
-                        CityImprovementManager& improvementManager = getImprovementManager(pLoopCity->getIDInfo());
-                        std::vector<CityImprovementManager::PlotImprovementData>& improvements = improvementManager.getImprovements();
+                        std::vector<PlotImprovementData>& improvements = player_.getCity(pLoopCity).getCityImprovementManager()->getImprovements();
                         for (size_t i = 0, count = improvements.size(); i < count; ++i)
                         {
-                            if (boost::get<0>(improvements[i]) == loopCoords)
+                            if (improvements[i].coords == loopCoords)
                             {
 #ifdef ALTAI_DEBUG
                                 {   // debug
                                     os << "\nMarked plot: " << loopCoords << " as possible source of irrigation chain";
                                 }
 #endif
-                                boost::get<6>(improvements[i]) |= CityImprovementManager::IrrigationChainPlot;
+                                improvements[i].flags |= PlotImprovementData::IrrigationChainPlot;
                                 break;
                             }
                         }
@@ -1593,94 +1903,106 @@ namespace AltAI
         }
     }
 
-    CityImprovementManager& MapAnalysis::getImprovementManager(IDInfo city)
-    {
-        CitiesImprovements::iterator iter(citiesImprovements_.find(CityImprovementManager(city)));
-        if (iter != citiesImprovements_.end())
-        {
-            return *iter;
-        }
-        else
-        {
-            std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
-            // todo - clean this up and make initial calc explicit
-            CityImprovementManager& improvementManager = *citiesImprovements_.insert(CityImprovementManager(city)).first; // add new one (probably actually an error?)
-
-            const CvCity* pCity = getCity(city);
-            const int targetSize = 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel());
-            improvementManager.calcImprovements(yieldTypes, targetSize);
-            return improvementManager;
-        }
-    }
-
-    // add/remove cities...
+    // add/remove cities... (doesn't have to be ours - want to update dotmap regardless)
     void MapAnalysis::addCity(const CvCity* pCity)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        os << "\nMapAnalysis::addCity - adding city: " << narrow(pCity->getName());
 #endif
         const CvPlot* pPlot = pCity->plot();
-        const XYCoords coords(pPlot->getX(), pPlot->getY());
+        const XYCoords coords(pPlot->getCoords());
+        IDInfo thisCity = pCity->getIDInfo();
 
-        CitySharedPlots citySharedPlots(pCity->getIDInfo());
+        seenCities_[pPlot->getPlotCity()->getIDInfo()] = coords;
 
-        // iterate over all plots within city's workable radius
-        for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
+        if (pCity->getOwner() == player_.getPlayerID())
         {
-            CultureRangePlotIter plotIter(pPlot, (CultureLevelTypes)i);
-            while (IterPlot pLoopPlot = plotIter())
+            // iterate over all plots within city's workable radius
+            for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
             {
-                if (pLoopPlot.valid() && pLoopPlot->isRevealed(player_.getTeamID(), false) && pLoopPlot->getOwner() == player_.getPlayerID())
+                CultureRangePlotIter plotIter(pPlot, (CultureLevelTypes)i);
+                while (IterPlot pLoopPlot = plotIter())
                 {
-                    SharedPlotItemPtr sharedPlot(new SharedPlotItem());
-                    sharedPlot->coords = XYCoords(pLoopPlot->getX(), pLoopPlot->getY());
-
-                    for (int j = 1; j <= CITY_PLOTS_RADIUS; ++j)
+                    if (pLoopPlot.valid() && pLoopPlot->isRevealed(player_.getTeamID(), false) && pLoopPlot->getOwner() == player_.getPlayerID())
                     {
-                        CultureRangePlotIter loopPlotIter(pLoopPlot, (CultureLevelTypes)j);
-                        while (IterPlot pCityLoopPlot = loopPlotIter())
+                        std::vector<IDInfo> possibleCities;
+                        IDInfo improvementOwningCity;
+
+                        for (int j = 1; j <= CITY_PLOTS_RADIUS; ++j)
                         {
-                            if (pCityLoopPlot.valid() && pCityLoopPlot->getOwner() == player_.getPlayerID())
+                            CultureRangePlotIter loopPlotIter(pLoopPlot, (CultureLevelTypes)j);
+                            while (IterPlot pCityLoopPlot = loopPlotIter())
                             {
-                                const CvCity* pLoopCity = pCityLoopPlot->getPlotCity();
-                                if (pLoopCity && !(pLoopCity->getIDInfo() == citySharedPlots.city))
+                                if (pCityLoopPlot.valid() && pCityLoopPlot->getOwner() == player_.getPlayerID())
                                 {
-                                    sharedPlot->possibleCities.push_back(pLoopCity->getIDInfo());
-                                    addSharedPlotToCity_(pLoopCity->getIDInfo(), sharedPlot->coords, pCity->getIDInfo());
+                                    const CvCity* pLoopCity = pCityLoopPlot->getPlotCity();
+                                    if (pLoopCity && pLoopCity->getIDInfo() != thisCity)
+                                    {
+                                        possibleCities.push_back(pLoopCity->getIDInfo());
+#ifdef ALTAI_DEBUG
+                                        os << "\nAdding shared plot: " << pLoopPlot->getCoords() << " for city: " << safeGetCityName(pLoopCity)
+                                            << " shared with: " << safeGetCityName(pCity);
+#endif
+                                        CitySharedPlotsMap::iterator citySharedPlotsIter = getCitySharedPlots_(pLoopCity->getIDInfo());
+                                        citySharedPlotsIter->second.sharedPlots.insert(pLoopPlot->getCoords());
+
+                                        // see if this city has assigned and selected (not necessarily built) an improvement to this plot
+                                        bool foundImprovement;
+                                        PlotImprovementData* pImprovementData;
+                                        boost::tie(foundImprovement, pImprovementData) = 
+                                            player_.getCity(pLoopCity).getCityImprovementManager()->findImprovement(pLoopPlot->getCoords());
+                                        if (foundImprovement && pImprovementData->simulationData.firstTurnWorked > -1)
+                                        {
+                                            improvementOwningCity = pLoopCity->getIDInfo();
+#ifdef ALTAI_DEBUG
+                                            os << "\nSetting shared improvement owner for coords: " << pLoopPlot->getCoords() << " to city: " << safeGetCityName(pLoopCity);
+#endif
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if (!sharedPlot->possibleCities.empty())
-                    {
-                        sharedPlot->possibleCities.push_back(citySharedPlots.city); // add ourselves if we have at least one other city
-                        sharedPlot->assignedCity = pLoopPlot->getWorkingCity() ? pLoopPlot->getWorkingCity()->getIDInfo() : IDInfo();
-                        citySharedPlots.sharedPlots.push_back(sharedPlot);
+                        if (!possibleCities.empty())
+                        {
+                            possibleCities.push_back(pCity->getIDInfo());
+
+                            CitySharedPlotsMap::iterator citySharedPlotsIter = getCitySharedPlots_(pCity->getIDInfo());
+                            citySharedPlotsIter->second.sharedPlots.insert(pLoopPlot->getCoords());
+
+                            MapAnalysis::SharedPlots::iterator sharedPlotsIter = getSharedPlot_(pLoopPlot->getCoords());
+                            sharedPlotsIter->second.possibleCities.insert(possibleCities.begin(), possibleCities.end());
+                            if (sharedPlotsIter->second.assignedCity == IDInfo())
+                            {
+                                sharedPlotsIter->second.assignedCity = pLoopPlot->getWorkingCity() ? 
+                                    pLoopPlot->getWorkingCity()->getIDInfo() : IDInfo();
+                            }
+
+                            // now we've added the shared plot data, can set any imp ownership info
+                            if (improvementOwningCity != IDInfo())
+                            {
+                                sharedPlotsIter->second.assignedImprovementCity = improvementOwningCity;
+                            }
+#ifdef ALTAI_DEBUG
+                            os << "\nAdding shared plot: " << pLoopPlot->getCoords() << " for city: " << safeGetCityName(pCity);
+#endif
+                        }
                     }
                 }
             }
-        }
-        sharedPlots_.insert(citySharedPlots);
 
 #ifdef ALTAI_DEBUG
-        debugSharedPlots();
+            debugSharedPlots();
 #endif
-        // update plot info data
-        const int oldKey = keyInfoMap_[coords];
-        std::pair<int, MapAnalysis::PlotInfoMap::iterator> keyAndIter = updatePlotInfo_(pPlot);
-        
-#ifdef ALTAI_DEBUG
-        os << "\n(MapAnalysis::addCity) Updating plot key for new city at: " << coords << " from: " << oldKey << " to: " << keyAndIter.first
-           << "\n" << keyAndIter.second->second;
-#endif
+        }
 
         // remove plots from plotValues_
         // the city plot...
 #ifdef ALTAI_DEBUG
-        os << "\nRemoving plot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " from plot values map for sub area: " << pPlot->getSubArea();
+        os << "\nRemoving plot: " << pPlot->getCoords() << " from plot values map for sub area: (new city) " << pPlot->getSubArea();
 #endif
-        plotValues_.plotValueMap[pPlot->getSubArea()].erase(XYCoords(pPlot->getX(), pPlot->getY()));
+        plotValues_.plotValueMap[pPlot->getSubArea()].erase(pPlot->getCoords());
         // neightbouring plots which are now invalid (must be same area)
         NeighbourPlotIter plotIter(pPlot, 2, 2);
         while (IterPlot pLoopPlot = plotIter())
@@ -1690,18 +2012,18 @@ namespace AltAI
                 continue;
             }
 #ifdef ALTAI_DEBUG
-            os << "\nChecking plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY()) << " for removal from plotValues map";
+            os << "\nChecking plot: " << pLoopPlot->getCoords() << " for removal from plotValues map";
 #endif
             if (pLoopPlot->getArea() == pPlot->getArea())
             {
                 PlotValues::PlotValueMap::iterator iter = plotValues_.plotValueMap.find(pLoopPlot->getSubArea());
                 if (iter != plotValues_.plotValueMap.end())
                 {
-                    PlotValues::SubAreaPlotValueMap::iterator plotValueIter = iter->second.find(XYCoords(pLoopPlot->getX(), pLoopPlot->getY()));
+                    PlotValues::SubAreaPlotValueMap::iterator plotValueIter = iter->second.find(pLoopPlot->getCoords());
                     if (plotValueIter != iter->second.end())
                     {
 #ifdef ALTAI_DEBUG
-                        os << "\nRemoving plot: " << XYCoords(pLoopPlot->getX(), pLoopPlot->getY()) << " from plot values map for sub area: " << pLoopPlot->getSubArea();
+                        os << "\nRemoving plot: " << pLoopPlot->getCoords() << " from plot values map for sub area: " << pLoopPlot->getSubArea();
 #endif
                         iter->second.erase(plotValueIter);
                     }
@@ -1717,104 +2039,50 @@ namespace AltAI
 
     void MapAnalysis::deleteCity(const CvCity* pCity)
     {
+        IDInfo city = pCity->getIDInfo();
+        std::map<IDInfo, XYCoords>::iterator seenCitiesIter = seenCities_.find(city);
+        if (seenCitiesIter != seenCities_.end())
+        {
+            seenCities_.erase(seenCitiesIter);
+        }
+        else
+        {
+            ErrorLog::getLog(*player_.getCvPlayer())->getStream() << "\nErasing unseen city: " << city << " at: " << pCity->plot()->getCoords();
+        }
+
         const CvPlot* pPlot = pCity->plot();
 
-        SharedPlots::iterator iter = sharedPlots_.find(CitySharedPlots(pCity->getIDInfo()));
-        if (iter != sharedPlots_.end())
+        CitySharedPlotsMap::iterator cityIter = citySharedPlots_.find(city);
+        if (cityIter != citySharedPlots_.end())
         {
-            std::set<IDInfo> sharedCities;
-            for (CitySharedPlots::SharedPlotsConstIter plotsIter(iter->sharedPlots.begin()), endIter(iter->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
+            for (std::set<XYCoords>::const_iterator citySharedPlotsIter(cityIter->second.sharedPlots.begin()), citySharedPlotsEndIter(cityIter->second.sharedPlots.end());
+                citySharedPlotsIter != citySharedPlotsEndIter; ++citySharedPlotsIter)
             {
-                for (SharedPlotItem::PossibleCitiesConstIter citiesIter((*plotsIter)->possibleCities.begin()), endIter((*plotsIter)->possibleCities.end()); citiesIter != endIter; ++citiesIter)
+                SharedPlots::iterator sharedPlotsIter = sharedPlots_.find(*citySharedPlotsIter);
+                if (sharedPlotsIter != sharedPlots_.end())
                 {
-                    if (!(*citiesIter == pCity->getIDInfo()))
+                    sharedPlotsIter->second.possibleCities.erase(city);
+                    if (sharedPlotsIter->second.possibleCities.size() < 2)
                     {
-                        sharedCities.insert(*citiesIter);
+                        sharedPlots_.erase(*citySharedPlotsIter);
+                    }
+                    else
+                    {
+                        if (sharedPlotsIter->second.assignedCity == city)
+                        {
+                            sharedPlotsIter->second.assignedCity = IDInfo();
+                        }
+                        if (sharedPlotsIter->second.assignedImprovementCity == city)
+                        {
+                            sharedPlotsIter->second.assignedImprovementCity = IDInfo();
+                        }
                     }
                 }
             }
-
-            for (std::set<IDInfo>::const_iterator ci(sharedCities.begin()), ciEnd(sharedCities.end()); ci != ciEnd; ++ci)
-            {
-                deleteSharedCity_(*ci, pCity->getIDInfo());
-            }
-            sharedPlots_.erase(iter);
         }
-    }
 
-    void MapAnalysis::deleteSharedCity_(IDInfo city, IDInfo sharedCity)
-    {
-        SharedPlots::iterator iter = sharedPlots_.find(CitySharedPlots(city));
-
-        if (iter != sharedPlots_.end())
-        {
-            CitySharedPlots::SharedPlotsIter plotsIter(iter->sharedPlots.begin()), endIter(iter->sharedPlots.end());
-            while (plotsIter != endIter)
-            {
-                SharedPlotItem::PossibleCitiesIter citiesIter = std::find((*plotsIter)->possibleCities.begin(), (*plotsIter)->possibleCities.end(), sharedCity);
-                if (citiesIter != (*plotsIter)->possibleCities.end()) // found plot for this city which was shared with sharedCity
-                {
-                    (*plotsIter)->possibleCities.erase(citiesIter);
-                }
-
-                if ((*plotsIter)->possibleCities.size() < 2) // this was the only city we were sharing with
-                {
-                    iter->sharedPlots.erase(plotsIter++);  // no longer a shared plot
-                }
-                else
-                {
-                    ++plotsIter;
-                }
-            }
-        }
-    }
-
-    void MapAnalysis::addSharedPlotToCity_(IDInfo city, XYCoords coords, IDInfo otherCity)
-    {
-        SharedPlots::iterator iter = sharedPlots_.find(CitySharedPlots(city));
-
-        if (iter != sharedPlots_.end())
-        {
-            bool found = false;
-            for (CitySharedPlots::SharedPlotsIter plotsIter(iter->sharedPlots.begin()), endIter(iter->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
-            {
-                if ((*plotsIter)->coords == coords)
-                {
-                    (*plotsIter)->possibleCities.push_back(city);
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
-            {
-                SharedPlotItemPtr sharedPlot(new SharedPlotItem());
-
-                sharedPlot->coords = coords;
-                sharedPlot->possibleCities.push_back(city);
-                sharedPlot->possibleCities.push_back(otherCity);
-
-                CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
-                sharedPlot->assignedCity = pPlot->getWorkingCity() ? pPlot->getWorkingCity()->getIDInfo() : IDInfo();
-
-                iter->sharedPlots.push_back(sharedPlot);
-            }
-        }
-        else // need to add this city too as this city had no shared plots until now - todo - is this really possible?
-        {
-            SharedPlotItemPtr sharedPlot(new SharedPlotItem());
-
-            sharedPlot->coords = coords;
-            sharedPlot->possibleCities.push_back(city);
-            sharedPlot->possibleCities.push_back(otherCity);
-
-            CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
-            sharedPlot->assignedCity = pPlot->getWorkingCity() ? pPlot->getWorkingCity()->getIDInfo() : IDInfo();
-
-            CitySharedPlots citySharedPlots(city);
-            citySharedPlots.sharedPlots.push_back(sharedPlot);
-
-            sharedPlots_.insert(citySharedPlots);
-        }
+        citySharedPlots_.erase(city);
+        updatePlotInfo_(pPlot, false);
     }
    
     // debug functions
@@ -1853,11 +2121,12 @@ namespace AltAI
                 int ourCount = 0, otherCount = 0, unownedCount = 0;
                 for (size_t i = 0, count = bi->second.size(); i < count; ++i)
                 {
-                    if (bi->second[i].second == player_.getPlayerID())
+                    PlayerTypes owner = boost::get<1>(bi->second[i]);
+                    if (owner == player_.getPlayerID())
                     {
                         ++ourCount;
                     }
-                    else if (bi->second[i].second == NO_PLAYER)
+                    else if (owner == NO_PLAYER)
                     {
                         ++unownedCount;
                     }
@@ -1878,49 +2147,29 @@ namespace AltAI
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
 
         for (SharedPlots::const_iterator ci(sharedPlots_.begin()), ciEnd(sharedPlots_.end()); ci != ciEnd; ++ci)
-        {
-            const CvCity* pCity = getCity(ci->city);
-            if (pCity)
+        {           
+            os << "\nPlot: " << ci->first << " ";
+
+            for (SharedPlot::PossibleCitiesConstIter citiesIter(ci->second.possibleCities.begin()), citiesEndIter(ci->second.possibleCities.end());
+                citiesIter != citiesEndIter; ++citiesIter)
             {
-                os << "\nCity: " << narrow(pCity->getName()) << " shared plots:\n";
-                for (CitySharedPlots::SharedPlotsConstIter plotsIter(ci->sharedPlots.begin()), endIter(ci->sharedPlots.end()); plotsIter != endIter; ++plotsIter)
-                {
-                    os << "\tPlot: " << (*plotsIter)->coords << " shared with: ";
-                    for (SharedPlotItem::PossibleCitiesConstIter citiesIter((*plotsIter)->possibleCities.begin()), endIter((*plotsIter)->possibleCities.end()); citiesIter != endIter; ++citiesIter)
-                    {
-                        if (citiesIter != (*plotsIter)->possibleCities.begin()) os << ", ";
+                if (citiesIter != ci->second.possibleCities.begin()) os << ", ";
+                os << safeGetCityName(*citiesIter);
+            }
 
-                        const CvCity* pCity = getCity(*citiesIter);
-                        if (pCity)
-                        {
-                            os << narrow(pCity->getName());
-                        }
-                        else
-                        {
-                            os << "unknown city?";
-                        }
-                    }
+            os << " worked by: " << safeGetCityName(ci->second.assignedCity) << ", imp assigned to: " << safeGetCityName(ci->second.assignedImprovementCity);
 
-                    if (!((*plotsIter)->assignedCity == IDInfo()))
-                    {
-                        const CvCity* pCity = getCity((*plotsIter)->assignedCity);
-                        if (pCity)
-                        {
-                            os << " worked by: " << narrow(pCity->getName());
-                        }
-                        else
-                        {
-                            os << " worked by unknown city? (not controlled by AltAI?)";
-                        }
-                    }
-                    else
-                    {
-                        os << " not worked ";
-                    }
+            CvPlot* pPlot = gGlobals.getMap().plot(ci->first.iX, ci->first.iY);
+            os << " (Plot = " << (pPlot->getWorkingCity() ? narrow(pPlot->getWorkingCity()->getName()) : " none ") << ")\n";
+        }
 
-                    CvPlot* pPlot = gGlobals.getMap().plot((*plotsIter)->coords.iX, (*plotsIter)->coords.iY);
-                    os << " (Plot = " << (pPlot->getWorkingCity() ? narrow(pPlot->getWorkingCity()->getName()) : " none ") << ")\n";
-                }
+        for (CitySharedPlotsMap::const_iterator ci(citySharedPlots_.begin()), ciEnd(citySharedPlots_.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nCity: " << safeGetCityName(ci->first) << " shared plots: ";
+            for (std::set<XYCoords>::const_iterator coordsIter(ci->second.sharedPlots.begin()), coordsEndIter(ci->second.sharedPlots.end()); coordsIter != coordsEndIter; ++coordsIter)
+            {
+                if (coordsIter != ci->second.sharedPlots.begin()) os << ", ";
+                os << *coordsIter << " ";
             }
         }
 #endif

@@ -13,20 +13,162 @@ namespace AltAI
 {
     namespace
     {
-        int getCombatOdds(const UnitData& attacker, const UnitData& defender, int flags = 0)
+        int getCombatOdds(const UnitData& attacker, const UnitData& defender, const UnitData::CombatDetails& combatDetails = UnitData::CombatDetails())
         {
-            const int attHP = gGlobals.getMAX_HIT_POINTS();
-            const int defHP = attHP;
-            const int attMaxHP = gGlobals.getMAX_HIT_POINTS();
-            const int defMaxHP = attMaxHP;
+            const int attHP = attacker.hp;
+            const int defHP = defender.hp;
+            const int attMaxHP = attacker.maxhp;
+            const int defMaxHP = defender.maxhp;
 
-            const int attackerStrength = attacker.calculateStrength(flags);
-            const int defenderStrength = defender.calculateStrength(attacker, flags);
+            const int maxAttackerStrength = attacker.calculateStrength(combatDetails);
+            const int maxDefenderStrength = defender.calculateStrength(attacker, combatDetails);
 
-            return ::getCombatOdds(attackerStrength, attacker.firstStrikes, attacker.chanceFirstStrikes, attacker.immuneToFirstStrikes,
-                attackerStrength, attHP, attMaxHP, attacker.combatLimit,
-                defenderStrength, defender.firstStrikes, defender.chanceFirstStrikes, defender.immuneToFirstStrikes,
-                defenderStrength, defHP, defMaxHP);
+            const int attackerStrength = maxAttackerStrength * attHP / attMaxHP;
+            const int defenderStrength = maxDefenderStrength * defHP / defMaxHP;
+
+            const int attackerFirepower = (1 + maxAttackerStrength + attackerStrength) / 2;
+            const int defenderFirepower = (1 + maxDefenderStrength + defenderStrength) / 2;
+
+            return ::getCombatOdds(attackerStrength, attacker.firstStrikes, attacker.chanceFirstStrikes, 
+                attacker.immuneToFirstStrikes, attackerFirepower, attHP, attMaxHP, attacker.combatLimit,
+                defenderStrength, defender.firstStrikes, defender.chanceFirstStrikes, 
+                defender.immuneToFirstStrikes, defenderFirepower, defHP, defMaxHP);
+        }
+
+        struct OddsForwarder
+        {
+            OddsForwarder(const int attStrength_, const int attFirstStrikes_, const int attChanceFirstStrikes_, 
+                const int attFirepower_, const int attHP_, const int attMaxHP_, 
+                const int attCombatLimit_, const int attWithdrawalProb_,
+                const int defStrength_, const int defFirstStrikes_, const int defChanceFirstStrikes_, 
+                const int defFirepower_, const int defHP_, const int defMaxHP_,
+                const bool attImmuneToFirstStrikes_, const bool defImmuneToFirstStrikes_)
+                    : attStrength(attStrength_), attFirstStrikes(attFirstStrikes_), attChanceFirstStrikes(attChanceFirstStrikes_),
+                      attFirepower(attFirepower_), attHP(attHP_), attMaxHP(attMaxHP_), 
+                      attCombatLimit(attCombatLimit_), attWithdrawalProb(attWithdrawalProb_),
+                      defStrength(defStrength_), defFirstStrikes(defFirstStrikes_), defChanceFirstStrikes(defChanceFirstStrikes_),
+                      defFirepower(defFirepower_), defHP(defHP_), defMaxHP(defMaxHP_),
+                      attImmuneToFirstStrikes(attImmuneToFirstStrikes_), defImmuneToFirstStrikes(defImmuneToFirstStrikes_)
+            {
+            }            
+
+            float operator() (const int attRounds, const int defRounds) const
+            {
+                return ::getCombatOdds(attStrength, attFirstStrikes, attChanceFirstStrikes, attImmuneToFirstStrikes,
+                        attFirepower, attHP, attMaxHP, attCombatLimit, attWithdrawalProb,
+                        defStrength, defFirstStrikes, defChanceFirstStrikes, defImmuneToFirstStrikes,
+                        defFirepower, defHP, defMaxHP, attRounds, defRounds);
+            }
+
+            const int attStrength, attFirstStrikes, attChanceFirstStrikes, attFirepower, attHP, attMaxHP, attCombatLimit, attWithdrawalProb;            
+            const int defStrength, defFirstStrikes, defChanceFirstStrikes, defFirepower, defHP, defMaxHP;
+            const bool attImmuneToFirstStrikes, defImmuneToFirstStrikes;
+        };
+
+        UnitOddsData getCombatOddsDetail_(const UnitData& attacker, const UnitData& defender, const UnitData::CombatDetails& combatDetails = UnitData::CombatDetails())
+        {
+            static const int COMBAT_DIE_SIDES = gGlobals.getDefineINT("COMBAT_DIE_SIDES");  // 1000
+            static const int COMBAT_DAMAGE = gGlobals.getDefineINT("COMBAT_DAMAGE");  // 20
+
+            UnitOddsData odds;
+
+            const int attHP = attacker.hp;
+            const int defHP = defender.hp;
+            const int attMaxHP = attacker.maxhp;
+            const int defMaxHP = defender.maxhp;
+
+            const int maxAttackerStrength = attacker.calculateStrength(combatDetails);
+            const int maxDefenderStrength = defender.calculateStrength(attacker, combatDetails);
+
+            const int attackerStrength = maxAttackerStrength * attHP / attMaxHP;
+            const int defenderStrength = maxDefenderStrength * defHP / defMaxHP;
+
+            const int attackerFirepower = (1 + maxAttackerStrength + attackerStrength) / 2;
+            const int defenderFirepower = (1 + maxDefenderStrength + defenderStrength) / 2;
+
+            const int iStrengthFactor = ((attackerFirepower + defenderFirepower + 1) / 2);
+            const int iDamageToAttacker = std::max<int>(1, (COMBAT_DAMAGE * (defenderFirepower + iStrengthFactor)) / (attackerFirepower + iStrengthFactor));
+            const int iDamageToDefender = std::max<int>(1, (COMBAT_DAMAGE * (attackerFirepower + iStrengthFactor)) / (defenderFirepower + iStrengthFactor));
+            const int iDefenderHitLimit = defMaxHP - attacker.combatLimit;
+
+            const int iNeededRoundsAttacker = (defHP - defMaxHP + attacker.combatLimit - (attacker.combatLimit == defMaxHP ? 1 : 0)) / iDamageToDefender + 1;
+            const int iNeededRoundsDefender = (attHP - 1) / iDamageToAttacker + 1;
+
+            OddsForwarder oddsForwarder(attackerStrength, attacker.firstStrikes, attacker.chanceFirstStrikes,
+                        attackerFirepower, attHP, attMaxHP, attacker.combatLimit, attacker.withdrawalProb,
+                        defenderStrength, defender.firstStrikes, defender.chanceFirstStrikes,
+                        defenderFirepower, defHP, defMaxHP, attacker.immuneToFirstStrikes, defender.immuneToFirstStrikes);
+
+            for (int n_A = 0; n_A < iNeededRoundsDefender; n_A++)
+            {
+                odds.E_HP_Att += (attHP - n_A * iDamageToAttacker) * oddsForwarder(n_A, iNeededRoundsAttacker);
+            }
+
+            odds.E_HP_Att_Victory = odds.E_HP_Att;         
+
+            if (attacker.withdrawalProb > 0)
+            {
+                odds.E_HP_Att_Withdraw = odds.E_HP_Att;
+                for (int n_D = 0; n_D < iNeededRoundsAttacker; n_D++)
+                {
+                    odds.E_HP_Att += (attHP - (iNeededRoundsDefender - 1) * iDamageToAttacker) * oddsForwarder(iNeededRoundsAttacker - 1, n_D);
+                }
+            }
+
+            if (attacker.combatLimit < defMaxHP)
+            {
+                odds.E_HP_Att_Retreat = attHP - (iNeededRoundsDefender - 1) * iDamageToAttacker;
+            }
+
+            for (int n_D = 0; n_D < iNeededRoundsAttacker; n_D++)
+            {
+                odds.E_HP_Def += (defHP - n_D * iDamageToDefender) * oddsForwarder(iNeededRoundsDefender, n_D) + oddsForwarder(iNeededRoundsDefender - 1, n_D);
+            }
+
+            odds.E_HP_Def_Defeat = odds.E_HP_Def;
+
+            if (attacker.combatLimit < defMaxHP) // if attacker has a combatLimit (eg. catapult)
+            {
+                // code specific to case where the last successful hit by an attacker will do 0 damage, 
+                // and doing either iNeededRoundsAttacker or iNeededRoundsAttacker - 1 will cause the same damage
+                // seems to be the same in original - so removed here for now
+                for (int n_A = 0; n_A < iNeededRoundsDefender; n_A++)
+                {
+                    odds.E_HP_Def += (float)iDefenderHitLimit * oddsForwarder(n_A, iNeededRoundsAttacker);
+                    odds.E_HP_Def_Withdraw += (float)iDefenderHitLimit * oddsForwarder(n_A, iNeededRoundsAttacker);
+                }
+            }
+
+            if (attacker.combatLimit == defMaxHP) // ie. we can kill the defender...
+            {
+                for (int n_A = 0; n_A < iNeededRoundsDefender; n_A++)
+                {
+                    odds.AttackerKillOdds += oddsForwarder(n_A, iNeededRoundsAttacker);
+                }
+            }
+            else
+            {
+                // else we cannot kill the defender (eg. catapults attacking)
+                for (int n_A = 0; n_A < iNeededRoundsDefender; n_A++)
+                {
+                    odds.PullOutOdds += oddsForwarder(n_A, iNeededRoundsAttacker);
+                }
+            }
+
+            if (attacker.withdrawalProb > 0)
+            {
+                for (int n_D = 0; n_D < iNeededRoundsAttacker; n_D++)
+                {
+                    odds.RetreatOdds += oddsForwarder(iNeededRoundsDefender - 1, n_D);
+                }
+            }
+
+            for (int n_D = 0; n_D < iNeededRoundsAttacker; n_D++)
+            {
+                odds.DefenderKillOdds += oddsForwarder(iNeededRoundsDefender, n_D);
+            }
+
+            return odds;
         }
 
         void debugPromotion(std::ostream& os, PromotionTypes promotionType, const Promotions& requiredPromotions, int level)
@@ -54,7 +196,7 @@ namespace AltAI
         void debugUnits(std::ostream& os, const UnitAnalysis::UnitLevels& unitLevels, const std::string& descriptor)
         {
 #ifdef ALTAI_DEBUG
-            os << "\n" << descriptor<< ": ";
+            os << "\n" << descriptor << ": ";
             for (size_t i = 0, count = unitLevels.size(); i < count; ++i)
             {
                 os << "\nlevel = " << i;
@@ -65,7 +207,7 @@ namespace AltAI
                     {
                         os << gGlobals.getPromotionInfo(*pi).getType() << ", ";
                     }
-					os << " (remaining levels = " << ci->second.second.first << ")";
+                    os << " (remaining levels = " << ci->second.second.first << ")";
                 }
             }
 #endif
@@ -120,25 +262,178 @@ namespace AltAI
         };
     }
 
-    UnitData::UnitData(const CvUnitInfo& unitInfo_, const Promotions& promotions_) :
-        unitInfo(unitInfo_),
-        combat(100 * unitInfo.getCombat()), 
-        firstStrikes(unitInfo.getFirstStrikes()),
-        chanceFirstStrikes(unitInfo.getChanceFirstStrikes()),
-        firePower(100 * unitInfo.getCombat()),
-        combatLimit(unitInfo.getCombatLimit()),
-        cityAttackPercent(unitInfo.getCityAttackModifier()), cityDefencePercent(unitInfo.getCityDefenseModifier()),
-        immuneToFirstStrikes(unitInfo.isFirstStrikeImmune())
+    void UnitOddsData::debug(std::ostream& os) const
     {
-        for (Promotions::const_iterator ci(promotions_.begin()), ciEnd(promotions_.end()); ci != ciEnd; ++ci)
-		{
-			applyPromotion(gGlobals.getPromotionInfo(*ci));
-		}
+        os << " E_HP_Att: " << E_HP_Att << ", E_HP_Def: " << E_HP_Def;
+        if (E_HP_Att_Withdraw > 0.0)
+        {
+            os << ", E_HP_Att_Withdraw: " << E_HP_Att_Withdraw;
+        }
+        if (E_HP_Att_Retreat > 0.0)
+        {
+            os << ", E_HP_Att_Retreat: " << E_HP_Att_Retreat;
+        }
+        os << ", E_HP_Att_Victory: " << E_HP_Att_Victory << ", E_HP_Def_Defeat: " << E_HP_Def_Defeat;
+        if (E_HP_Def_Withdraw > 0.0)
+        {
+            os << ", E_HP_Def_Withdraw: " << E_HP_Def_Withdraw;
+        }
+
+        os << ". AttackerKillOdds: " << AttackerKillOdds;
+        if (PullOutOdds > 0.0)
+        {
+            os << ", PullOutOdds: " << PullOutOdds;
+        }
+        if (RetreatOdds > 0.0)
+        {
+            os << ", RetreatOdds: " << RetreatOdds;
+        }
+        os << ", DefenderKillOdds: " << DefenderKillOdds;
     }
 
-    void UnitData::applyPromotion(const CvPromotionInfo& promotion)
+    UnitData::CombatDetails::CombatDetails(const CvPlot* pPlot) : 
+        flags(None), plotIsHills(pPlot->isHills()), plotTerrain(pPlot->getTerrainType()), plotFeature(pPlot->getFeatureType()), cultureDefence(0), buildingDefence(0)
     {
-        combat += unitInfo.getCombat() * promotion.getCombatPercent();
+        if (pPlot->isCity())  // assumes we can see the city for real if we're checking combat odds
+        {
+            cultureDefence = pPlot->getPlotCity()->getDefenseModifier(true);
+            buildingDefence = pPlot->getPlotCity()->getDefenseModifier(false);
+        }
+    }
+
+    UnitData::UnitData() :
+        pUnitInfo(NULL),
+        unitType(NO_UNIT),
+        hp(0), maxhp(0),
+        baseCombat(0), extraCombat(0), firstStrikes(0), chanceFirstStrikes(0), firePower(0), combatLimit(0), withdrawalProb(0),
+        cityAttackPercent(0), cityDefencePercent(0), fortifyPercent(0),
+        hillsAttackPercent(0), hillsDefencePercent(0),
+        extraCollateralDamage(0), collateralDamageProtection(0),
+        immuneToFirstStrikes(false)
+    {
+    }
+
+    UnitData::UnitData(const CvUnit* pUnit) :
+        pUnitInfo(&pUnit->getUnitInfo()),
+        unitType(pUnit->getUnitType()),
+        hp(pUnit->currHitPoints()),
+        maxhp(pUnit->maxHitPoints()),
+        baseCombat(pUnitInfo->getCombat()), 
+        extraCombat(pUnit->getExtraCombatPercent()),
+        firstStrikes(pUnit->firstStrikes()),
+        chanceFirstStrikes(pUnit->chanceFirstStrikes()),
+        firePower(100 * pUnitInfo->getCombat()),
+        combatLimit(pUnitInfo->getCombatLimit()), withdrawalProb(pUnit->withdrawalProbability()),
+        cityAttackPercent(pUnit->cityAttackModifier()), cityDefencePercent(pUnit->cityDefenseModifier()), fortifyPercent(pUnit->fortifyModifier()),
+        hillsAttackPercent(pUnit->hillsAttackModifier()), hillsDefencePercent(pUnit->hillsDefenseModifier()),
+        extraCollateralDamage(pUnit->getExtraCollateralDamage()), collateralDamageProtection(pUnit->getCollateralDamageProtection()),
+        immuneToFirstStrikes(pUnit->immuneToFirstStrikes())
+    {
+        for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
+        {
+            if (pUnit->unitCombatModifier((UnitCombatTypes)i) != 0)
+            {
+                unitCombatModifiers[(UnitCombatTypes)i] = pUnit->unitCombatModifier((UnitCombatTypes)i);
+            }
+        }
+
+        for (int i = 0, count = gGlobals.getNumTerrainInfos(); i < count; ++i)
+        {
+            if (pUnit->terrainAttackModifier((TerrainTypes)i) != 0)
+            {
+                unitTerrainAttackModifiers[(TerrainTypes)i] = pUnit->terrainAttackModifier((TerrainTypes)i);
+            }
+            if (pUnit->terrainDefenseModifier((TerrainTypes)i) != 0)
+            {
+                unitTerrainDefenceModifiers[(TerrainTypes)i] = pUnit->terrainDefenseModifier((TerrainTypes)i);
+            }
+        }
+
+        for (int i = 0, count = gGlobals.getNumFeatureInfos(); i < count; ++i)
+        {
+            if (pUnit->featureAttackModifier((FeatureTypes)i) != 0)
+            {
+                unitFeatureAttackModifiers[(FeatureTypes)i] = pUnit->featureAttackModifier((FeatureTypes)i);
+            }
+            if (pUnit->featureDefenseModifier((FeatureTypes)i) != 0)
+            {
+                unitFeatureDefenceModifiers[(FeatureTypes)i] = pUnit->featureDefenseModifier((FeatureTypes)i);
+            }
+        }
+
+        for (int i = 0, count = gGlobals.getNumPromotionInfos(); i < count; ++i)
+        {
+            if (pUnit->isHasPromotion((PromotionTypes)i))
+            {
+                promotions.push_back((PromotionTypes)i);
+            }
+        }
+    }
+
+    UnitData::UnitData(UnitTypes unitType_, const Promotions& promotions_) :
+        pUnitInfo(&gGlobals.getUnitInfo(unitType_)),
+        unitType(unitType_),
+        hp(gGlobals.getMAX_HIT_POINTS()),
+        maxhp(gGlobals.getMAX_HIT_POINTS()),
+        baseCombat(pUnitInfo->getCombat()), 
+        extraCombat(0),
+        firstStrikes(pUnitInfo->getFirstStrikes()),
+        chanceFirstStrikes(pUnitInfo->getChanceFirstStrikes()),
+        firePower(100 * pUnitInfo->getCombat()),
+        combatLimit(pUnitInfo->getCombatLimit()), withdrawalProb(pUnitInfo->getWithdrawalProbability()),
+        cityAttackPercent(pUnitInfo->getCityAttackModifier()), cityDefencePercent(pUnitInfo->getCityDefenseModifier()), fortifyPercent(0),
+        hillsAttackPercent(pUnitInfo->getHillsAttackModifier()), hillsDefencePercent(pUnitInfo->getHillsDefenseModifier()),
+        extraCollateralDamage(0), collateralDamageProtection(0),
+        immuneToFirstStrikes(pUnitInfo->isFirstStrikeImmune())
+    {
+        for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
+        {
+            if (pUnitInfo->getUnitCombatModifier(i) != 0)
+            {
+                unitCombatModifiers[(UnitCombatTypes)i] = pUnitInfo->getUnitCombatModifier(i);
+            }
+        }
+
+        for (int i = 0, count = gGlobals.getNumTerrainInfos(); i < count; ++i)
+        {
+            if (pUnitInfo->getTerrainAttackModifier(i) != 0)
+            {
+                unitTerrainAttackModifiers[(TerrainTypes)i] = pUnitInfo->getTerrainAttackModifier(i);
+            }
+            if (pUnitInfo->getTerrainDefenseModifier(i) != 0)
+            {
+                unitTerrainDefenceModifiers[(TerrainTypes)i] = pUnitInfo->getTerrainDefenseModifier(i);
+            }
+        }
+
+        for (int i = 0, count = gGlobals.getNumFeatureInfos(); i < count; ++i)
+        {
+            if (pUnitInfo->getFeatureAttackModifier(i) != 0)
+            {
+                unitFeatureAttackModifiers[(FeatureTypes)i] = pUnitInfo->getFeatureAttackModifier(i);
+            }
+            if (pUnitInfo->getFeatureDefenseModifier(i) != 0)
+            {
+                unitFeatureDefenceModifiers[(FeatureTypes)i] = pUnitInfo->getFeatureDefenseModifier(i);
+            }
+        }
+
+        for (Promotions::const_iterator ci(promotions_.begin()), ciEnd(promotions_.end()); ci != ciEnd; ++ci)
+        {
+            applyPromotion(*ci);
+        }
+    }
+
+    void UnitData::applyPromotion(PromotionTypes promotionType)
+    {
+        if (std::find(promotions.begin(), promotions.end(), promotionType) != promotions.end())
+        {
+            return;
+        }
+        const CvPromotionInfo& promotion = gGlobals.getPromotionInfo(promotionType);
+        promotions.push_back(promotionType);
+
+        extraCombat += promotion.getCombatPercent();
         firstStrikes += promotion.getFirstStrikesChange();
         chanceFirstStrikes += promotion.getChanceFirstStrikesChange();
         if (promotion.isImmuneToFirstStrikes())
@@ -146,8 +441,25 @@ namespace AltAI
             immuneToFirstStrikes = true;
         }
 
+        withdrawalProb += promotion.getWithdrawalChange();
+
         cityAttackPercent += promotion.getCityAttackPercent();
         cityDefencePercent += promotion.getCityDefensePercent();
+
+        hillsAttackPercent += promotion.getHillsAttackPercent();
+        hillsDefencePercent += promotion.getHillsDefensePercent();
+
+        for (int i = 0, count = gGlobals.getNumFeatureInfos(); i < count; ++i)
+        {
+            if (promotion.getFeatureAttackPercent(i) != 0)
+            {
+                unitFeatureAttackModifiers[(FeatureTypes)i] += promotion.getFeatureAttackPercent(i);
+            }
+            if (promotion.getFeatureDefensePercent(i) != 0)
+            {
+                unitFeatureDefenceModifiers[(FeatureTypes)i] += promotion.getFeatureDefensePercent(i);
+            }
+        }
 
         for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
         {
@@ -158,45 +470,122 @@ namespace AltAI
         }
     }
 
-	// calculate our strength as defender
-    int UnitData::calculateStrength(const UnitData& other, int flags) const
+    void UnitData::debug(std::ostream& os) const
     {
-		// unit class type modifiers - add defence, subtract the other unit's attack modifier
-        int modifier = unitInfo.getUnitClassDefenseModifier(other.unitInfo.getUnitClassType());
-        modifier -= other.unitInfo.getUnitClassAttackModifier(unitInfo.getUnitClassType());
-		// unit type modifiers - add defence, subtract other's attack bonus
-        modifier += unitInfo.getUnitCombatModifier(other.unitInfo.getUnitCombatType());
-        modifier -= other.unitInfo.getUnitCombatModifier(unitInfo.getUnitCombatType());
+#ifdef ALTAI_DEBUG
+        for (size_t i = 0, count = promotions.size(); i < count; ++i)
+        {
+            if (i == 0) os << " (";
+            else os << ", ";
+            os << gGlobals.getPromotionInfo(promotions[i]).getType();
+        }
+        if (!promotions.empty()) os << ") ";
+#endif  
+    }
 
-        std::map<UnitCombatTypes, int>::const_iterator ci = unitCombatModifiers.find((UnitCombatTypes)other.unitInfo.getUnitCombatType());
+    // calculate our strength as defender
+    int UnitData::calculateStrength(const UnitData& other, const UnitData::CombatDetails& combatDetails) const
+    {
+        // unit class type modifiers - add defence, subtract the other unit's attack modifier
+        // don't bother to precalculate as there are no promotions which affect them
+        int modifier = pUnitInfo->getUnitClassDefenseModifier(other.pUnitInfo->getUnitClassType());
+        const bool noDefensiveBonus = pUnitInfo->isNoDefensiveBonus();
+        modifier -= other.pUnitInfo->getUnitClassAttackModifier(pUnitInfo->getUnitClassType());
+        modifier += extraCombat;
+
+        modifier += fortifyPercent;
+
+        // unit type modifiers - add defence, subtract other's attack bonus
+        std::map<UnitCombatTypes, int>::const_iterator ci = unitCombatModifiers.find((UnitCombatTypes)other.pUnitInfo->getUnitCombatType());
         if (ci != unitCombatModifiers.end())
         {
             modifier += ci->second;
         }
 
-        ci = other.unitCombatModifiers.find((UnitCombatTypes)unitInfo.getUnitCombatType());
+        ci = other.unitCombatModifiers.find((UnitCombatTypes)pUnitInfo->getUnitCombatType());
         if (ci != other.unitCombatModifiers.end())
         {
             modifier -= ci->second;
         }
 
-		// if attacker is attacking a city (so we are the defender)
-        if (flags & CityAttack)
+        if (combatDetails.plotIsHills)
         {
-			// subtract attacker's city attack bonus and add our city defence bonus
-            modifier -= other.cityAttackPercent;
-            modifier += cityDefencePercent;
+            if (!noDefensiveBonus)
+            {
+                modifier += hillsDefencePercent;
+            }
+            modifier -= other.hillsAttackPercent;
         }
 
-        if (flags & FortifyDefender)
+        if (combatDetails.plotTerrain != NO_TERRAIN)
         {
-            if (!unitInfo.isNoDefensiveBonus())
+            std::map<TerrainTypes, int>::const_iterator fi = unitTerrainDefenceModifiers.find(combatDetails.plotTerrain);
+            if (fi != unitTerrainDefenceModifiers.end())
+            {
+                modifier += fi->second;
+            }
+
+            fi = unitTerrainAttackModifiers.find(combatDetails.plotTerrain);
+            if (fi != unitTerrainAttackModifiers.end())
+            {
+                modifier -= fi->second;
+            }
+        }
+
+        if (combatDetails.plotFeature != NO_FEATURE)
+        {
+            std::map<FeatureTypes, int>::const_iterator fi = unitFeatureDefenceModifiers.find(combatDetails.plotFeature);
+            if (fi != unitFeatureDefenceModifiers.end())
+            {
+                modifier += fi->second;
+            }
+
+            fi = unitFeatureAttackModifiers.find(combatDetails.plotFeature);
+            if (fi != unitFeatureAttackModifiers.end())
+            {
+                modifier -= fi->second;
+            }
+        }
+
+        // if attacker is attacking a city (so we are the defender)
+        if (combatDetails.flags & CombatDetails::CityAttack)
+        {
+            // subtract attacker's city attack bonus and add our city defence bonus
+            modifier -= other.cityAttackPercent;
+            modifier += cityDefencePercent;
+
+            if (!noDefensiveBonus)
+            {
+                modifier += std::max<int>(combatDetails.cultureDefence, other.pUnitInfo->isIgnoreBuildingDefense() ? 0 : combatDetails.buildingDefence);
+            }
+        }
+
+        if (combatDetails.flags & CombatDetails::FortifyDefender)
+        {
+            if (!noDefensiveBonus)
             {
                 modifier += gGlobals.getDefineINT("MAX_FORTIFY_TURNS") * gGlobals.getFORTIFY_MODIFIER_PER_TURN();
             }
         }
 
-        int strength = combat;
+        int strength = baseCombat;
+        if (modifier > 0)
+        {
+            strength = strength * (modifier + 100);
+        }
+        else
+        {
+            strength = (strength * 10000) / (100 - modifier);
+        }
+        return strength;
+    }
+
+    // calculate our strength as attacker
+    int UnitData::calculateStrength(const CombatDetails&) const
+    {
+        int modifier = extraCombat;
+        int strength = baseCombat;
+
         if (modifier > 0)
 	    {
 		    strength = strength * (modifier + 100);
@@ -205,13 +594,7 @@ namespace AltAI
 	    {
 		    strength = (strength * 10000) / (100 - modifier);
 	    }
-        return strength / 100;
-    }
-
-    // calculate our strength as attacker
-    int UnitData::calculateStrength(int flags) const
-    {
-        return combat;
+        return strength;
     }
 
     UnitAnalysis::UnitAnalysis(const Player& player) : player_(player)
@@ -220,7 +603,7 @@ namespace AltAI
 
     void UnitAnalysis::init()
     {
-		analysePromotions_();
+        analysePromotions_();
         analyseUnits_();
 
         const int attHP = gGlobals.getMAX_HIT_POINTS();
@@ -242,14 +625,14 @@ namespace AltAI
                     analyseAsCounterUnit_(unitType);
 
                     if (unitInfo.getUnitAIType(UNITAI_ATTACK_CITY) || unitInfo.getUnitAIType(UNITAI_ATTACK) || unitInfo.getUnitAIType(UNITAI_COUNTER))
-					{
-						analyseAsCityAttackUnit_(unitType);
-					}
+                    {
+                        analyseAsCityAttackUnit_(unitType);
+                    }
 
                     if (unitInfo.getUnitAIType(UNITAI_CITY_DEFENSE) || unitInfo.getUnitAIType(UNITAI_CITY_COUNTER) || unitInfo.getUnitAIType(UNITAI_COUNTER))
-					{
-						analyseAsCityDefenceUnit_(unitType);
-					}
+                    {
+                        analyseAsCityDefenceUnit_(unitType);
+                    }
                     
                     int attBaseCombat = 100 * unitInfo.getCombat();
                     int attFS = unitInfo.getFirstStrikes();
@@ -285,13 +668,13 @@ namespace AltAI
 
                                 int defCombat = defBaseCombat / 100;
                                 if (modifier > 0)
-	                            {
-		                            defCombat = defCombat * (modifier + 100);
-	                            }
-	                            else
-	                            {
-		                            defCombat = (defCombat * 10000) / (100 - modifier);
-	                            }
+                                {
+                                    defCombat = defCombat * (modifier + 100);
+                                }
+                                else
+                                {
+                                    defCombat = (defCombat * 10000) / (100 - modifier);
+                                }
 
                                 combatData.attackOdds = ::getCombatOdds(attBaseCombat, attFS, attChanceFS, attImmuneToFS, attFirePower, attHP, attMaxHP, attCombatLimit,
                                     defCombat, defFS, defChanceFS, defImmuneToFS, defFirePower, defHP, defMaxHP);
@@ -306,13 +689,13 @@ namespace AltAI
 
                                 int attCombat = attBaseCombat / 100;
                                 if (modifier > 0)
-	                            {
-		                            attCombat = attCombat * (modifier + 100);
-	                            }
-	                            else
-	                            {
-		                            attCombat = (attCombat * 10000) / (100 - modifier);
-	                            }
+                                {
+                                    attCombat = attCombat * (modifier + 100);
+                                }
+                                else
+                                {
+                                    attCombat = (attCombat * 10000) / (100 - modifier);
+                                }
 
                                 // temp
                                 combatData.cityAttackOdds = defBaseCombat;
@@ -334,8 +717,37 @@ namespace AltAI
 
         
     }
+    
+    void UnitAnalysis::promote(UnitData& unit, const UnitData::CombatDetails& combatDetails, bool isAttacker, int level, const Promotions& freePromotions) const
+    {
+        RemainingLevelsAndPromotions ourPromotions;
 
-    std::pair<int, int> UnitAnalysis::getOdds(const CvUnitInfo& unit1Info, const CvUnitInfo& unit2Info, int unit1Level, int unit2Level) const
+        if (combatDetails.flags & UnitData::CombatDetails::CityAttack)
+        {
+            if (isAttacker)
+            {
+                ourPromotions = getCityAttackPromotions(unit.unitType, level);
+            }
+            else
+            {
+                ourPromotions = getCityDefencePromotions(unit.unitType, level);
+            }
+        }
+
+        // todo - check for free promotions which match ones given here and adjust our level appropriately
+        if (ourPromotions.second.empty())
+        {
+            ourPromotions = getCombatPromotions(unit.unitType, level);
+        }       
+        combinePromotions(ourPromotions.second, freePromotions);
+
+        for (Promotions::const_iterator ci(ourPromotions.second.begin()), ciEnd(ourPromotions.second.end()); ci != ciEnd; ++ci)
+        {
+            unit.applyPromotion(*ci);
+        }
+    }
+
+    std::pair<int, int> UnitAnalysis::getOdds(UnitTypes unit1Type, UnitTypes unit2Type, int unit1Level, int unit2Level) const
     {
         const int attHP = gGlobals.getMAX_HIT_POINTS();
         const int defHP = attHP;
@@ -344,10 +756,11 @@ namespace AltAI
 
         int attackOdds = 0, defenceOdds = 0;
 
-        UnitData unit1(unit1Info), unit2(unit2Info);
+        UnitData unit1(unit1Type), unit2(unit2Type);
 
         // todo - handle all air combat separately
-        if (unit2Info.getProductionCost() >= 0 && unit2.combat > 0 && unit1Info.getDomainType() == unit2Info.getDomainType())
+        const CvUnitInfo& unit1Info = gGlobals.getUnitInfo(unit1Type), &unit2Info = gGlobals.getUnitInfo(unit2Type);
+        if (unit2Info.getProductionCost() >= 0 && unit2.baseCombat > 0 && unit1Info.getDomainType() == unit2Info.getDomainType())
         {
             //Promotions combatPromotions = getCombatPromotions(unit1.getUnitClassType, unit1Level);
 
@@ -358,10 +771,11 @@ namespace AltAI
         return std::make_pair(attackOdds, defenceOdds);
     }
 
-    std::vector<int> UnitAnalysis::getOdds(UnitTypes unitType, const std::vector<UnitTypes>& units, int ourLevel, int theirLevel, int flags, bool isAttacker) const
+    std::vector<int> UnitAnalysis::getOdds(UnitTypes unitType, const std::vector<UnitTypes>& units, int ourLevel, int theirLevel, 
+        const UnitData::CombatDetails& combatDetails, bool isAttacker, const Promotions& freePromotions) const
     {
 #ifdef ALTAI_DEBUG
-        //std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
         //os << "\ngetOdds():\n";
 #endif
         const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
@@ -372,104 +786,166 @@ namespace AltAI
             return std::vector<int>(units.size(), -1);
         }
 
+        UnitData us(unitType);
+        promote(us, combatDetails, isAttacker, ourLevel, freePromotions);
+        return getOdds(us, units, theirLevel, combatDetails, isAttacker);
+    }
+
+    std::vector<int> UnitAnalysis::getOdds(const UnitData& unit, const std::vector<UnitTypes>& units, int level, const UnitData::CombatDetails& combatDetails, bool isAttacker) const
+    {
         std::vector<int> odds;
-        RemainingLevelsAndPromotions ourPromotions, theirPromotions;
-
-        if (flags & UnitData::CityAttack)
-        {
-            if (isAttacker)
-            {
-                ourPromotions = getCityAttackPromotions(unitType, ourLevel);
-            }
-            else
-            {
-                ourPromotions = getCityDefencePromotions(unitType, ourLevel);
-            }
-        }
-
-        if (ourPromotions.second.empty())
-        {
-            ourPromotions = getCombatPromotions(unitType, ourLevel);
-        }        
-#ifdef ALTAI_DEBUG
-        //os << (isAttacker ? "attacker" : "defender") << " promotions = ";
-#endif
-        UnitData us(unitInfo);
-		for (Promotions::const_iterator ci(ourPromotions.second.begin()), ciEnd(ourPromotions.second.end()); ci != ciEnd; ++ci)
-		{
-#ifdef ALTAI_DEBUG
-            //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
-#endif
-			us.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		}
+        RemainingLevelsAndPromotions promotions;
+        bool defensiveOnly = unit.pUnitInfo->isOnlyDefensive();
 
         for (size_t i = 0, count = units.size(); i < count; ++i)
         {
             const CvUnitInfo& otherUnitInfo = gGlobals.getUnitInfo(units[i]);
 
-            // other unit is defending, or other unit is attacking and therefore can't be defensive only
-            if (isAttacker || !otherUnitInfo.isOnlyDefensive())
+            bool otherUnitIsDefensiveOnly = otherUnitInfo.isOnlyDefensive();
+            // units[i] are defending v. unit (isAttacker true), or units[i] are attacking and therefore they can't be defensive only
+            if ((isAttacker && !defensiveOnly) || (!isAttacker && !otherUnitIsDefensiveOnly))
             {
-                if (otherUnitInfo.getProductionCost() >= 0 && otherUnitInfo.getCombat() > 0 && unitInfo.getDomainType() == otherUnitInfo.getDomainType())
-			    {
-                    if (flags & UnitData::CityAttack)
-                    {
-                        theirPromotions = RemainingLevelsAndPromotions();
-                        if (isAttacker)
-                        {
-                            theirPromotions = getCityDefencePromotions(units[i], theirLevel);
-                        }
-                        else
-                        {
-                            theirPromotions = getCityAttackPromotions(units[i], theirLevel);
-                        }
-                    }
-
-                    if (theirPromotions.second.empty())
-                    {
-                        theirPromotions = getCombatPromotions(units[i], theirLevel);
-                    }
-#ifdef ALTAI_DEBUG
-                    //os << "\n " << (isAttacker ? "defender" : "attacker") << " promotions = ";
-#endif
-				    UnitData them(otherUnitInfo);
-				    for (Promotions::const_iterator ci(theirPromotions.second.begin()), ciEnd(theirPromotions.second.end()); ci != ciEnd; ++ci)
-				    {
-#ifdef ALTAI_DEBUG
-                        //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
-#endif
-	    				them.applyPromotion(gGlobals.getPromotionInfo(*ci));
-		    		}
+                if (otherUnitInfo.getCombat() > 0 && unit.pUnitInfo->getDomainType() == otherUnitInfo.getDomainType())
+                {
+                    UnitData them(units[i]);
+                    promote(them, combatDetails, !isAttacker, level, Promotions());
 
                     int ourOdds;
 
                     if (isAttacker)
                     {
-				        ourOdds = getCombatOdds(us, them, flags);
+                        ourOdds = getCombatOdds(unit, them, combatDetails);
 #ifdef ALTAI_DEBUG
                         //os << "\n\t\tv. unit: " << otherUnitInfo.getType() << " our attack str = " << us.calculateStrength() 
                         //    << " their defence str = " << them.calculateStrength(us)
-                        //    << " attacker combat = " << us.combat << " defender combat = " << them.combat;
+                        //    << " attacker combat = " << us.combat << " defender combat = " << them.combat << ", odds = " << ourOdds;
 #endif
                     }
                     else
                     {
-                        ourOdds = 1000 - getCombatOdds(them, us, flags);
+                        ourOdds = 1000 - getCombatOdds(them, unit, combatDetails);
 #ifdef ALTAI_DEBUG
                         //os << "\n\t\tv. unit: " << otherUnitInfo.getType() << " their attack str = " << them.calculateStrength() 
                         //    << " our defence str = " << us.calculateStrength(them)
-                        //    << " attacker combat = " << them.combat << " defender combat = " << us.combat;
+                        //    << " attacker combat = " << them.combat << " defender combat = " << us.combat << ", odds = " << ourOdds;
 #endif
                     }
 
                     odds.push_back(ourOdds);
                     continue;
                 }
-			}
+            }
+            odds.push_back(isAttacker ? 0 : (defensiveOnly ? 0 : 1000));  // add entry for each unit regardless of whether they could actually fight
+            //odds.push_back(0);  // add entry for each unit regardless of whether they could actually fight
+        }
 
-            odds.push_back(-1);
-		}
         return odds;
+    }
+
+    std::vector<int> UnitAnalysis::getOdds(const UnitData& unit, const std::vector<UnitData>& units, const UnitData::CombatDetails& combatDetails, bool isAttacker) const
+    {
+        std::vector<int> odds;
+        bool defensiveOnly = unit.pUnitInfo->isOnlyDefensive();
+
+        for (size_t i = 0, count = units.size(); i < count; ++i)
+        {
+            bool otherUnitIsDefensiveOnly = units[i].pUnitInfo->isOnlyDefensive();
+            // units[i] are defending v. unit (isAttacker true), or units[i] are attacking and therefore they can't be defensive only
+            if ((isAttacker && !defensiveOnly) || (!isAttacker && !otherUnitIsDefensiveOnly))
+            {
+                if (units[i].pUnitInfo->getCombat() > 0 && unit.pUnitInfo->getDomainType() == units[i].pUnitInfo->getDomainType())
+                {
+                    int ourOdds;
+                    if (isAttacker)
+                    {
+                        ourOdds = getCombatOdds(unit, units[i], combatDetails);
+                    }
+                    else
+                    {
+                        ourOdds = 1000 - getCombatOdds(units[i], unit, combatDetails);
+                    }
+                    odds.push_back(ourOdds);
+                    continue;
+                }
+            }
+            // add zero for case of both attacker and defender being defensive only units
+            // for case of defender being defensive only, above check will only skip odds calc
+            // if attacker also happens to be defensive only, and then we don't want to add 1000 odds for a battle which can't occur
+            odds.push_back(isAttacker ? 0 : (defensiveOnly ? 0 : 1000));  // add entry for each unit regardless of whether they could actually fight
+            //odds.push_back(0);  // add entry for each unit regardless of whether they could actually fight
+        }
+
+        return odds;
+    }
+
+    UnitOddsData UnitAnalysis::getCombatOddsDetail(const UnitData& attacker, const UnitData& defender, const UnitData::CombatDetails& combatDetails) const
+    {
+        return getCombatOddsDetail_(attacker, defender, combatDetails);
+    }
+
+    std::vector<int> UnitAnalysis::getCollateralDamage(const UnitData& attacker, const std::vector<UnitData>& units, size_t skipIndex, const UnitData::CombatDetails& combatDetails) const
+    {
+        static const int COLLATERAL_COMBAT_DAMAGE = gGlobals.getDefineINT("COLLATERAL_COMBAT_DAMAGE");
+        static const int MAX_HIT_POINTS = gGlobals.getMAX_HIT_POINTS();
+
+        std::vector<int> damage(units.size(), 0);        
+        
+        const int numPossibleTargets = std::min<int>(attacker.pUnitInfo->getCollateralDamageMaxUnits(), units.size());
+        if (numPossibleTargets <= 0)
+        {
+            return damage;
+        }
+
+		const int collateralStr = attacker.baseCombat * attacker.pUnitInfo->getCollateralDamage();
+        const int collateralDamageLimit = attacker.pUnitInfo->getCollateralDamageLimit() * MAX_HIT_POINTS / 100;
+
+		CvGameAI& refgame = gGlobals.getGame();
+        std::multimap<int, size_t, std::greater<int> > potentialTargets;
+        for (size_t i = 0, count = units.size(); i < count; ++i)
+        {
+            if (i == skipIndex) continue;
+            // assumes all units in the list can defend and are visible
+            potentialTargets.insert(std::make_pair((1 + refgame.getSorenRandNum(10000, "CollateralSim")) * units[i].hp, i));
+        }
+
+        std::multimap<int, size_t, std::greater<int> >::iterator targetIter = potentialTargets.begin();
+        for (int targetIndex = 0; targetIndex < numPossibleTargets; ++targetIndex)
+        {
+            if (targetIter == potentialTargets.end())
+            {
+                break;
+            }
+
+            if (!units[targetIter->second].pUnitInfo->getUnitCombatCollateralImmune(attacker.pUnitInfo->getUnitCombatType()))
+            {
+                int iTheirStrength = units[targetIter->second].baseCombat;
+
+				int iStrengthFactor = (collateralStr + iTheirStrength + 1) / 2;
+
+				int iCollateralDamage = (COLLATERAL_COMBAT_DAMAGE * (collateralStr + iStrengthFactor)) / (iTheirStrength + iStrengthFactor);
+
+                iCollateralDamage *= 100 + attacker.extraCollateralDamage;
+
+				iCollateralDamage *= std::max<int>(0, 100 - units[targetIter->second].collateralDamageProtection);
+				iCollateralDamage /= 100;
+
+                // todo - add air modifier for city attacks from bombers (bunker gives protection)				
+
+				iCollateralDamage /= 100;
+
+				iCollateralDamage = std::max<int>(0, iCollateralDamage);
+
+				int iMaxDamage = std::min<int>(collateralDamageLimit, (collateralDamageLimit * (collateralStr + iStrengthFactor)) / (iTheirStrength + iStrengthFactor));
+                int iUnitDamage = std::max<int>(units[targetIter->second].maxhp - units[targetIter->second].hp, 
+                    std::min<int>(units[targetIter->second].maxhp - units[targetIter->second].hp + iCollateralDamage, iMaxDamage));
+
+				damage[targetIter->second] = iUnitDamage;
+            }
+
+            potentialTargets.erase(targetIter++);
+        }
+
+		return damage;
     }
 
     int UnitAnalysis::getCurrentUnitValue(UnitTypes unitType) const
@@ -656,10 +1132,10 @@ namespace AltAI
         return std::make_pair(level, Promotions());
     }
 
-	UnitAnalysis::RemainingLevelsAndPromotions UnitAnalysis::getCityDefencePromotions(UnitTypes unitType, int level) const
+    UnitAnalysis::RemainingLevelsAndPromotions UnitAnalysis::getCityDefencePromotions(UnitTypes unitType, int level) const
     {
         level = std::max<int>(0, level);
-		level = std::min<int>(level, (int)cityDefenceUnits_.size());
+        level = std::min<int>(level, (int)cityDefenceUnits_.size());
 
         for (UnitValuesMap::const_iterator ci(cityDefenceUnits_[level].begin()), ciEnd(cityDefenceUnits_[level].end()); ci != ciEnd; ++ci)
         {
@@ -708,7 +1184,7 @@ namespace AltAI
     UnitAnalysis::RemainingLevelsAndPromotions UnitAnalysis::getCollateralPromotions(UnitTypes unitType, int level) const
     {
         level = std::max<int>(0, level);
-		level = std::min<int>(level, (int)collateralUnits_.size());
+        level = std::min<int>(level, (int)collateralUnits_.size());
 
         for (UnitValuesMap::const_iterator ci(collateralUnits_[level].begin()), ciEnd(collateralUnits_[level].end()); ci != ciEnd; ++ci)
         {
@@ -922,23 +1398,23 @@ namespace AltAI
                         boost::tie(bestCityAttack, requiredPromotions) = calculateBestPromotions_(cityAttackPromotions_, unitInfo.getCityAttackModifier(), 
                             pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCityAttackPercent), j);
 
-					    // still have more promotions available
-					    if (requiredPromotions.first > 0)
-					    {
-						    boost::tie(additionalCityAttack, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+                        // still have more promotions available
+                        if (requiredPromotions.first > 0)
+                        {
+                            boost::tie(additionalCityAttack, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+                                pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
 
-						    if (requiredPromotions.first > 0)
-						    {
-							    boost::tie(additionalCityAttack, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-								    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-						    }
-					    }
+                            if (requiredPromotions.first > 0)
+                            {
+                                boost::tie(additionalCityAttack, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+                                    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+                            }
+                        }
 
                         if (bestCityAttack > 0)
                         {
                             combinePromotions(requiredPromotions.second, freePromotions);
-						    cityAttackUnits_[j].insert(std::make_pair(bestCityAttack, std::make_pair(unitType, requiredPromotions)));
+                            cityAttackUnits_[j].insert(std::make_pair(bestCityAttack, std::make_pair(unitType, requiredPromotions)));
                         }
 
                         // city defence
@@ -947,23 +1423,23 @@ namespace AltAI
                         boost::tie(bestCityDefence, requiredPromotions) = calculateBestPromotions_(cityDefencePromotions_, unitInfo.getCityDefenseModifier(),
                             pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCityDefensePercent), j);
 
-					    // still have more promotions available
-					    if (requiredPromotions.first > 0)
-					    {
-						    boost::tie(additionalCityDefence, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+                        // still have more promotions available
+                        if (requiredPromotions.first > 0)
+                        {
+                            boost::tie(additionalCityDefence, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+                                pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
 
-						    if (requiredPromotions.first > 0)
-						    {
-							    boost::tie(additionalCityDefence, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-								    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-						    }
-					    }
+                            if (requiredPromotions.first > 0)
+                            {
+                                boost::tie(additionalCityDefence, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+                                    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+                            }
+                        }
 
                         if (bestCityDefence > 0)
                         {
                             combinePromotions(requiredPromotions.second, freePromotions);
-						    cityDefenceUnits_[j].insert(std::make_pair(bestCityDefence, std::make_pair(unitType, requiredPromotions)));
+                            cityDefenceUnits_[j].insert(std::make_pair(bestCityDefence, std::make_pair(unitType, requiredPromotions)));
                         }
 
                         // combat
@@ -972,17 +1448,17 @@ namespace AltAI
                         boost::tie(bestCombatPercent, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, pUnitInfo,
                             PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), j);
 
-					    // still have more promotions available
-					    if (requiredPromotions.first > 0)
-					    {
-						    boost::tie(additionalCombat, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-							    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-					    }
+                        // still have more promotions available
+                        if (requiredPromotions.first > 0)
+                        {
+                            boost::tie(additionalCombat, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+                                pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+                        }
 
                         if (bestCombatPercent > 0)
                         {
                             combinePromotions(requiredPromotions.second, freePromotions);
-						    combatUnits_[j].insert(std::make_pair(bestCombatPercent, std::make_pair(unitType, requiredPromotions)));
+                            combatUnits_[j].insert(std::make_pair(bestCombatPercent, std::make_pair(unitType, requiredPromotions)));
                         }
 
                         // first strikes
@@ -991,16 +1467,16 @@ namespace AltAI
                         boost::tie(bestFirstStrikes, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(),
                             pUnitInfo, FirstStrikesPromotionValueFunctor(), j);
 
-					    if (requiredPromotions.first > 0)
-					    {
-						    boost::tie(additionalFSCombat, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
-					    }
+                        if (requiredPromotions.first > 0)
+                        {
+                            boost::tie(additionalFSCombat, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+                                pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+                        }
 
                         if (bestFirstStrikes > 0)
                         {
                             combinePromotions(requiredPromotions.second, freePromotions);
-						    firstStrikeUnits_[j].insert(std::make_pair(bestFirstStrikes, std::make_pair(unitType, requiredPromotions)));
+                            firstStrikeUnits_[j].insert(std::make_pair(bestFirstStrikes, std::make_pair(unitType, requiredPromotions)));
                         }
 
                         // collateral
@@ -1009,17 +1485,17 @@ namespace AltAI
                         boost::tie(bestCollateral, requiredPromotions) = calculateBestPromotions_(cityAttackPromotions_, unitInfo.getCollateralDamage(), 
                             pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCollateralDamageChange), j);
 
-					    // still have more promotions available
-					    if (requiredPromotions.first > 0)
-					    {
-						    boost::tie(additionalCollateralCombat, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
-					    }
+                        // still have more promotions available
+                        if (requiredPromotions.first > 0)
+                        {
+                            boost::tie(additionalCollateralCombat, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+                                pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+                        }
 
                         if (bestCollateral > 0)
                         {
                             combinePromotions(requiredPromotions.second, freePromotions);
-						    collateralUnits_[j].insert(std::make_pair(bestCollateral, std::make_pair(unitType, requiredPromotions)));
+                            collateralUnits_[j].insert(std::make_pair(bestCollateral, std::make_pair(unitType, requiredPromotions)));
                         }
 
                         // unit counters
@@ -1032,17 +1508,17 @@ namespace AltAI
                                 UnitCombatPromotionValueFunctor(&CvPromotionInfo::getUnitCombatModifierPercent, ci->first), j);
 
                             // still have more promotions available
-					        if (requiredPromotions.first > 0)
-					        {
-						        boost::tie(extraValue, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							        pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+                            if (requiredPromotions.first > 0)
+                            {
+                                boost::tie(extraValue, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+                                    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
 
-						        if (requiredPromotions.first > 0)
-						        {
-							        boost::tie(extraValue, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-								        pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-						        }
-					        }
+                                if (requiredPromotions.first > 0)
+                                {
+                                    boost::tie(extraValue, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+                                        pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+                                }
+                            }
 
                             if (bestCounterValue > 0)
                             {
@@ -1056,17 +1532,17 @@ namespace AltAI
                         boost::tie(mostMoves, requiredPromotions) = calculateBestPromotions_(movementPromotions_, unitInfo.getMoves(), pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getMovesChange), j);
 
                         // still have more promotions available
-					    if (requiredPromotions.first > 0)
-					    {
-						    boost::tie(extras, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
-							    pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
+                        if (requiredPromotions.first > 0)
+                        {
+                            boost::tie(extras, requiredPromotions) = calculateBestPromotions_(combatPromotions_, 0, 
+                                pUnitInfo, PromotionValueFunctor(&CvPromotionInfo::getCombatPercent), requiredPromotions.first, requiredPromotions.second);
 
-						    if (requiredPromotions.first > 0)
-						    {
-							    boost::tie(extras, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
-								    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
-						    }
-					    }
+                            if (requiredPromotions.first > 0)
+                            {
+                                boost::tie(extras, requiredPromotions) = calculateBestPromotions_(firstStrikePromotions_, 2 * unitInfo.getFirstStrikes() + unitInfo.getChanceFirstStrikes(), 
+                                    pUnitInfo, FirstStrikesPromotionValueFunctor(), requiredPromotions.first, requiredPromotions.second);
+                            }
+                        }
 
                         if (mostMoves > 1)
                         {
@@ -1079,98 +1555,103 @@ namespace AltAI
         }
     }
 
-	void UnitAnalysis::analyseAsCityAttackUnit_(UnitTypes unitType)
-	{
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-//#endif
-		const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+    void UnitAnalysis::analyseAsCityAttackUnit_(UnitTypes unitType)
+    {
+#ifdef ALTAI_DEBUG
+        //std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
+        const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
 
         if (unitInfo.isOnlyDefensive())
         {
 //#ifdef ALTAI_DEBUG
-//            os << "\nSkipping unit as only defensive: " << unitInfo.getType();
+//            os << "\nSkipping unit as only defensive: " << pUnitInfo->getType();
 //#endif
             return;
         }
-//#ifdef ALTAI_DEBUG
-//        os << "\nAnalysing unit: " << unitInfo.getType();
-//#endif
-		for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
-		{
-//#ifdef ALTAI_DEBUG
-//            os << "\n\tfor level: " << i;
-//#endif
-			RemainingLevelsAndPromotions attackPromotions = getCityAttackPromotions(unitType, i);
+#ifdef ALTAI_DEBUG
+        //os << "\nAnalysing unit: " << pUnitInfo->getType();
+#endif
+        for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
+        {
+#ifdef ALTAI_DEBUG
+            //os << "\n\tfor level: " << i;
+#endif
+            RemainingLevelsAndPromotions attackPromotions = getCityAttackPromotions(unitType, i);
 
-			if (attackPromotions.second.empty())
-			{
-				attackPromotions = getCombatPromotions(unitType, i);
-			}
-//#ifdef ALTAI_DEBUG
-//            os << " attack promotions = ";
-//#endif
-			UnitData attacker(unitInfo);
-			for (Promotions::const_iterator ci(attackPromotions.second.begin()), ciEnd(attackPromotions.second.end()); ci != ciEnd; ++ci)
-			{
-//#ifdef ALTAI_DEBUG
-//                os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
-//#endif
-				attacker.applyPromotion(gGlobals.getPromotionInfo(*ci));
-			}
+            if (attackPromotions.second.empty())
+            {
+                attackPromotions = getCombatPromotions(unitType, i);
+            }
+#ifdef ALTAI_DEBUG
+            //os << " attack promotions = ";
+#endif
+            UnitData attacker(unitType);
+            for (Promotions::const_iterator ci(attackPromotions.second.begin()), ciEnd(attackPromotions.second.end()); ci != ciEnd; ++ci)
+            {
+#ifdef ALTAI_DEBUG
+                //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
+#endif
+                attacker.applyPromotion(*ci);
+            }
 
-			for (int j = 0, count = gGlobals.getNumUnitClassInfos(); j < count; ++j)
+            UnitData::CombatDetails combatDetails;
+            combatDetails.flags = UnitData::CombatDetails::CityAttack | UnitData::CombatDetails::FortifyDefender;
+
+            for (int j = 0, count = gGlobals.getNumUnitClassInfos(); j < count; ++j)
             {
                 UnitTypes defaultUnit = (UnitTypes)gGlobals.getUnitClassInfo((UnitClassTypes)j).getDefaultUnitIndex();
 
                 const CvUnitInfo& otherUnitInfo = gGlobals.getUnitInfo(defaultUnit);
 
                 if (otherUnitInfo.getProductionCost() >= 0 && otherUnitInfo.getCombat() > 0 && unitInfo.getDomainType() == otherUnitInfo.getDomainType())
-				{
-					if (otherUnitInfo.getUnitAIType(UNITAI_CITY_DEFENSE) || (otherUnitInfo.getUnitAIType(UNITAI_COUNTER) && !otherUnitInfo.isNoDefensiveBonus()))
-					{
-						RemainingLevelsAndPromotions defencePromotions = getCityDefencePromotions(defaultUnit, i);
+                {
+                    if (otherUnitInfo.getUnitAIType(UNITAI_CITY_DEFENSE) || (otherUnitInfo.getUnitAIType(UNITAI_COUNTER) && !otherUnitInfo.isNoDefensiveBonus()))
+                    {
+                        RemainingLevelsAndPromotions defencePromotions = getCityDefencePromotions(defaultUnit, i);
 
-						if (defencePromotions.second.empty())
-						{
-							defencePromotions = getCombatPromotions(defaultUnit, i);
-						}
-//#ifdef ALTAI_DEBUG
-//                        os << "\n defender promotions = ";
-//#endif
-						UnitData defender(otherUnitInfo);
-						for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
-						{
-//#ifdef ALTAI_DEBUG
-//                            os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
-//#endif
-							defender.applyPromotion(gGlobals.getPromotionInfo(*ci));
-						}
+                        if (defencePromotions.second.empty())
+                        {
+                            defencePromotions = getCombatPromotions(defaultUnit, i);
+                        }
+#ifdef ALTAI_DEBUG
+                        //os << "\n defender promotions = ";
+#endif
+                        UnitData defender(defaultUnit);
+                        for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
+                        {
+#ifdef ALTAI_DEBUG
+                            //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
+#endif
+                            defender.applyPromotion(*ci);
+                        }
+                        
+                        int attackOdds = getCombatOdds(attacker, defender, combatDetails);
+                        int defenceOdds = getCombatOdds(defender, attacker, combatDetails);
+#ifdef ALTAI_DEBUG
+                        //os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(UnitData::CityAttack | UnitData::FortifyDefender) 
+                        //   << " defence str = " << defender.calculateStrength(attacker, combatDetails)
+                        //   << " attacker combat = " << attacker.combat << " defender combat = " << defender.combat
+                        //   << " city attack % = " << attacker.cityAttackPercent
+                        //   << "\n\t attack = " << attackOdds << ", defence = " << defenceOdds;
+#endif                        
+                        //UnitOddsData odds = getCombatOddsDetail_(attacker, defender, combatDetails);
+#ifdef ALTAI_DEBUG
+                        //odds.debug(os);
+#endif
 
-						int attackOdds = getCombatOdds(attacker, defender, UnitData::CityAttack | UnitData::FortifyDefender);
-//#ifdef ALTAI_DEBUG
-//                        os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(UnitData::CityAttack | UnitData::FortifyDefender) 
-//                           << " defence str = " << defender.calculateStrength(attacker, UnitData::CityAttack | UnitData::FortifyDefender)
-//                           << " attacker combat = " << attacker.combat << " defender combat = " << defender.combat
-//                           << " city attack % = " << attacker.cityAttackPercent;
-//#endif
-						int defenceOdds = getCombatOdds(defender, attacker, 0);
-
-//#ifdef ALTAI_DEBUG
-//                        os << "\n\t attack = " << attackOdds << ", defence = " << defenceOdds;
-//#endif
-						if (attackOdds > 0)
-						{
-							cityAttackUnitValues_[unitType][i][defaultUnit].insert(std::make_pair(UNITAI_CITY_DEFENSE, std::make_pair(attackOdds, 1000 - defenceOdds)));
-						}
-						if (defenceOdds > 0)
-						{
+                        if (attackOdds > 0)
+                        {
+                            cityAttackUnitValues_[unitType][i][defaultUnit].insert(std::make_pair(UNITAI_CITY_DEFENSE, std::make_pair(attackOdds, 1000 - defenceOdds)));
+                        }
+                        if (defenceOdds > 0)
+                        {
                             cityDefenceUnitValues_[defaultUnit][i][unitType].insert(std::make_pair(UNITAI_ATTACK_CITY, std::make_pair(defenceOdds, 1000 - attackOdds)));
-						}
-					}
-				}
-			}
-		}
+                        }
+                    }
+                }
+            }
+        }
 //#ifdef ALTAI_DEBUG
 //        os << "\n final city attack value = ";
 //        for (int i = 0; i < 5; ++i)
@@ -1179,79 +1660,82 @@ namespace AltAI
 //        }
 //        os << "\n final city defence value = " << getCityDefenceUnitValue(unitType);
 //#endif
-	}
+    }
 
     void UnitAnalysis::analyseAsCityDefenceUnit_(UnitTypes unitType)
-	{
+    {
 //#ifdef ALTAI_DEBUG
 //        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
 //#endif
-		const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+        const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
 
 //#ifdef ALTAI_DEBUG
-//        os << "\nAnalysing unit: " << unitInfo.getType();
+//        os << "\nAnalysing unit: " << pUnitInfo->getType();
 //#endif
-		for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
-		{
+        for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
+        {
 //#ifdef ALTAI_DEBUG
 //            os << "\n\tfor level: " << i;
 //#endif
             RemainingLevelsAndPromotions defencePromotions = getCityDefencePromotions(unitType, i);
 
-			if (defencePromotions.second.empty())
-			{
-				defencePromotions = getCombatPromotions(unitType, i);
-			}
+            if (defencePromotions.second.empty())
+            {
+                defencePromotions = getCombatPromotions(unitType, i);
+            }
 //#ifdef ALTAI_DEBUG
 //            os << " defence promotions = ";
 //#endif
-			UnitData defender(unitInfo);
-			for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
-			{
+            UnitData defender(unitType);
+            for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
+            {
 //#ifdef ALTAI_DEBUG
 //                os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
 //#endif
-				defender.applyPromotion(gGlobals.getPromotionInfo(*ci));
-			}
+                defender.applyPromotion(*ci);
+            }
 
-			for (int j = 0, count = gGlobals.getNumUnitClassInfos(); j < count; ++j)
+            UnitData::CombatDetails combatDetails;
+            combatDetails.flags = UnitData::CombatDetails::CityAttack | UnitData::CombatDetails::FortifyDefender;
+
+            for (int j = 0, count = gGlobals.getNumUnitClassInfos(); j < count; ++j)
             {
                 UnitTypes defaultUnit = (UnitTypes)gGlobals.getUnitClassInfo((UnitClassTypes)j).getDefaultUnitIndex();
 
                 const CvUnitInfo& otherUnitInfo = gGlobals.getUnitInfo(defaultUnit);
 
                 if (otherUnitInfo.getProductionCost() >= 0 && otherUnitInfo.getCombat() > 0 && unitInfo.getDomainType() == otherUnitInfo.getDomainType())
-				{
+                {
                     if (otherUnitInfo.getUnitAIType(UNITAI_ATTACK_CITY) || otherUnitInfo.getUnitAIType(UNITAI_COUNTER))
-					{
-						RemainingLevelsAndPromotions attackPromotions = getCityAttackPromotions(defaultUnit, i);
+                    {
+                        RemainingLevelsAndPromotions attackPromotions = getCityAttackPromotions(defaultUnit, i);
 
-						if (attackPromotions.second.empty())
-						{
-							attackPromotions = getCombatPromotions(defaultUnit, i);
-						}
+                        if (attackPromotions.second.empty())
+                        {
+                            attackPromotions = getCombatPromotions(defaultUnit, i);
+                        }
 //#ifdef ALTAI_DEBUG
 //                        os << "\n attacker promotions = ";
 //#endif
-						UnitData attacker(otherUnitInfo);
-						for (Promotions::const_iterator ci(attackPromotions.second.begin()), ciEnd(attackPromotions.second.end()); ci != ciEnd; ++ci)
-						{
+                        UnitData attacker(defaultUnit);
+                        for (Promotions::const_iterator ci(attackPromotions.second.begin()), ciEnd(attackPromotions.second.end()); ci != ciEnd; ++ci)
+                        {
 //#ifdef ALTAI_DEBUG
 //                            os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
 //#endif
-							attacker.applyPromotion(gGlobals.getPromotionInfo(*ci));
-						}
+                            attacker.applyPromotion(*ci);
+                        }
 
-						int attackOdds = getCombatOdds(attacker, defender, UnitData::CityAttack | UnitData::FortifyDefender);
+                        int attackOdds = getCombatOdds(attacker, defender, combatDetails);
 //#ifdef ALTAI_DEBUG
 //                        os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(UnitData::CityAttack | UnitData::FortifyDefender) 
-//                           << " defence str = " << defender.calculateStrength(attacker, UnitData::CityAttack | UnitData::FortifyDefender)
+//                           << " defence str = " << defender.calculateStrength(attacker, combatDetails)
 //                           << " attacker combat = " << attacker.combat << " defender combat = " << defender.combat
 //                           << " city attack % = " << attacker.cityAttackPercent << " city def % = " << defender.cityDefencePercent
 //                           << " att fs = " << attacker.firstStrikes << " att fs chances = " << attacker.chanceFirstStrikes
 //                           << " def fs = " << defender.firstStrikes << " def fs chances = " << defender.chanceFirstStrikes;
 //#endif
-						int defenceOdds = getCombatOdds(defender, attacker, 0);
+                        int defenceOdds = getCombatOdds(defender, attacker, combatDetails);
 //#ifdef ALTAI_DEBUG
 //                        os << "\n\t\t\t" << " attack str = " << defender.calculateStrength(0) 
 //                           << " defence str = " << attacker.calculateStrength(defender, 0)
@@ -1264,91 +1748,99 @@ namespace AltAI
 //#ifdef ALTAI_DEBUG
 //                        os << "\n\t attack = " << attackOdds << ", defence = " << defenceOdds;
 //#endif
-					}
-				}
-			}
-		}
-	}
-
+                    }
+                }
+            }
+        }
+    }
 
     void UnitAnalysis::analyseAsCombatUnit_(UnitTypes unitType)
     {
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-//#endif
-		const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
+        const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
 
         if (unitInfo.isOnlyDefensive())
         {
 //#ifdef ALTAI_DEBUG
-//            os << "\nSkipping unit as only defensive: " << unitInfo.getType();
+//            os << "\nSkipping unit as only defensive: " << pUnitInfo->getType();
 //#endif
             return;
         }
 //#ifdef ALTAI_DEBUG
-//        os << "\nAnalysing unit: " << unitInfo.getType();
+//        os << "\nAnalysing unit: " << pUnitInfo->getType();
 //#endif
-		for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
-		{
+        for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
+        {
 //#ifdef ALTAI_DEBUG
-//            os << "\n\tfor level: " << i;
+//        os << "\n\tfor level: " << i;
 //#endif
-			RemainingLevelsAndPromotions combatPromotions = getCombatPromotions(unitType, i);
+            RemainingLevelsAndPromotions combatPromotions = getCombatPromotions(unitType, i);
 //#ifdef ALTAI_DEBUG
 //            os << " attack promotions = ";
 //#endif
-			UnitData attacker(unitInfo);
-			for (Promotions::const_iterator ci(combatPromotions.second.begin()), ciEnd(combatPromotions.second.end()); ci != ciEnd; ++ci)
-			{
+            UnitData attacker(unitType);
+            for (Promotions::const_iterator ci(combatPromotions.second.begin()), ciEnd(combatPromotions.second.end()); ci != ciEnd; ++ci)
+            {
 //#ifdef ALTAI_DEBUG
 //                os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
 //#endif
-				attacker.applyPromotion(gGlobals.getPromotionInfo(*ci));
-			}
+                attacker.applyPromotion(*ci);
+            }
 
-			for (int j = 0, count = gGlobals.getNumUnitClassInfos(); j < count; ++j)
+            UnitData::CombatDetails combatDetails;
+
+            for (int j = 0, count = gGlobals.getNumUnitClassInfos(); j < count; ++j)
             {
                 UnitTypes defaultUnit = (UnitTypes)gGlobals.getUnitClassInfo((UnitClassTypes)j).getDefaultUnitIndex();
 
                 const CvUnitInfo& otherUnitInfo = gGlobals.getUnitInfo(defaultUnit);
 
                 if (otherUnitInfo.getProductionCost() >= 0 && otherUnitInfo.getCombat() > 0 && unitInfo.getDomainType() == otherUnitInfo.getDomainType())
-				{
+                {
                     if (otherUnitInfo.getUnitAIType(UNITAI_COUNTER) || otherUnitInfo.getUnitAIType(UNITAI_ATTACK_SEA) || otherUnitInfo.getUnitAIType(UNITAI_ASSAULT_SEA))
-					{
-						RemainingLevelsAndPromotions defencePromotions = getCombatPromotions(defaultUnit, i);
+                    {
+                        RemainingLevelsAndPromotions defencePromotions = getCombatPromotions(defaultUnit, i);
 //#ifdef ALTAI_DEBUG
 //                        os << "\n defender promotions = ";
 //#endif
-						UnitData defender(otherUnitInfo);
-						for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
-						{
+                        UnitData defender(defaultUnit);
+                        for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
+                        {
 //#ifdef ALTAI_DEBUG
 //                            os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
 //#endif
-							defender.applyPromotion(gGlobals.getPromotionInfo(*ci));
-						}
+                            defender.applyPromotion(*ci);
+                        }
 
-						int attackOdds = getCombatOdds(attacker, defender);
+                        int attackOdds = getCombatOdds(attacker, defender);
+                        int defenceOdds = getCombatOdds(defender, attacker);
+
 //#ifdef ALTAI_DEBUG
-//                        os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(0) 
-//                           << " defence str = " << defender.calculateStrength(attacker, 0)
-//                           << " attacker combat = " << attacker.combat << " defender combat = " << defender.combat;
+//                        os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(combatDetails) 
+//                           << " defence str = " << defender.calculateStrength(attacker, combatDetails)
+//                           << " attacker combat = " << attacker.combat << " defender combat = " << defender.combat
+//                           << "\n\t attack = " << attackOdds << ", defence = " << defenceOdds;
 //#endif
-						int defenceOdds = getCombatOdds(defender, attacker);
 
-						if (attackOdds > 0)
-						{
+                        UnitOddsData odds = getCombatOddsDetail_(attacker, defender);
+//#ifdef ALTAI_DEBUG
+//                        odds.debug(os);
+//#endif
+
+                        if (attackOdds > 0)
+                        {
                             attackUnitValues_[unitType][i][defaultUnit].insert(std::make_pair(UNITAI_ATTACK, std::make_pair(attackOdds, 1000 - defenceOdds)));
-						}
-						if (defenceOdds > 0)
-						{
+                        }
+                        if (defenceOdds > 0)
+                        {
                             defenceUnitValues_[defaultUnit][i][unitType].insert(std::make_pair(UNITAI_COUNTER, std::make_pair(defenceOdds, 1000 - attackOdds)));
-						}
-					}
-				}
-			}
-		}
+                        }
+                    }
+                }
+            }
+        }
 //#ifdef ALTAI_DEBUG
 //        os << "\n final attack value = " << getAttackUnitValue(unitType);
 //        os << "\n final defence value = " << getDefenceUnitValue(unitType);
@@ -1357,82 +1849,82 @@ namespace AltAI
 
     void UnitAnalysis::analyseAsCounterUnit_(UnitTypes unitType)
     {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-#endif
-		const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+//#endif
+        const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
 
         if (unitInfo.isOnlyDefensive())
         {
-#ifdef ALTAI_DEBUG
-            os << "\nSkipping unit as only defensive: " << unitInfo.getType();
-#endif
+//#ifdef ALTAI_DEBUG
+//            os << "\nSkipping unit as only defensive: " << pUnitInfo->getType();
+//#endif
             return;
         }
-#ifdef ALTAI_DEBUG
-        os << "\nAnalysing unit: " << unitInfo.getType();
-#endif
-		for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
-		{
-#ifdef ALTAI_DEBUG
-            //os << "\n\tfor level: " << i;
-#endif
-			for (int j = 0, count = gGlobals.getNumUnitClassInfos(); j < count; ++j)
+//#ifdef ALTAI_DEBUG
+//        os << "\nAnalysing unit: " << pUnitInfo->getType();
+//#endif
+        for (int i = 1; i <= maxPromotionSearchDepth_; ++i)
+        {
+//#ifdef ALTAI_DEBUG
+//            //os << "\n\tfor level: " << i;
+//#endif
+            for (int j = 0, count = gGlobals.getNumUnitClassInfos(); j < count; ++j)
             {
                 UnitTypes defaultUnit = (UnitTypes)gGlobals.getUnitClassInfo((UnitClassTypes)j).getDefaultUnitIndex();
 
                 const CvUnitInfo& otherUnitInfo = gGlobals.getUnitInfo(defaultUnit);
 
-                if (otherUnitInfo.getProductionCost() >= 0 && otherUnitInfo.getCombat() > 0 && unitInfo.getDomainType() == otherUnitInfo.getDomainType())
-				{
+                if (otherUnitInfo.getProductionCost() >= 0 && otherUnitInfo.getCombat() > 0 && otherUnitInfo.getDomainType() == otherUnitInfo.getDomainType())
+                {
                     RemainingLevelsAndPromotions combatPromotions = getCombatCounterPromotions(unitType, (UnitCombatTypes)otherUnitInfo.getUnitCombatType(), i);
-#ifdef ALTAI_DEBUG
-                    //os << " attack promotions = ";
-#endif
-			        UnitData attacker(unitInfo);
-			        for (Promotions::const_iterator ci(combatPromotions.second.begin()), ciEnd(combatPromotions.second.end()); ci != ciEnd; ++ci)
-			        {
-#ifdef ALTAI_DEBUG
-                        //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
-#endif
-				        attacker.applyPromotion(gGlobals.getPromotionInfo(*ci));
-			        }
+//#ifdef ALTAI_DEBUG
+//                    //os << " attack promotions = ";
+//#endif
+                    UnitData attacker(unitType);
+                    for (Promotions::const_iterator ci(combatPromotions.second.begin()), ciEnd(combatPromotions.second.end()); ci != ciEnd; ++ci)
+                    {
+//#ifdef ALTAI_DEBUG
+//                        //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
+//#endif
+                        attacker.applyPromotion(*ci);
+                    }
 
                     {
-    					RemainingLevelsAndPromotions defencePromotions = getCombatPromotions(defaultUnit, i);
-#ifdef ALTAI_DEBUG
-                        //os << "\n defender promotions = ";
-#endif
-	    				UnitData defender(otherUnitInfo);
-		    			for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
-			    		{
-#ifdef ALTAI_DEBUG
-                            //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
-#endif
-					    	defender.applyPromotion(gGlobals.getPromotionInfo(*ci));
-					    }
+                        RemainingLevelsAndPromotions defencePromotions = getCombatPromotions(defaultUnit, i);
+//#ifdef ALTAI_DEBUG
+//                        //os << "\n defender promotions = ";
+//#endif
+                        UnitData defender(defaultUnit);
+                        for (Promotions::const_iterator ci(defencePromotions.second.begin()), ciEnd(defencePromotions.second.end()); ci != ciEnd; ++ci)
+                        {
+//#ifdef ALTAI_DEBUG
+//                            //os << gGlobals.getPromotionInfo(*ci).getType() << ", ";
+//#endif
+                            defender.applyPromotion(*ci);
+                        }
 
-					    int attackOdds = getCombatOdds(attacker, defender);
+                        int attackOdds = getCombatOdds(attacker, defender);
                         int defenceOdds = getCombatOdds(defender, attacker);
-#ifdef ALTAI_DEBUG
-                        /*os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(0) 
-                            << " defence str = " << defender.calculateStrength(attacker, 0)
-                            << " attacker combat = " << attacker.combat << " defender combat = " << defender.combat;*/
-#endif
+//#ifdef ALTAI_DEBUG
+//                        /*os << "\n\t\tv. unit: " << gGlobals.getUnitInfo(defaultUnit).getType() << " attack str = " << attacker.calculateStrength(0) 
+//                            << " defence str = " << defender.calculateStrength(attacker, 0)
+//                            << " attacker combat = " << attacker.combat << " defender combat = " << defender.combat;*/
+//#endif
                         if (attackOdds > 0)
-						{
+                        {
                             attackUnitCounterValues_[unitType][i][defaultUnit].insert(std::make_pair(UNITAI_ATTACK, std::make_pair(attackOdds, 1000 - defenceOdds)));
-						}
+                        }
                     }
-				}
-			}
-		}
-#ifdef ALTAI_DEBUG
-        for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
-        {
-            os << "\n final counter value (" << gGlobals.getUnitCombatInfo((UnitCombatTypes)i).getType() << ") = " << getUnitCounterValue(unitType, (UnitCombatTypes)i);
+                }
+            }
         }
-#endif
+//#ifdef ALTAI_DEBUG
+//        for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
+//        {
+//            os << "\n final counter value (" << gGlobals.getUnitCombatInfo((UnitCombatTypes)i).getType() << ") = " << getUnitCounterValue(unitType, (UnitCombatTypes)i);
+//        }
+//#endif
     }
 
     void UnitAnalysis::debug()
@@ -1477,47 +1969,47 @@ namespace AltAI
             debugUnits(os, ci->second, oss.str());
         }
 
-		os << "\nCity attack values: ";
-		for (UnitCombatInfoMap::const_iterator ci(cityAttackUnitValues_.begin()), ciEnd(cityAttackUnitValues_.end()); ci != ciEnd; ++ci)
-		{
-			os << "\nUnit = " << gGlobals.getUnitInfo(ci->first).getType();
-			for (UnitCombatLevelsMap::const_iterator levelIter(ci->second.begin()), levelEndIter(ci->second.end()); levelIter != levelEndIter; ++levelIter)
-			{
-				os << "\n\tLevel = " << levelIter->first;
-				for (UnitCombatOddsMap::const_iterator unitCounterIter(levelIter->second.begin()), unitCounterEndIter(levelIter->second.end()); unitCounterIter != unitCounterEndIter; ++unitCounterIter)
-				{
-					os << "\n\tv. " << gGlobals.getUnitInfo(unitCounterIter->first).getType();
-					for (UnitAITypesCombatOddsMap::const_iterator unitAIIter(unitCounterIter->second.begin()), unitAIEndIter(unitCounterIter->second.end()); unitAIIter != unitAIEndIter; ++unitAIIter)
-					{
-						CvWString AITypeString;
-						getUnitAIString(AITypeString, unitAIIter->first);
+        os << "\nCity attack values: ";
+        for (UnitCombatInfoMap::const_iterator ci(cityAttackUnitValues_.begin()), ciEnd(cityAttackUnitValues_.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nUnit = " << gGlobals.getUnitInfo(ci->first).getType();
+            for (UnitCombatLevelsMap::const_iterator levelIter(ci->second.begin()), levelEndIter(ci->second.end()); levelIter != levelEndIter; ++levelIter)
+            {
+                os << "\n\tLevel = " << levelIter->first;
+                for (UnitCombatOddsMap::const_iterator unitCounterIter(levelIter->second.begin()), unitCounterEndIter(levelIter->second.end()); unitCounterIter != unitCounterEndIter; ++unitCounterIter)
+                {
+                    os << "\n\tv. " << gGlobals.getUnitInfo(unitCounterIter->first).getType();
+                    for (UnitAITypesCombatOddsMap::const_iterator unitAIIter(unitCounterIter->second.begin()), unitAIEndIter(unitCounterIter->second.end()); unitAIIter != unitAIEndIter; ++unitAIIter)
+                    {
+                        CvWString AITypeString;
+                        getUnitAIString(AITypeString, unitAIIter->first);
 
-						os << " AI Type = " << narrow(AITypeString) << " att = " << unitAIIter->second.first << ", def = " << unitAIIter->second.second;
-					}
-				}
-			}
-		}
+                        os << " AI Type = " << narrow(AITypeString) << " att = " << unitAIIter->second.first << ", def = " << unitAIIter->second.second;
+                    }
+                }
+            }
+        }
 
-		os << "\nCity defence values: ";
-		for (UnitCombatInfoMap::const_iterator ci(cityDefenceUnitValues_.begin()), ciEnd(cityDefenceUnitValues_.end()); ci != ciEnd; ++ci)
-		{
-			os << "\nUnit = " << gGlobals.getUnitInfo(ci->first).getType();
-			for (UnitCombatLevelsMap::const_iterator levelIter(ci->second.begin()), levelEndIter(ci->second.end()); levelIter != levelEndIter; ++levelIter)
-			{
-				os << "\n\tLevel = " << levelIter->first;
-				for (UnitCombatOddsMap::const_iterator unitCounterIter(levelIter->second.begin()), unitCounterEndIter(levelIter->second.end()); unitCounterIter != unitCounterEndIter; ++unitCounterIter)
-				{
-					os << "\n\tv. " << gGlobals.getUnitInfo(unitCounterIter->first).getType();
-					for (UnitAITypesCombatOddsMap::const_iterator unitAIIter(unitCounterIter->second.begin()), unitAIEndIter(unitCounterIter->second.end()); unitAIIter != unitAIEndIter; ++unitAIIter)
-					{
-						CvWString AITypeString;
-						getUnitAIString(AITypeString, unitAIIter->first);
+        os << "\nCity defence values: ";
+        for (UnitCombatInfoMap::const_iterator ci(cityDefenceUnitValues_.begin()), ciEnd(cityDefenceUnitValues_.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nUnit = " << gGlobals.getUnitInfo(ci->first).getType();
+            for (UnitCombatLevelsMap::const_iterator levelIter(ci->second.begin()), levelEndIter(ci->second.end()); levelIter != levelEndIter; ++levelIter)
+            {
+                os << "\n\tLevel = " << levelIter->first;
+                for (UnitCombatOddsMap::const_iterator unitCounterIter(levelIter->second.begin()), unitCounterEndIter(levelIter->second.end()); unitCounterIter != unitCounterEndIter; ++unitCounterIter)
+                {
+                    os << "\n\tv. " << gGlobals.getUnitInfo(unitCounterIter->first).getType();
+                    for (UnitAITypesCombatOddsMap::const_iterator unitAIIter(unitCounterIter->second.begin()), unitAIEndIter(unitCounterIter->second.end()); unitAIIter != unitAIEndIter; ++unitAIIter)
+                    {
+                        CvWString AITypeString;
+                        getUnitAIString(AITypeString, unitAIIter->first);
 
-						os << " AI Type = " << narrow(AITypeString) << " att = " << unitAIIter->second.first << ", def = " << unitAIIter->second.second;
-					}
-				}
-			}
-		}
+                        os << " AI Type = " << narrow(AITypeString) << " att = " << unitAIIter->second.first << ", def = " << unitAIIter->second.second;
+                    }
+                }
+            }
+        }
 #endif
     }
 }

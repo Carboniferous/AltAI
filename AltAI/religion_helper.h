@@ -23,6 +23,7 @@ namespace AltAI
         bool isHasReligion(ReligionTypes religionType) const;
         int getReligionCount(ReligionTypes religionType) const;
         ReligionTypes getStateReligion() const;
+        bool hasStateReligion() const;
 
     private:
         const CvCity* pCity_;

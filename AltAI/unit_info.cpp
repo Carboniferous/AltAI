@@ -27,10 +27,10 @@ namespace AltAI
             UnitInfo::UpgradeNode node;
 
             for (int i = 0, count = gGlobals.getNumUnitClassInfos(); i < count; ++i)
-        	{
-        		if (unitInfo.getUpgradeUnitClass(i))
+            {
+                if (unitInfo.getUpgradeUnitClass(i))
                 {
-			        node.upgrades.push_back((UnitClassTypes)i);
+                    node.upgrades.push_back((UnitClassTypes)i);
                 }
             }
 
@@ -59,7 +59,7 @@ namespace AltAI
             }
 
             for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
-        	{
+            {
                 if (unitInfo.getUnitCombatCollateralImmune(i))
                 {
                     CombatTypesMap::const_iterator ci(requestData.combatTypesMap.find((UnitCombatTypes)i));
@@ -119,9 +119,9 @@ namespace AltAI
             UnitInfo::CombatBonusNode node;
 
             for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
-		    {
+            {
                 int unitCombatModifier = unitInfo.getUnitCombatModifier(i);
-    		    if (unitCombatModifier > 0)
+                if (unitCombatModifier > 0)
                 {
                     CombatTypesMap::const_iterator ci(requestData.combatTypesMap.find((UnitCombatTypes)i));
                     if (ci != requestData.combatTypesMap.end())
@@ -135,9 +135,9 @@ namespace AltAI
             }
 
             for (int i = 0, count = gGlobals.getNumUnitClassInfos(); i < count; ++i)
-		    {
+            {
                 int attackMod = unitInfo.getUnitClassAttackModifier(i);
-			    if (attackMod != 0)
+                if (attackMod != 0)
                 {
                     const CvUnitClassInfo& unitClassInfo = gGlobals.getUnitClassInfo((UnitClassTypes)i);
                     UnitTypes defaultUnitType = (UnitTypes)unitClassInfo.getDefaultUnitIndex();
@@ -302,7 +302,7 @@ namespace AltAI
             node.canHurryBuilding = node.hurryBuilding.baseHurry > 0 && node.hurryBuilding.multiplier > 0;
 
             for (int i = 0, count = gGlobals.getNumSpecialistInfos(); i < count; ++i)
-	        {
+            {
                 if (unitInfo.getGreatPeoples(i))
                 {
                     node.settledSpecialists.push_back((SpecialistTypes)i);
@@ -318,13 +318,13 @@ namespace AltAI
 
         bool isForbiddenForDefensiveUnits(const CvPromotionInfo& promotionInfo)
         {
-		    return promotionInfo.getCityAttackPercent() != 0 ||
-			       promotionInfo.getWithdrawalChange() != 0 ||
-			       promotionInfo.getCollateralDamageChange() != 0 ||
-			       promotionInfo.isBlitz() ||
-			       promotionInfo.isAmphib() ||
-			       promotionInfo.isRiver() ||
-			       promotionInfo.getHillsAttackPercent() != 0;
+            return promotionInfo.getCityAttackPercent() != 0 ||
+                   promotionInfo.getWithdrawalChange() != 0 ||
+                   promotionInfo.getCollateralDamageChange() != 0 ||
+                   promotionInfo.isBlitz() ||
+                   promotionInfo.isAmphib() ||
+                   promotionInfo.isRiver() ||
+                   promotionInfo.getHillsAttackPercent() != 0;
         }
 
         typedef std::set<UnitInfo::PromotionsNode::Promotion> PromotionsSet;
@@ -438,7 +438,8 @@ namespace AltAI
             UnitInfo::BaseNode node(requestData.unitType);
             const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(requestData.unitType);
             
-            node.cost = CvPlayerAI::getPlayer(requestData.playerType).getProductionNeeded(requestData.unitType);
+            // includes settlers (0 xml cost), but excludes great people (-1 xml cost)
+            node.cost = unitInfo.getProductionCost() > -1 ? CvPlayerAI::getPlayer(requestData.playerType).getProductionNeeded(requestData.unitType) : 0;
 
             node.domainType = (DomainTypes)unitInfo.getDomainType();
 
@@ -449,13 +450,13 @@ namespace AltAI
             }
 
             for (int i = 0, count = gGlobals.getNUM_UNIT_PREREQ_OR_BONUSES(); i < count; ++i)
-		    {
-			    BonusTypes bonusType = (BonusTypes)unitInfo.getPrereqOrBonuses(i);
+            {
+                BonusTypes bonusType = (BonusTypes)unitInfo.getPrereqOrBonuses(i);
                 if (bonusType != NO_BONUS)
                 {
                     node.orBonusTypes.push_back(bonusType);
                 }
-    		}
+            }
 
             if (node.andBonusTypes.size() == 1 && node.orBonusTypes.size() == 1)
             {

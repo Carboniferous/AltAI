@@ -74,76 +74,76 @@ namespace AltAI
     {
         int iHappiness = 0;
 
-	    iHappiness += std::max<int>(0, largestCityHappiness_);
-	    iHappiness += std::max<int>(0, militaryHappiness_);
-	    iHappiness += std::max<int>(0, currentStateReligionHappiness_);
-	    iHappiness += std::max<int>(0, buildingGoodHappiness_);
-	    iHappiness += std::max<int>(0, extraBuildingGoodHappiness_);
-	    iHappiness += std::max<int>(0, featureGoodHappiness_);
-	    iHappiness += std::max<int>(0, bonusGoodHappiness_);
-	    iHappiness += std::max<int>(0, religionGoodHappiness_);
-	    iHappiness += std::max<int>(0, commerceHappiness_);
-	    iHappiness += std::max<int>(0, areaBuildingHappiness_);
-	    iHappiness += std::max<int>(0, playerBuildingHappiness_);
-	    iHappiness += std::max<int>(0, cityExtraHappiness_ + playerExtraHappiness_);
-	    iHappiness += std::max<int>(0, levelHappyBonus_);
-	    iHappiness += std::max<int>(0, vassalHappiness_);
+        iHappiness += std::max<int>(0, largestCityHappiness_);
+        iHappiness += std::max<int>(0, militaryHappiness_);
+        iHappiness += std::max<int>(0, currentStateReligionHappiness_);
+        iHappiness += std::max<int>(0, buildingGoodHappiness_);
+        iHappiness += std::max<int>(0, extraBuildingGoodHappiness_);
+        iHappiness += std::max<int>(0, featureGoodHappiness_);
+        iHappiness += std::max<int>(0, bonusGoodHappiness_);
+        iHappiness += std::max<int>(0, religionGoodHappiness_);
+        iHappiness += std::max<int>(0, commerceHappiness_);
+        iHappiness += std::max<int>(0, areaBuildingHappiness_);
+        iHappiness += std::max<int>(0, playerBuildingHappiness_);
+        iHappiness += std::max<int>(0, cityExtraHappiness_ + playerExtraHappiness_);
+        iHappiness += std::max<int>(0, levelHappyBonus_);
+        iHappiness += std::max<int>(0, vassalHappiness_);
 
-	    if (tempHappyTimer_ > 0)
-	    {
-		    iHappiness += TEMP_HAPPY_;
-	    }
+        if (tempHappyTimer_ > 0)
+        {
+            iHappiness += TEMP_HAPPY_;
+        }
 
-	    return std::max<int>(0, iHappiness);
+        return std::max<int>(0, iHappiness);
     }
 
     int HappyHelper::angryPopulation(const CityData& data) const
     {
-	    int iUnhappiness = 0;
+        int iUnhappiness = 0;
 
-	    if (!noUnhappiness_)
-	    {
-		    int iAngerPercent = 0;
+        if (!noUnhappiness_)
+        {
+            int iAngerPercent = 0;
 
-		    iAngerPercent += overcrowdingPercentAnger_;
-		    iAngerPercent += noMilitaryPercentAnger_;
-		    iAngerPercent += culturePercentAnger_;
-		    iAngerPercent += religionPercentAnger_;
-		    iAngerPercent += data.getHurryHelper()->getHurryPercentAnger();
-		    iAngerPercent += conscriptPercentAnger_;
-		    iAngerPercent += defyResolutionPercentAnger_;
-		    iAngerPercent += warWearinessPercentAnger_;
+            iAngerPercent += overcrowdingPercentAnger_;
+            iAngerPercent += noMilitaryPercentAnger_;
+            iAngerPercent += culturePercentAnger_;
+            iAngerPercent += religionPercentAnger_;
+            iAngerPercent += data.getHurryHelper()->getHurryPercentAnger();
+            iAngerPercent += conscriptPercentAnger_;
+            iAngerPercent += defyResolutionPercentAnger_;
+            iAngerPercent += warWearinessPercentAnger_;
 
-		    for (int i = 0, count = civicPercentAnger_.size(); i < count; ++i)
-		    {
-			    iAngerPercent += civicPercentAnger_[i];
-		    }
+            for (int i = 0, count = civicPercentAnger_.size(); i < count; ++i)
+            {
+                iAngerPercent += civicPercentAnger_[i];
+            }
 
-		    iUnhappiness = (iAngerPercent * population_) / PERCENT_ANGER_DIVISOR_;
+            iUnhappiness = (iAngerPercent * population_) / PERCENT_ANGER_DIVISOR_;
 
-		    iUnhappiness -= std::min<int>(0, largestCityHappiness_);
-		    iUnhappiness -= std::min<int>(0, militaryHappiness_);
-		    iUnhappiness -= std::min<int>(0, currentStateReligionHappiness_);
-		    iUnhappiness -= std::min<int>(0, buildingBadHappiness_);
-		    iUnhappiness -= std::min<int>(0, extraBuildingBadHappiness_);
-		    iUnhappiness -= std::min<int>(0, featureBadHappiness_);
-		    iUnhappiness -= std::min<int>(0, bonusBadHappiness_);
-		    iUnhappiness -= std::min<int>(0, religionBadHappiness_);
-		    iUnhappiness -= std::min<int>(0, commerceHappiness_);
-		    iUnhappiness -= std::min<int>(0, areaBuildingHappiness_);
-		    iUnhappiness -= std::min<int>(0, playerBuildingHappiness_);
-		    iUnhappiness -= std::min<int>(0, cityExtraHappiness_ + playerExtraHappiness_);
-		    iUnhappiness -= std::min<int>(0, levelHappyBonus_);
-		    iUnhappiness += std::max<int>(0, vassalUnhappiness_);
-		    iUnhappiness += std::max<int>(0, espionageHappinessCounter_);
-	    }
+            iUnhappiness -= std::min<int>(0, largestCityHappiness_);
+            iUnhappiness -= std::min<int>(0, militaryHappiness_);
+            iUnhappiness -= std::min<int>(0, currentStateReligionHappiness_);
+            iUnhappiness -= std::min<int>(0, buildingBadHappiness_);
+            iUnhappiness -= std::min<int>(0, extraBuildingBadHappiness_);
+            iUnhappiness -= std::min<int>(0, featureBadHappiness_);
+            iUnhappiness -= std::min<int>(0, bonusBadHappiness_);
+            iUnhappiness -= std::min<int>(0, religionBadHappiness_);
+            iUnhappiness -= std::min<int>(0, commerceHappiness_);
+            iUnhappiness -= std::min<int>(0, areaBuildingHappiness_);
+            iUnhappiness -= std::min<int>(0, playerBuildingHappiness_);
+            iUnhappiness -= std::min<int>(0, cityExtraHappiness_ + playerExtraHappiness_);
+            iUnhappiness -= std::min<int>(0, levelHappyBonus_);
+            iUnhappiness += std::max<int>(0, vassalUnhappiness_);
+            iUnhappiness += std::max<int>(0, espionageHappinessCounter_);
+        }
 
-	    return std::max<int>(0, iUnhappiness);
+        return std::max<int>(0, iUnhappiness);
     }
 
     void HappyHelper::advanceTurn(CityData& data)
     {
-        data.getHurryHelper()->advanceTurn();
+        data.getHurryHelper()->advanceTurns(1);
         if (--tempHappyTimer_ < 0)
         {
             tempHappyTimer_ = 0;
@@ -159,10 +159,10 @@ namespace AltAI
 
     void HappyHelper::setOvercrowdingPercentAnger_()
     {
-	    if (population_ > 0)
-	    {
-		    overcrowdingPercentAnger_ = 1 + (population_ * PERCENT_ANGER_DIVISOR_) / std::max<int>(1, population_);
-	    }
+        if (population_ > 0)
+        {
+            overcrowdingPercentAnger_ = 1 + (population_ * PERCENT_ANGER_DIVISOR_) / std::max<int>(1, population_);
+        }
     }
 
     void HappyHelper::changeBuildingGoodHappiness(int change)
@@ -187,12 +187,12 @@ namespace AltAI
 
     void HappyHelper::changeBonusGoodHappiness(int change)
     {
-        buildingGoodHappiness_ += change;
+        bonusGoodHappiness_ += change;
     }
 
     void HappyHelper::changeBonusBadHappiness(int change)
     {
-        buildingBadHappiness_ += change;
+        bonusBadHappiness_ += change;
     }
 
     void HappyHelper::changeFeatureGoodHappiness(int change)
@@ -214,9 +214,9 @@ namespace AltAI
     {
         // use actual rank - more interested in preserving relative order than actual size
         if (pCity_->findPopulationRank() <= targetNumCities_)
-	    {
-		    largestCityHappiness_ += change;
-	    }
+        {
+            largestCityHappiness_ += change;
+        }
     }
 
     void HappyHelper::setMilitaryHappiness(int happyPerUnit)
@@ -237,5 +237,10 @@ namespace AltAI
     void HappyHelper::setNoUnhappiness(bool newState)
     {
         noUnhappiness_ = newState;
+    }
+
+    bool HappyHelper::isNoUnhappiness() const
+    {
+        return noUnhappiness_;
     }
 }

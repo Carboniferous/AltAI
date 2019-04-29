@@ -266,9 +266,19 @@ bool isLimitedProject(ProjectTypes eProject);													// Exposed to Python
 
 __int64 getBinomialCoefficient(int iN, int iK);
 int getCombatOdds(CvUnit* pAttacker, CvUnit* pDefender);							// Exposed to Python
-int getCombatOdds(int attCombat, int attFS, int attChanceFS, bool attImmuneToFS, int attFirePower, int attHP, int attMaxHP, int attCombatLimit, 
-                  int defCombat, int defFS, int defChanceFS, bool defImmuneToFS, int defFirePower, int defHP, int defMaxHP);
-
+int getCombatOdds(const int attStrength, const int attFS, const int attChanceFS, const bool attImmuneToFS, const int attFirePower, const int attHP, const int attMaxHP, const int attCombatLimit, 
+                  const int defStrength, const int defFS, const int defChanceFS, const bool defImmuneToFS, const int defFirePower, const int defHP, const int defMaxHP);
+/////////////////////////////////////////////////////////////////
+// ADVANCED COMABT ODDS                         PieceOfMind    //
+// BEGIN                                                       //
+/////////////////////////////////////////////////////////////////
+DllExport float getCombatOddsSpecific(CvUnit* pAttacker, CvUnit* pDefender, int n_A, int n_D);
+/////////////////////////////////////////////////////////////////
+// ADVANCED COMABT ODDS                         PieceOfMind    //
+// END                                                         //
+/////////////////////////////////////////////////////////////////
+float getCombatOdds(const int attStrength, const int attFS, const int attChanceFS, const bool attImmuneToFS, const int attFirePower, const int attHP, const int attMaxHP, const int attCombatLimit, const int attWithdrawalProb,
+                    const int defStrength, const int defFS, const int defChanceFS, const bool defImmuneToFS, const int defFirePower, const int defHP, const int defMaxHP, const int nHitsToAttacker, const int nHitsToDefender);
 
 int getEspionageModifier(TeamTypes eOurTeam, TeamTypes eTargetTeam);							// Exposed to Python
 
@@ -339,7 +349,12 @@ int areaValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 int subAreaValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 // AltAI
 int irrigatableAreaValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+// AltAI
+int routeStepCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+// AltAI
 int irrigationStepCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+int irrigationStepAdd(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+// AltAI
 int irrigationStepValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 int joinArea(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 // AltAI
@@ -361,6 +376,7 @@ struct SubAreaStepFlags
 
 // AltAI
 int subAreaStepDestValid(int iToX, int iToY, const void* pointer, FAStar* finder);
+int areaStepValidWithFlags(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 int subAreaStepValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 
 int baseYieldToSymbol(int iNumYieldTypes, int iYieldStack);

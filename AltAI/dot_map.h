@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./utils.h"
+#include "./plot_data.h"
 
 namespace AltAI
 {
@@ -14,7 +15,7 @@ namespace AltAI
             {
             }
 
-            DotMapPlotData(const CvPlot* pPlot, PlayerTypes playerType, int lookAheadDepth);
+            DotMapPlotData(const PlotData& plotData, PlayerTypes playerType, int lookAheadDepth);
 
             explicit DotMapPlotData(XYCoords coords_) : coords(coords_), workedImprovement(-1), neighbourCityCount(0), workedByNeighbour(false),
                 bonusType(NO_BONUS), featureType(NO_FEATURE), isPinned(false), isSelected(true), improvementMakesBonusValid(false) {}
@@ -25,13 +26,16 @@ namespace AltAI
             BonusTypes bonusType;
             FeatureTypes featureType;
             std::vector<std::pair<PlotYield, ImprovementTypes> > possibleImprovements;
+            PlotYield currentYield;
             bool isPinned, isSelected, improvementMakesBonusValid;
             bool operator < (const DotMapPlotData& other) const { return coords < other.coords; }
-            PlotYield getPlotYield() const { return workedImprovement == -1 ? PlotYield() : possibleImprovements[workedImprovement].first; }
+            PlotYield getPlotYield() const { return workedImprovement == -1 ? currentYield : possibleImprovements[workedImprovement].first; }
 
-            PlotYield getPlotYield(int index) const { return (index == -1 || possibleImprovements.empty()) ? PlotYield() : possibleImprovements[index].first; }
+            PlotYield getPlotYield(int index) const { return (index == -1 || possibleImprovements.empty()) ? currentYield : possibleImprovements[index].first; }
             ImprovementTypes getWorkedImprovement() const { return workedImprovement == -1 ? NO_IMPROVEMENT : possibleImprovements[workedImprovement].second; }
             ImprovementTypes getWorkedImprovement(int index) const { return index == -1 ? NO_IMPROVEMENT : possibleImprovements[index].second; }
+
+            void debug(std::ostream& os) const;
         };
 
         template <typename P>
@@ -89,7 +93,11 @@ namespace AltAI
             {
                 int bestImprovementIndex = plotIter->workedImprovement;
                 PlotYield bestYield = plotIter->getPlotYield();
-                bool improvementMakesBonusValid = false;
+                bool improvementMakesBonusValid = 
+                    plotIter->bonusType != NO_BONUS && 
+                    bestImprovementIndex != -1 &&
+                    plotIter->possibleImprovements[bestImprovementIndex].second != NO_IMPROVEMENT &&
+                    gGlobals.getImprovementInfo(plotIter->possibleImprovements[bestImprovementIndex].second).isImprovementBonusMakesValid(plotIter->bonusType);
 
                 if (!plotIter->isPinned)
                 {

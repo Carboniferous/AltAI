@@ -18,7 +18,8 @@ namespace AltAI
     void updateRequestData(const CvCity* pCity, CityData& data, const boost::shared_ptr<TechInfo>& pTechInfo);
 
     bool techAffectsBuildings(const boost::shared_ptr<TechInfo>& pTechInfo);
-    bool techAffectsImprovements(const boost::shared_ptr<TechInfo>& pTechInfo);
+    bool techAffectsImprovements(const boost::shared_ptr<TechInfo>& pTechInfo, 
+        std::vector<ImprovementTypes>& affectedImprovements, std::vector<FeatureTypes>& removeFeatureTypes);
     bool techIsWorkerTech(const boost::shared_ptr<TechInfo>& pTechInfo);
 
     std::vector<BonusTypes> getRevealedBonuses(const boost::shared_ptr<TechInfo>& pTechInfo);

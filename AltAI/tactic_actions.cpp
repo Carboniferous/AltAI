@@ -1,6 +1,7 @@
 #include "AltAI.h"
 
 #include "./tactic_actions.h"
+#include "./tactics_interfaces.h"
 #include "./save_utils.h"
 
 namespace AltAI
@@ -234,5 +235,33 @@ namespace AltAI
     //    pStream->Read(&victoryFlags);
 
     //    readComplexVector<ConstructItem>(pStream, prerequisites);
+    }
+
+    void ConstructItem::debug(std::ostream& os) const
+    {
+        if (buildingType != NO_BUILDING)
+        {
+            os << " building: " << gGlobals.getBuildingInfo(buildingType).getType();
+        }
+        if (unitType != NO_UNIT)
+        {
+            os << " unit: " << gGlobals.getUnitInfo(unitType).getType();
+        }
+        if (projectType != NO_PROJECT)
+        {
+            os << " project: " << gGlobals.getProjectInfo(projectType).getType();
+        }
+        if (processType != NO_PROCESS)
+        {
+            os << " process: " << gGlobals.getProcessInfo(processType).getType();
+        }
+        if (improvementType != NO_IMPROVEMENT)
+        {
+            os << " improvement: " << gGlobals.getImprovementInfo(improvementType).getType();
+        }
+        if (buildTarget != XYCoords())
+        {
+            os << " build target: " << buildTarget;
+        }
     }
 }

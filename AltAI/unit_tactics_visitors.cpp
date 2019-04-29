@@ -3,6 +3,7 @@
 #include "./unit_tactics_visitors.h"
 #include "./unit_info.h"
 #include "./unit_info_visitors.h"
+#include "./resource_info_visitors.h"
 #include "./city_unit_tactics.h"
 #include "./building_tactics_items.h"
 #include "./unit_tactics_items.h"
@@ -220,14 +221,26 @@ namespace AltAI
         void operator() (const UnitInfo::BaseNode& node)
         {
             // always add bonus requirements, as cities' access can vary
-            if (!node.andBonusTypes.empty())
+            if (!node.andBonusTypes.empty() || !node.orBonusTypes.empty())
             {
-                dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(node.andBonusTypes, node.unitType, false)));
-            }
-
-            if (!node.orBonusTypes.empty())
-            {
-                dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(node.orBonusTypes, node.unitType, true)));
+                std::map<BonusTypes, TechTypes> bonusTypesRevealTechsMap;
+                for (size_t i = 0, count = node.andBonusTypes.size(); i < count; ++i)
+                {
+                    TechTypes resourceRevealTech = getTechForResourceReveal(player_.getAnalysis()->getResourceInfo(node.andBonusTypes[i]));
+                    if (resourceRevealTech != NO_TECH)
+                    {
+                        bonusTypesRevealTechsMap[node.andBonusTypes[i]] = resourceRevealTech;
+                    }
+                }
+                for (size_t i = 0, count = node.orBonusTypes.size(); i < count; ++i)
+                {
+                    TechTypes resourceRevealTech = getTechForResourceReveal(player_.getAnalysis()->getResourceInfo(node.orBonusTypes[i]));
+                    if (resourceRevealTech != NO_TECH)
+                    {
+                        bonusTypesRevealTechsMap[node.orBonusTypes[i]] = resourceRevealTech;
+                    }
+                }
+                dependentTactics_.push_back(IDependentTacticPtr(new CityBonusDependency(node.andBonusTypes, node.orBonusTypes, bonusTypesRevealTechsMap, node.unitType)));
             }
 
             for (size_t i = 0, count = node.techTypes.size(); i < count; ++i)
@@ -292,7 +305,7 @@ namespace AltAI
 
         void operator() (const UnitInfo::BaseNode& node)
         {
-            pTactic_ = ICityUnitTacticsPtr(new CityUnitTactic(unitType_, city_.getCvCity()->getIDInfo()));
+            pTactic_ = CityUnitTacticsPtr(new CityUnitTactics(unitType_, city_.getCvCity()->getIDInfo()));
 
             MakeUnitTacticsDependenciesVisitor dependentTacticsVisitor(player_, city_.getCvCity());
             dependentTacticsVisitor(node);
@@ -336,7 +349,13 @@ namespace AltAI
 
         void operator() (const UnitInfo::PromotionsNode& node)
         {
-            
+            for (std::set<UnitInfo::PromotionsNode::Promotion>::const_iterator ci(node.promotions.begin()), ciEnd(node.promotions.end()); ci != ciEnd; ++ci)
+            {
+                if (ci->level == 0)
+                {
+                    freePromotions_.insert(ci->promotionType);
+                }
+            }
         }
         
         void operator() (const UnitInfo::CombatBonusNode& node)
@@ -351,9 +370,14 @@ namespace AltAI
         {
         }
 
-        const ICityUnitTacticsPtr& getTactic() const
+        const CityUnitTacticsPtr& getTactic() const
         {
             return pTactic_;
+        }
+
+        const Promotions& getFreePromotions() const
+        {
+            return freePromotions_;
         }
 
     private:
@@ -361,8 +385,9 @@ namespace AltAI
         const CvUnitInfo& unitInfo_;
         const Player& player_;
         const City& city_;
-        ICityUnitTacticsPtr pTactic_;
+        CityUnitTacticsPtr pTactic_;
         boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;
+        Promotions freePromotions_;
     };
 
     class MakeSpecialUnitTacticsVisitor : public boost::static_visitor<>
@@ -381,7 +406,7 @@ namespace AltAI
 
         void operator() (const UnitInfo::BaseNode& node)
         {
-            pTactic_ = IUnitTacticsPtr(new UnitTactic(unitType_));
+            pTactic_ = UnitTacticsPtr(new UnitTactics(player_.getPlayerID(), unitType_));
 
             for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
             {
@@ -395,27 +420,38 @@ namespace AltAI
             {
                 for (size_t i = 0, count = node.specialBuildings.buildings.size(); i < count; ++i)
                 {
-                    pTactic_->addTactic(IUnitTacticPtr(new BuildSpecialBuildingUnitTactic(node.specialBuildings.buildings[i])));
+                    pTactic_->addTactic(IBuiltUnitTacticPtr(new BuildSpecialBuildingUnitTactic(node.specialBuildings.buildings[i])));
+                    pTactic_->addDependency(boost::shared_ptr<CivUnitDependency>(new CivUnitDependency(unitType_)));
                 }
             }
 
             if (node.canDiscoverTech)
             {
-                pTactic_->addTactic(IUnitTacticPtr(new DiscoverTechUnitTactic()));
+                pTactic_->addTactic(IBuiltUnitTacticPtr(new DiscoverTechUnitTactic()));
             }
 
             if (node.canCreateGreatWork)
             {
-                pTactic_->addTactic(IUnitTacticPtr(new CreateGreatWorkUnitTactic()));
+                pTactic_->addTactic(IBuiltUnitTacticPtr(new CreateGreatWorkUnitTactic()));
             }
 
             if (node.canDoTradeMission)
             {
-                pTactic_->addTactic(IUnitTacticPtr(new TradeMissionUnitTactic()));
+                pTactic_->addTactic(IBuiltUnitTacticPtr(new TradeMissionUnitTactic()));
+            }
+
+            for (size_t i = 0, count = node.settledSpecialists.size(); i < count; ++i)
+            {
+                pTactic_->addTactic(IBuiltUnitTacticPtr(new JoinCityUnitTactic(node.settledSpecialists[i])));
+            }
+
+            if (node.canHurryBuilding)
+            {
+                pTactic_->addTactic(IBuiltUnitTacticPtr(new HurryBuildingUnitTactic(node.hurryBuilding.baseHurry, node.hurryBuilding.multiplier)));
             }
         }
 
-        const IUnitTacticsPtr& getTactic() const
+        const UnitTacticsPtr& getTactic() const
         {
             return pTactic_;
         }
@@ -424,114 +460,102 @@ namespace AltAI
         UnitTypes unitType_;
         const CvUnitInfo& unitInfo_;
         const Player& player_;
-        IUnitTacticsPtr pTactic_;
-        boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;
+        UnitTacticsPtr pTactic_;
+        boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;        
     };
 
-    /*ConstructItem getEconomicUnitTactics(const Player& player, UnitTypes unitType, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    CityUnitTacticsPtr makeCityUnitTactics(const Player& player, const City& city, const boost::shared_ptr<UnitInfo>& pUnitInfo)
     {
-        MakeEconomicUnitConditionsVisitor visitor(player, unitType);
-        boost::apply_visitor(visitor, pUnitInfo->getInfo());
+        static const int MAX_HIT_POINTS = gGlobals.getMAX_HIT_POINTS();  // 100
 
-        return visitor.getConstructItem();
-    }*/
-
-    /*ConstructItem getMilitaryExpansionUnitTactics(const Player& player, UnitTypes unitType, const boost::shared_ptr<UnitInfo>& pUnitInfo)
-    {
-        MakeMilitaryExpansionUnitConditionsVisitor visitor(player, unitType);
-        boost::apply_visitor(visitor, pUnitInfo->getInfo());
-
-        return visitor.getConstructItem();
-    }*/
-
-    ICityUnitTacticsPtr makeCityUnitTactics(const Player& player, const City& city, const boost::shared_ptr<UnitInfo>& pUnitInfo)
-    {
         const UnitTypes unitType = pUnitInfo->getUnitType();
         const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(pUnitInfo->getUnitType());
         boost::shared_ptr<UnitAnalysis> pUnitAnalysis = player.getAnalysis()->getUnitAnalysis();   
 
         MakeUnitTacticsVisitor visitor(player, city, pUnitInfo->getUnitType());
         boost::apply_visitor(visitor, pUnitInfo->getInfo());
-        ICityUnitTacticsPtr pCityUnitTactics = visitor.getTactic();
+        CityUnitTacticsPtr pCityUnitTactics = visitor.getTactic();
 
-        int maxPromotionLevel = 0;
         int freeExperience = ((CvCity*)city.getCvCity())->getProductionExperience(unitType);
-        int requiredExperience = 2;
-        while (freeExperience > requiredExperience)
-        {
-            // TODO - handle charismatic
-            requiredExperience += 2 * ++maxPromotionLevel + 1;
-        }
+        int maxPromotionLevel = player.getAnalysis()->getUnitLevel(freeExperience);
 
         if (unitInfo.getDomainType() == DOMAIN_LAND && unitInfo.getCombat() > 0)
         {
             if (!unitInfo.isOnlyDefensive())
             {
                 {
-                    UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
+                    /*UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
 
                     if (levelsAndPromotions.second.empty())
-			        {
-				        levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
-			        }
+                    {
+                        levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+                    }
 
-                    UnitData unitData(unitInfo, levelsAndPromotions.second);
-                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityAttackUnitTactic(levelsAndPromotions.second)));
+                    UnitData unitData(unitType, levelsAndPromotions.second);*/
+                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityAttackUnitTactic(visitor.getFreePromotions())));
                 }
 
                 if (unitInfo.getCombatLimit() == 100)
                 {
-                    UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+                    /*UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 
-                    UnitData unitData(unitInfo, levelsAndPromotions.second);
-                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldAttackUnitTactic(levelsAndPromotions.second)));
+                    UnitData unitData(unitType, levelsAndPromotions.second);*/
+                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldAttackUnitTactic(visitor.getFreePromotions())));
                 }
 
                 // todo - refine this check
                 if (unitInfo.getCollateralDamage() > 0)
                 {
-                    UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
+                    /*UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityAttackPromotions(unitType, maxPromotionLevel);
 
                     if (levelsAndPromotions.second.empty())
-			        {
+                    {
                         levelsAndPromotions = pUnitAnalysis->getCollateralPromotions(unitType, maxPromotionLevel);
-			        }
+                    }
 
-                    UnitData unitData(unitInfo, levelsAndPromotions.second);
-                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CollateralUnitTactic(levelsAndPromotions.second)));
+                    UnitData unitData(unitType, levelsAndPromotions.second);*/
+                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CollateralUnitTactic(visitor.getFreePromotions())));
                 }
             }
-
+            // can include defensive only units here
             {
-                UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityDefencePromotions(unitType, maxPromotionLevel);
+                /*UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityDefencePromotions(unitType, maxPromotionLevel);
 
                 if (levelsAndPromotions.second.empty())
-			    {
-				    levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
-			    }
+                {
+                    levelsAndPromotions = pUnitAnalysis->getCityDefencePromotions(unitType, maxPromotionLevel);
+                }
 
-                UnitData unitData(unitInfo, levelsAndPromotions.second);
-                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityDefenceUnitTactic(levelsAndPromotions.second)));
+                UnitData unitData(unitType, levelsAndPromotions.second);*/
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityDefenceUnitTactic(visitor.getFreePromotions())));
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new ThisCityDefenceUnitTactic(visitor.getFreePromotions())));
             }
 
             {
-                UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+                /*UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 
-                UnitData unitData(unitInfo, levelsAndPromotions.second);
-                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldDefenceUnitTactic(levelsAndPromotions.second)));
+                UnitData unitData(unitType, levelsAndPromotions.second);*/
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new FieldDefenceUnitTactic(visitor.getFreePromotions())));
+            }
+
+            {
+                //UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+                //// todo - get movement promotions
+                //UnitData unitData(unitType, levelsAndPromotions.second);
+                pCityUnitTactics->addTactic(ICityUnitTacticPtr(new ScoutUnitTactic(visitor.getFreePromotions())));
             }
         }
         else if (unitInfo.getDomainType() == DOMAIN_SEA)
         {
             if (unitInfo.getCombat() > 0 && !unitInfo.isOnlyDefensive())
             {
-                UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
+                /*UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 
-                UnitData unitData(unitInfo, levelsAndPromotions.second);
+                UnitData unitData(unitType, levelsAndPromotions.second);*/
 
-                if (unitData.combat > 0)
+                //if (unitData.baseCombat > 0)
                 {
-                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new SeaAttackUnitTactic(levelsAndPromotions.second)));
+                    pCityUnitTactics->addTactic(ICityUnitTacticPtr(new SeaAttackUnitTactic(visitor.getFreePromotions())));
                 }
             }
 
@@ -539,12 +563,14 @@ namespace AltAI
             {
                 // todo
             }
+
+            // todo - add sea scout unit tactic entries
         }
 
         return pCityUnitTactics;
     }
 
-    IUnitTacticsPtr makeUnitTactics(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    UnitTacticsPtr makeUnitTactics(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo)
     {
         const int lookAheadDepth = 2;
         if (couldConstructUnit(player, lookAheadDepth, pUnitInfo, true))
@@ -552,14 +578,14 @@ namespace AltAI
             const UnitTypes unitType = pUnitInfo->getUnitType();
             const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
 
-            IUnitTacticsPtr pTactic(new UnitTactic(unitType));
+            UnitTacticsPtr pTactic(new UnitTactics(player.getPlayerID(), unitType));
 
             CityIter iter(*player.getCvPlayer());
 
             while (CvCity* pCity = iter())
             {
 #ifdef ALTAI_DEBUG
-                CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for unit: " << unitInfo.getType();
+                CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for unit: " << unitInfo.getType() << " for city: " << narrow(pCity->getName());
 #endif
                 
                 pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, player.getCity(pCity), pUnitInfo));               
@@ -577,10 +603,10 @@ namespace AltAI
             return pTactic;
         }
 
-        return IUnitTacticsPtr();
+        return UnitTacticsPtr();
     }
 
-    IUnitTacticsPtr makeSpecialUnitTactics(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    UnitTacticsPtr makeSpecialUnitTactics(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo)
     {
         const UnitTypes unitType = pUnitInfo->getUnitType();
         const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);

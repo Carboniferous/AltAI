@@ -2,39 +2,32 @@
 
 namespace AltAI
 {
-    struct SharedPlotItem
+    struct SharedPlot
     {
-        SharedPlotItem() : coords(-1, -1), assignedImprovement(IDInfo(), boost::make_tuple(NO_IMPROVEMENT, NO_FEATURE, PlotYield(), 0)) {}
+        SharedPlot() : coords(-1, -1) {}
+        explicit SharedPlot(XYCoords coords_) : coords(coords_) {}
 
         XYCoords coords;
-        typedef std::list<IDInfo> PossibleCities;
+        typedef std::set<IDInfo> PossibleCities;
         typedef PossibleCities::const_iterator PossibleCitiesConstIter;
         typedef PossibleCities::iterator PossibleCitiesIter;
         PossibleCities possibleCities;
-        IDInfo assignedCity;
+        IDInfo assignedCity, assignedImprovementCity;
 
-        bool isShared() const { return !(coords == XYCoords(-1, -1)); }
-
-        // owning city assigned desired improvement
-        typedef std::pair<IDInfo, boost::tuple<ImprovementTypes, FeatureTypes, PlotYield, int> > AssignedImprovement;
-        AssignedImprovement assignedImprovement;
+        bool isShared() const { return possibleCities.size() > 1; }
     };
-
-    typedef boost::shared_ptr<SharedPlotItem> SharedPlotItemPtr;
 
     struct CitySharedPlots
     {
-        explicit CitySharedPlots(IDInfo idInfo) : city(idInfo) {}
+        CitySharedPlots() {}
+        explicit CitySharedPlots(IDInfo city_) : city(city_) {}
 
         IDInfo city;
-        typedef std::list<SharedPlotItemPtr> SharedPlots;
-        typedef SharedPlots::iterator SharedPlotsIter;
-        typedef SharedPlots::const_iterator SharedPlotsConstIter;
-        SharedPlots sharedPlots;
+        std::set<XYCoords> sharedPlots;
 
-        bool operator < (const CitySharedPlots& other) const
+        bool isSharedPlot(XYCoords coords) const
         {
-            return city < other.city;
+            return sharedPlots.find(coords) != sharedPlots.end();
         }
     };
 }

@@ -28,7 +28,6 @@
 #include "team.h"
 #include "city.h"
 #include "iters.h"
-#include "plot_events.h"
 
 // Public Functions...
 
@@ -646,7 +645,7 @@ void CvTeam::shareItems(TeamTypes eTeam)
 	{
 		if (GET_TEAM(eTeam).isHasTech((TechTypes)iI))
 		{
-			setHasTech(((TechTypes)iI), true, NO_PLAYER, true, false);
+			setHasTech(((TechTypes)iI), true, NO_PLAYER, true, false, AltAI::SHARE_TECH);
 		}
 	}
 
@@ -4366,7 +4365,7 @@ void CvTeam::setResearchProgress(TechTypes eIndex, int iNewValue, PlayerTypes eP
 		{
 			int iOverflow = (100 * (getResearchProgress(eIndex) - getResearchCost(eIndex))) / std::max(1, GET_PLAYER(ePlayer).calculateResearchModifier(eIndex));
 			GET_PLAYER(ePlayer).changeOverflowResearch(iOverflow);
-			setHasTech(eIndex, true, ePlayer, true, true);
+			setHasTech(eIndex, true, ePlayer, true, true, AltAI::RESEARCH_TECH);
 			if (!GC.getGameINLINE().isMPOption(MPOPTION_SIMULTANEOUS_TURNS) && !GC.getGameINLINE().isOption(GAMEOPTION_NO_TECH_BROKERING))
 			{
 				setNoTradeTech(eIndex, true);
@@ -4664,7 +4663,7 @@ void CvTeam::announceTechToPlayers(TechTypes eIndex, bool bPartial)
 	}
 }
 
-void CvTeam::setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, bool bFirst, bool bAnnounce)
+void CvTeam::setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, bool bFirst, bool bAnnounce, int source)
 {
 	PROFILE_FUNC();
 
@@ -4771,7 +4770,7 @@ void CvTeam::setHasTech(TechTypes eIndex, bool bNewValue, PlayerTypes ePlayer, b
             {
                 if (player->isUsingAltAI())
                 {
-                    GC.getGame().getAltAI()->getPlayer(player->getID())->addTech(eIndex);
+					GC.getGame().getAltAI()->getPlayer(player->getID())->addTech(eIndex, (AltAI::TechSources)source);
                 }
             }
         }
@@ -5259,7 +5258,7 @@ void CvTeam::updateTechShare(TechTypes eTech)
 
 		if (iCount >= iBestShare)
 		{
-			setHasTech(eTech, true, NO_PLAYER, true, true);
+			setHasTech(eTech, true, NO_PLAYER, true, true, AltAI::SHARE_TECH);
 		}
 	}
 }
@@ -5539,7 +5538,7 @@ void CvTeam::processTech(TechTypes eTech, int iChange)
                 // AltAI
                 if (pLoopPlot->isRevealed(m_eID, false))
                 {
-                    GC.getGame().getAltAI()->getTeam(m_eID)->pushPlotEvent(boost::shared_ptr<AltAI::IPlotEvent>(new AltAI::RevealBonusEvent(pLoopPlot, eBonus)));
+                    GC.getGame().getAltAI()->getTeam(m_eID)->updatePlotBonus(pLoopPlot, eBonus);
                 }
 			}
 		}

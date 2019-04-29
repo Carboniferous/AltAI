@@ -39,7 +39,7 @@ namespace AltAI
             return numTiles_;
         }
 
-        void setIrrigatable()
+        void setHasFreshWaterAccess()
         {
             hasFreshWaterAccess_ = true;
         }

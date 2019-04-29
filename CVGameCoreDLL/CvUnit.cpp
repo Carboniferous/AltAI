@@ -261,6 +261,22 @@ void CvUnit::init(int iID, UnitTypes eUnit, UnitAITypes eUnitAI, PlayerTypes eOw
     {
         GC.getGame().getAltAI()->getPlayer(m_eOwner)->addUnit((CvUnitAI*)this);
     }
+
+    // AltAI
+    AltAI::PlayerIter playerIter;
+    while (const CvPlayerAI* player = playerIter())
+    {
+        if (player->isUsingAltAI())
+        {
+            TeamTypes teamType = player->getTeam();
+            bool unitPlotVisible = plot()->isVisible(teamType, false);
+
+            if (unitPlotVisible)
+            {
+                GC.getGame().getAltAI()->getPlayer(player->getID())->addPlayerUnit((CvUnitAI*)this, plot());
+            }
+        }
+    }
 }
 
 
@@ -628,6 +644,28 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer)
 
 	CvEventReporter::getInstance().unitLost(this);
 
+    // AltAI
+    AltAI::PlayerIter playerIter;
+    while (const CvPlayerAI* player = playerIter())
+    {
+        if (player->isUsingAltAI())
+        {
+            TeamTypes teamType = player->getTeam();
+            bool unitPlotVisible = pPlot->isVisible(teamType, false);
+
+            if (unitPlotVisible)
+            {
+                GC.getGame().getAltAI()->getPlayer(player->getID())->deletePlayerUnit((CvUnitAI*)this, pPlot);
+            }
+        }
+    }
+
+    // AltAI
+    if (GET_PLAYER(m_eOwner).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(eOwner)->deleteUnit(this);
+    }
+
 	GET_PLAYER(getOwnerINLINE()).deleteUnit(getID());
 
 	if ((eCapturingPlayer != NO_PLAYER) && (eCaptureUnitType != NO_UNIT) && !(GET_PLAYER(eCapturingPlayer).isBarbarian()))
@@ -666,12 +704,6 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer)
 			}
 		}
 	}
-
-    // AltAI
-    if (GET_PLAYER(m_eOwner).isUsingAltAI())
-    {
-        GC.getGame().getAltAI()->getPlayer(eOwner)->deleteUnit((CvUnitAI*)this);
-    }
 }
 
 
@@ -2744,28 +2776,31 @@ void CvUnit::move(CvPlot* pPlot, bool bShow)
 	setXY(pPlot->getX_INLINE(), pPlot->getY_INLINE(), true, true, bShow && pPlot->isVisibleToWatchingHuman(), bShow);
 
     // AltAI
-    if (GET_PLAYER(m_eOwner).isUsingAltAI())
+    /*if (GET_PLAYER(m_eOwner).isUsingAltAI())
     {
         GC.getGame().getAltAI()->getPlayer(m_eOwner)->moveUnit((CvUnitAI*)this, pOldPlot, pPlot);
-    }
+    }*/
 
-    // AltAI
-    AltAI::PlayerIter playerIter;
-    while (const CvPlayerAI* player = playerIter())
+    if (!m_pUnitInfo->isInvisible())
     {
-        if (player->isUsingAltAI())
+        // AltAI
+        AltAI::PlayerIter playerIter;
+        while (const CvPlayerAI* player = playerIter())
         {
-            TeamTypes teamType = player->getTeam();
-            bool sourcePlotVisible = pOldPlot->isVisible(teamType, false);
-            bool destPlotVisible = pPlot->isVisible(teamType, false);
+            if (player->isUsingAltAI())
+            {
+                TeamTypes teamType = player->getTeam();
+                bool sourcePlotVisible = pOldPlot->isVisible(teamType, false);
+                bool destPlotVisible = pPlot->isVisible(teamType, false);
 
-            if (destPlotVisible)
-            {
-                GC.getGame().getAltAI()->getPlayer(player->getID())->movePlayerUnit((CvUnitAI*)this, pPlot);
-            }
-            else if (sourcePlotVisible)
-            {
-                GC.getGame().getAltAI()->getPlayer(player->getID())->hidePlayerUnit((CvUnitAI*)this, pOldPlot);
+                if (destPlotVisible)
+                {
+                    GC.getGame().getAltAI()->getPlayer(player->getID())->movePlayerUnit((CvUnitAI*)this, sourcePlotVisible ? pOldPlot : (CvPlot*)0, pPlot);
+                }
+                else if (sourcePlotVisible)
+                {
+                    GC.getGame().getAltAI()->getPlayer(player->getID())->hidePlayerUnit((CvUnitAI*)this, pOldPlot);
+                }
             }
         }
     }
@@ -2798,6 +2833,11 @@ void CvUnit::move(CvPlot* pPlot, bool bShow)
 			}
 		}
 	}
+
+    if (CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->updateMission((CvUnitAI*)this, pOldPlot, pPlot);
+    }
 
 	CvEventReporter::getInstance().unitMove(pPlot, this, pOldPlot);
 }
@@ -6390,11 +6430,7 @@ bool CvUnit::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestVisible)
 	}
 
 	if (!(GET_PLAYER(getOwnerINLINE()).canBuild(pPlot, eBuild, false, bTestVisible)))
-	{
-        /*if (GET_PLAYER(m_eOwner).isUsingAltAI())
-        {
-            GC.getGame().getAltAI()->getPlayer(m_eOwner)->logInvalidUnitBuild(this, eBuild);
-        }*/
+	{        
 		return false;
 	}
 
@@ -6415,6 +6451,10 @@ bool CvUnit::build(BuildTypes eBuild)
 
 	if (!canBuild(plot(), eBuild))
 	{
+        if (GET_PLAYER(m_eOwner).isUsingAltAI())
+        {
+            GC.getGame().getAltAI()->getPlayer(m_eOwner)->logInvalidUnitBuild(this, eBuild);
+        }
 		return false;
 	}
 
@@ -6425,6 +6465,11 @@ bool CvUnit::build(BuildTypes eBuild)
 	GET_PLAYER(getOwnerINLINE()).changeGold(-(GET_PLAYER(getOwnerINLINE()).getBuildCost(plot(), eBuild)));
 
 	bFinished = plot()->changeBuildProgress(eBuild, workRate(false), getTeam());
+
+    if (GET_PLAYER(m_eOwner).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->updateWorkerMission((CvUnitAI*)this, eBuild);
+    }
 
 	finishMoves(); // needs to be at bottom because movesLeft() can affect workRate()...
 
@@ -7393,8 +7438,10 @@ bool CvUnit::isGoldenAge() const
 
 bool CvUnit::canCoexistWithEnemyUnit(TeamTypes eTeam) const
 {
-    // what was wrong with writing: return NO_TEAM == eTeam ? alwaysInvisible() : isInvisible(eTeam, false);
-	if (NO_TEAM == eTeam)
+    // bit simpler...
+    return NO_TEAM == eTeam ? alwaysInvisible() : isInvisible(eTeam, false);
+
+	/*if (NO_TEAM == eTeam)
 	{
 		if(alwaysInvisible())
 		{
@@ -7409,7 +7456,7 @@ bool CvUnit::canCoexistWithEnemyUnit(TeamTypes eTeam) const
 		return true;
 	}
 
-	return false;
+	return false;*/
 }
 
 bool CvUnit::isFighting() const
@@ -8071,6 +8118,7 @@ int CvUnit::airMaxCombatStr(const CvUnit* pOther) const
 		iModifier += getKamikazePercent();
 	}
 
+    // is this a bug - surely this was already added just above?
 	if (getExtraCombatPercent() != 0)
 	{
 		iModifier += getExtraCombatPercent();

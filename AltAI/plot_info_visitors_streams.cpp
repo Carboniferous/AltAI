@@ -79,28 +79,65 @@ namespace AltAI
 
     std::ostream& operator << (std::ostream& os, const PlotInfo::BaseNode& node)
     {
-        os << "BaseYield = " << node.yield;
+        os << gGlobals.getTerrainInfo(node.terrainType).getType();
+        
+        switch (node.plotType)
+        {
+            case ::PLOT_PEAK:
+                os << " peak ";
+                break;
+            case ::PLOT_HILLS:
+                os << " hills ";
+                break;
+            case ::PLOT_OCEAN:
+                os << " ocean ";
+                break;
+            case ::PLOT_LAND:
+                break;
+            default:
+                os << " UNKNOWN PLOT TYPE? " << (int)node.plotType;
+                break;
+        }
+
+        if (node.isFreshWater)
+        {
+            os << " (fresh water) ";
+        }
+        if (node.hasPotentialFreshWaterAccess)
+        {
+            os << " (potential fresh water access) ";
+        }
+        if (node.isImpassable)
+        {
+            os << " (impassable) ";
+        }
+        os << " baseYield = " << node.yield;
         if (!node.bonusYield.isNone())
         {
-            os << " Bonus = " << node.bonusYield;
+            os << " bonus = " << node.bonusYield;
         }
-        os << node.featureRemovedNode;
+        if (node.featureType != NO_FEATURE)
+        {
+            os << " feature = " << gGlobals.getFeatureInfo(node.featureType).getType();
+        }        
 
         for (size_t i = 0, count = node.improvementNodes.size(); i < count; ++i)
         {
             os << node.improvementNodes[i];
         }
 
+        os << node.featureRemovedNode;
+
         if (node.tech != NO_TECH)
         {
             const CvTechInfo& techInfo = gGlobals.getTechInfo(node.tech);
-            os << " Tech = " << techInfo.getType();
+            os << " tech = " << techInfo.getType();
         }
 
         if (node.featureRemoveTech != NO_TECH)
         {
             const CvTechInfo& techInfo = gGlobals.getTechInfo(node.featureRemoveTech);
-            os << " Tech = " << techInfo.getType();
+            os << " feature remove tech = " << techInfo.getType();
         }
         return os;
     }
@@ -162,7 +199,7 @@ namespace AltAI
             os << "\n\tUpgrades to (" << info.getType() << ")";
         }
 
-        os << " BaseYield = " << node.yield;
+        os << " baseYield = " << node.yield;
         if (!node.bonusYield.isNone())
         {
             os << " Bonus = " << node.bonusYield;
@@ -199,7 +236,7 @@ namespace AltAI
 
     std::ostream& operator << (std::ostream& os, const PlotInfo::FeatureRemovedNode& node)
     {
-        os << " (No Feature) BaseYield = " << node.yield;
+        os << "\n\t (w/o feature) baseYield = " << node.yield;
         if (!node.bonusYield.isNone())
         {
             os << " Bonus = " << node.bonusYield;
@@ -216,6 +253,11 @@ namespace AltAI
     std::ostream& operator << (std::ostream& os, const PlotInfo::HasTech& node)
     {
         return os << " requires tech: " << gGlobals.getTechInfo(node.techType).getType();
+    }
+
+    std::ostream& operator << (std::ostream& os, const PlotInfo::HasAvailableRiverSide& node)
+    {
+        return os << " has available river side ";
     }
 
     std::ostream& operator << (std::ostream& os, const PlotInfo::BuildOrCondition& node)

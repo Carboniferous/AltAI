@@ -14,7 +14,7 @@ namespace AltAI
     //ResearchTech getMilitaryTechTactics(const Player& player, const boost::shared_ptr<TechInfo>& pTechInfo);
     //ResearchTech getWorkerTechTactics(const Player& player, const boost::shared_ptr<TechInfo>& pTechInfo);
 
-    std::list<ICityImprovementTacticsPtr> makeCityBuildTactics(const Player& player, const City& city, const boost::shared_ptr<TechInfo>& pTechInfo);
+    std::list<CityImprovementTacticsPtr> makeCityBuildTactics(const Player& player, const City& city);
 
     ITechTacticsPtr makeTechTactics(const Player& player, const boost::shared_ptr<TechInfo>& pTechInfo);
 }

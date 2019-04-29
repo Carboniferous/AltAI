@@ -54,8 +54,8 @@ namespace AltAI
                     else
                     {
                         for (int j = 0; j < gGlobals.getNUM_BUILDING_AND_TECH_PREREQS(); ++j)
-	                    {
-                		    if (buildingInfo.getPrereqAndTechs(j) == requestData.techType)
+                        {
+                            if (buildingInfo.getPrereqAndTechs(j) == requestData.techType)
                             {
                                 baseNode.nodes.push_back(TechInfo::BuildingNode(buildingType));
                                 continue;
@@ -272,12 +272,14 @@ namespace AltAI
         void getFirstToNode(TechInfo::BaseNode& baseNode, const CvTechInfo& techInfo, const TechInfoRequestData& requestData)
         {
             bool foundsReligion = false;
+            ReligionTypes defaultReligionType = NO_RELIGION;
             for (int i = 0, count = gGlobals.getNumReligionInfos(); i < count; ++i)
             {
                 const CvReligionInfo& religionInfo = gGlobals.getReligionInfo((ReligionTypes)i);
                 if (religionInfo.getTechPrereq() == requestData.techType)
                 {
                     foundsReligion = true;
+                    defaultReligionType = (ReligionTypes)i;
                     break;
                 }
             }
@@ -287,7 +289,8 @@ namespace AltAI
 
             if (freeTechCount > 0 || foundsReligion || unitClassType != NO_UNITCLASS)
             {
-                baseNode.nodes.push_back(TechInfo::FirstToNode(techInfo.getFirstFreeTechs(), foundsReligion, (UnitClassTypes)techInfo.getFirstFreeUnitClass()));
+                baseNode.nodes.push_back(TechInfo::FirstToNode(techInfo.getFirstFreeTechs(), 
+                    foundsReligion, defaultReligionType, (UnitClassTypes)techInfo.getFirstFreeUnitClass()));
             }
         }
 
@@ -321,20 +324,20 @@ namespace AltAI
             node.health = techInfo.getHealth();
 
             for (int i = 0, count = gGlobals.getNUM_AND_TECH_PREREQS(); i < count; ++i)
-	        {
-		        TechTypes andTech = (TechTypes)techInfo.getPrereqAndTechs(i);
+            {
+                TechTypes andTech = (TechTypes)techInfo.getPrereqAndTechs(i);
 
-		        if (andTech != NO_TECH)
+                if (andTech != NO_TECH)
                 {
                     node.andTechs.push_back(andTech);
                 }
             }
 
             for (int i = 0, count = gGlobals.getNUM_OR_TECH_PREREQS(); i < count; ++i)
-	        {
-		        TechTypes orTech = (TechTypes)techInfo.getPrereqOrTechs(i);
+            {
+                TechTypes orTech = (TechTypes)techInfo.getPrereqOrTechs(i);
 
-		        if (orTech != NO_TECH)
+                if (orTech != NO_TECH)
                 {
                     node.orTechs.push_back(orTech);
                 }

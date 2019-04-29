@@ -1,5 +1,7 @@
 #include "AltAI.h"
 
+#include "CyArgsList.h"
+
 #include "./plot_info.h"
 #include "./resource_info.h"
 #include "./resource_info_visitors.h"
@@ -10,8 +12,12 @@
 #include "./project_info_visitors.h"
 #include "./spec_info_visitors.h"
 #include "./player_analysis.h"
+#include "./military_tactics.h"
 #include "./map_analysis.h"
+#include "./worker_tactics.h"
 #include "./unit_analysis.h"
+#include "./great_people_tactics.h"
+#include "./modifiers_helper.h"
 #include "./gamedata_analysis.h"
 #include "./settler_manager.h"
 #include "./game.h"
@@ -28,13 +34,32 @@
 
 namespace AltAI
 {
+    namespace
+    {
+        int getRequiredUnitExperience_(PlayerTypes playerType, int level)
+        {
+            int iExperienceNeeded = 0;
+	        long lExperienceNeeded = 0;
+        	CyArgsList argsList;
+	        argsList.add(level);
+            argsList.add(playerType);
+
+	        gDLL->getPythonIFace()->callFunction(PYGameModule, "getExperienceNeeded", argsList.makeFunctionArgs(), &lExperienceNeeded);
+	        iExperienceNeeded = (int)lExperienceNeeded;
+            return iExperienceNeeded;
+        }
+    }
+
     PlayerAnalysis::PlayerAnalysis(Player& player) : player_(player), pMapAnalysis_(boost::shared_ptr<MapAnalysis>(new MapAnalysis(player))), timeHorizon_(0)
     {
         int nTurnsLeft = gGlobals.getGame().getMaxTurns() - gGlobals.getGame().getElapsedGameTurns();
         timeHorizon_ = std::min<int>(std::max<int>(gGlobals.getGame().getMaxTurns() / 10, 20), nTurnsLeft);
 
         playerTactics_ = boost::shared_ptr<PlayerTactics>(new PlayerTactics(player_));
+        pWorkerAnalysis_ = boost::shared_ptr<WorkerAnalysis>(new WorkerAnalysis(player));
+        pMilitaryAnalysis_ = boost::shared_ptr<MilitaryAnalysis>(new MilitaryAnalysis(player));
         pUnitAnalysis_ = boost::shared_ptr<UnitAnalysis>(new UnitAnalysis(player_));
+        pGreatPeopleAnalysis_ = boost::shared_ptr<GreatPeopleAnalysis>(new GreatPeopleAnalysis(player_));
     }
 
     // init 'static' data, i.e. xml based stuff
@@ -46,6 +71,7 @@ namespace AltAI
         analyseTechs_();
         analyseCivics_();
         analyseResources_();
+        analyseExperienceLevels_();
 
         recalcTechDepths();
     }
@@ -53,12 +79,10 @@ namespace AltAI
     // this initialisation depends on cities having being initialised
     void PlayerAnalysis::postCityInit()
     {
-        analyseSpecialists_();
+        analyseSpecialists();
 
         pUnitAnalysis_->init();
-        //pUnitAnalysis_->debug();
-
-        analyseCities();
+        pUnitAnalysis_->debug();
 
         playerTactics_->init();
     }
@@ -82,6 +106,7 @@ namespace AltAI
                 {
                     std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
                     os << "\nSkipping unit: " << gGlobals.getUnitInfo(unitType).getType();
+                    continue;
                 }
 
                 int productionMultiplier = 0;
@@ -102,6 +127,14 @@ namespace AltAI
                 if (productionMultiplier != 0)
                 {
                     unitProductionModifiersMap_[unitType] = productionMultiplier;
+                }
+
+                // UNIT_SCIENTIST -> BUILDING_ACADEMY, BUILDING_CORPORATION_3, BUILDING_CORPORATION_6
+                // UNIT_MERCHANT -> BUILDING_CORPORATION_1, BUILDING_CORPORATION_2, etc...
+                std::vector<BuildingTypes> unitSpecialBuildings = getUnitSpecialBuildings(unitsInfo_[unitType]);
+                for (size_t buildingIndex = 0, buildingCount = unitSpecialBuildings.size(); buildingIndex < buildingCount; ++buildingIndex)
+                {
+                    unitSpecialBuildingsMap_[unitSpecialBuildings[buildingIndex]].push_back(unitType);
                 }
             }
         }
@@ -135,6 +168,7 @@ namespace AltAI
                 }
                 else
                 {
+                    // buildings which we can't build directly (e.g. need great people to build)
                     specialBuildingsInfo_.insert(std::make_pair(buildingType, makeBuildingInfo(buildingType, playerType)));
                 }
 
@@ -144,7 +178,7 @@ namespace AltAI
                 {
                     if (player_.getCvPlayer()->hasTrait((TraitTypes)j))
                     {
-                        productionMultiplier = buildingInfo.getProductionTraits(j);
+                        productionMultiplier += buildingInfo.getProductionTraits(j);
 
                         if (specialBuildingType != NO_SPECIALBUILDING)
                         {
@@ -168,12 +202,24 @@ namespace AltAI
             {
                 os << "\n" << gGlobals.getBuildingInfo(ci->first).getType() << ": ";
                 streamBuildingInfo(os, ci->second);
+
+                std::map<BuildingTypes, int>::const_iterator modifiersIter = buildingProductionModifiersMap_.find(ci->first);
+                if (modifiersIter != buildingProductionModifiersMap_.end())
+                {
+                    os << " production modifier = " << modifiersIter->second;
+                }
             }
             os << "\n\nSpecial buildings:\n";
             for (std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> >::const_iterator ci(specialBuildingsInfo_.begin()), ciEnd(specialBuildingsInfo_.end()); ci != ciEnd; ++ci)
             {
                 os << "\n" << gGlobals.getBuildingInfo(ci->first).getType() << ": ";
                 streamBuildingInfo(os, ci->second);
+
+                std::map<BuildingTypes, int>::const_iterator modifiersIter = buildingProductionModifiersMap_.find(ci->first);
+                if (modifiersIter != buildingProductionModifiersMap_.end())
+                {
+                    os << " production modifier = " << modifiersIter->second;
+                }
             }
         }
 #endif
@@ -212,13 +258,13 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         // debug
         {
-            //std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-            //for (std::map<TechTypes, boost::shared_ptr<TechInfo> >::const_iterator ci(techsInfo_.begin()), ciEnd(techsInfo_.end()); ci != ciEnd; ++ci)
-            //{
-            //    os << "\n" << gGlobals.getTechInfo(ci->first).getType() << ": ";
-            //    streamTechInfo(os, ci->second);
-            //}
-            //os << "\n";
+            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+            for (std::map<TechTypes, boost::shared_ptr<TechInfo> >::const_iterator ci(techsInfo_.begin()), ciEnd(techsInfo_.end()); ci != ciEnd; ++ci)
+            {
+                os << "\n" << gGlobals.getTechInfo(ci->first).getType() << ": ";
+                streamTechInfo(os, ci->second);
+            }
+            os << "\n";
         }
 #endif
     }
@@ -233,13 +279,13 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         // debug
         {
-            //std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-            //for (std::map<CivicTypes, boost::shared_ptr<CivicInfo> >::const_iterator ci(civicsInfo_.begin()), ciEnd(civicsInfo_.end()); ci != ciEnd; ++ci)
-            //{
-            //    os << "\n" << gGlobals.getCivicInfo(ci->first).getType() << ": ";
-            //    streamCivicInfo(os, ci->second);
-            //}
-            //os << "\n";
+            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+            for (std::map<CivicTypes, boost::shared_ptr<CivicInfo> >::const_iterator ci(civicsInfo_.begin()), ciEnd(civicsInfo_.end()); ci != ciEnd; ++ci)
+            {
+                os << "\n" << gGlobals.getCivicInfo(ci->first).getType() << ": ";
+                streamCivicInfo(os, ci->second);
+            }
+            os << "\n";
         }
 #endif
     }
@@ -255,18 +301,35 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         // debug
         {
-            //std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-            //for (std::map<BonusTypes, boost::shared_ptr<ResourceInfo> >::const_iterator ci(resourcesInfo_.begin()), ciEnd(resourcesInfo_.end()); ci != ciEnd; ++ci)
-            //{
-            //    os << "\n" << gGlobals.getBonusInfo(ci->first).getType() << ": ";
-            //    streamResourceInfo(os, ci->second);
-            //}
-            //os << "\n";
+            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+            for (std::map<BonusTypes, boost::shared_ptr<ResourceInfo> >::const_iterator ci(resourcesInfo_.begin()), ciEnd(resourcesInfo_.end()); ci != ciEnd; ++ci)
+            {
+                os << "\n" << gGlobals.getBonusInfo(ci->first).getType() << ": ";
+                streamResourceInfo(os, ci->second);
+            }
+            os << "\n";
         }
 #endif
     }
 
-    void PlayerAnalysis::analyseSpecialists_()
+    void PlayerAnalysis::analyseExperienceLevels_()
+    {
+        static const int maxLevel = 12;
+
+        levelExperienceMap_.clear();
+        experienceLevelsMap_.clear();
+        experienceLevelsMap_[0] = 0;
+
+        for (int i = 1; i <= maxLevel; ++i)
+        {
+            int iExperienceNeeded = getRequiredUnitExperience_(player_.getPlayerID(), i);
+
+            levelExperienceMap_[i] = iExperienceNeeded; // e.g. {1, 2}, {2, 5}, {3, 10}, {4, 17}
+            experienceLevelsMap_[iExperienceNeeded] = i;  // e.g. {2, 1}, {4, 2}, {8, 3}, {13, 4} (if charismatic)
+        }
+    }
+
+    void PlayerAnalysis::analyseSpecialists()
     {
         TotalOutputWeights outputWeights = makeOutputW(1, 1, 1, 1, 1, 1);
         const CvCity* pCity = player_.getCvPlayer()->getCapitalCity();
@@ -277,7 +340,11 @@ namespace AltAI
 
             if (pCity)
             {
-                bestSpecialistTypesMap_[(OutputTypes)i] = AltAI::getBestSpecialist(player_, player_.getCity(pCity), valueF);
+                const CityDataPtr& pCityData = player_.getCity(pCity).getCityData();
+
+                YieldModifier yieldModifier = pCityData->getModifiersHelper()->getTotalYieldModifier(*pCityData);
+                CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+                bestSpecialistTypesMap_[(OutputTypes)i] = AltAI::getBestSpecialist(player_, yieldModifier, commerceModifier, valueF);
             }
             else
             {
@@ -285,138 +352,73 @@ namespace AltAI
             }
         }
 
-#ifdef ALTAI_DEBUG
-        //std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-        //for (std::map<OutputTypes, SpecialistTypes>::const_iterator ci(bestSpecialistTypesMap_.begin()), ciEnd(bestSpecialistTypesMap_.end()); ci != ciEnd; ++ci)
-        //{
-        //    os << "\n" << ci->first << " = " << (ci->second == NO_SPECIALIST ? "NO_SPECIALIST" : gGlobals.getSpecialistInfo(ci->second).getType());
-        //}
-#endif
-    }
-
-    void PlayerAnalysis::analyseCities()
-    {
-        CityIter cityIter(*player_.getCvPlayer());
-        while (CvCity* pCity = cityIter())
+        if (pCity)
         {
-            analyseCity(pCity);
+            std::vector<OutputTypes> outputTypes;
+            outputTypes.push_back(OUTPUT_PRODUCTION);
+            outputTypes.push_back(OUTPUT_RESEARCH);
+            outputTypes.push_back(OUTPUT_GOLD);
+
+            mixedSpecialistTypes_ = getBestSpecialists(outputTypes, 4);
         }
-    }
 
-    void PlayerAnalysis::analyseCity(const CvCity* pCity)
-    {
-//        if (pCity->isDisorder())
-//        {
-//            return;
-//        }
-//
-//        const CvPlayer* pPlayer = player_.getCvPlayer();
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-//#endif
-//        // todo - calculate these from city itself, not generically
-//        std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
-//        std::vector<OutputTypes> outputTypes = boost::assign::list_of(OUTPUT_PRODUCTION)(OUTPUT_RESEARCH);
-//        TotalOutputPriority outputPriorities = makeTotalOutputPriorities(outputTypes);
-//        TotalOutputWeights outputWeights = makeOutputW(2, 2, 2, 2, 1, 1);
-//
-//        CityImprovementManager improvementManager(pMapAnalysis_->getImprovementManager(pCity->getIDInfo()));
-//        const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-//
-//        cityOutputsMap_[pCity->getIDInfo()] = std::vector<CityGrowthLadder>();
-//        improvementManager.calcImprovements(yieldTypes, pCity->getPopulation() + 5, 3);
-//
-//        CityDataPtr pCityData(new CityData(pCity, improvementManager));
-//        pCityData->getHappyHelper()->setNoUnhappiness(true);
-//
-//        CityOptimiser cityOptimiser(pCityData);
-//
-//#ifdef ALTAI_DEBUG
-//        os << "\nCity: " << narrow(pCity->getName()) << " ";
-//        //os << "\nImprovements: count = " << improvementManager.getImprovements().size();
-//
-//        //const std::vector<CityImprovementManager::PlotImprovementData>& plotImprovements = improvementManager.getImprovements();
-//        //for (size_t i = 0, count = plotImprovements.size(); i < count; ++i)
-//        //{
-//        //    improvementManager.logImprovement(os, plotImprovements[i]);
-//        //}
-//#endif
-//        TotalOutput lastOutput;
-//        std::vector<CityGrowthLadder> growthLadder;
-//
-//        while (true)
-//        {
-//            int requiredFood = 100 * (pCityData->getPopulation() * foodPerPop) + pCityData->getLostFood();
-//            int maxFood = cityOptimiser.getMaxFood();
-//
-//            if (maxFood < requiredFood)
-//            {
-//                break;
-//            }
-//
-//            Range<> targetFood(maxFood < requiredFood + 200 ? requiredFood + 100 : 200 + (requiredFood + maxFood) / 2, Range<>::LowerBound);
-//#ifdef ALTAI_DEBUG
-//            pCityData->debugBasicData(os);
-//            os << "\n max food = " << cityOptimiser.getMaxFood() << ", target = " << targetFood.lower;
-//#endif
-//            // optimise with target of at least some growth
-//            if (cityOptimiser.optimise<MixedWeightedTotalOutputOrderFunctor>(outputPriorities, outputWeights, targetFood) == CityOptimiser::FailedInsufficientFood)
-//            {
-//#ifdef ALTAI_DEBUG
-//                os << "\n final output = " << pCityData->getOutput() << " ";
-//                cityOptimiser.debug(os, false);
-//#endif
-//                break;
-//            }
-//
-//            TotalOutput thisOutput = pCityData->getOutput();
-//            int turnsToGrow = MAX_INT;
-//            int foodDelta = thisOutput[OUTPUT_FOOD] - requiredFood;
-//
-//            if (foodDelta > 0)
-//            {
-//                const int growthRate = (pCityData->getGrowthThreshold() - pCityData->getCurrentFood()) / foodDelta;
-//                const int growthDelta = (pCityData->getGrowthThreshold() - pCityData->getCurrentFood()) % foodDelta;
-//#ifdef ALTAI_DEBUG
-//                os << "\nfood delta = " << foodDelta << ", threshold = " << pCityData->getGrowthThreshold() << ", stored food = " << pCityData->getStoredFood()
-//                    << ", growth rate = " << growthRate << ", remainder = " << growthDelta;
-//#endif
-//                turnsToGrow = growthRate + (growthDelta ? 1 : 0);
-//            }
-//                
-//            growthLadder.push_back(boost::make_tuple(turnsToGrow, pCityData->getPopulation(), thisOutput - lastOutput));
-//
-//            lastOutput = thisOutput;
-//
-//            pCityData->setStoredFood(pCityData->getFoodKeptPercent() * pPlayer->getGrowthThreshold(pCityData->getPopulation() + 1));
-//            pCityData->changePopulation(1);
-//        }
-//
-//        cityOutputsMap_[pCity->getIDInfo()] = growthLadder;
-//
-//#ifdef ALTAI_DEBUG
-//        int turn = 0;
-//        TotalOutput cumulativeOutput;
-//        for (size_t i = 0, count = growthLadder.size(); i < count; ++i)
-//        {
-//            turn += boost::get<0>(growthLadder[i]);
-//            cumulativeOutput += boost::get<2>(growthLadder[i]);
-//            os << "\n\tPop = " << boost::get<1>(growthLadder[i]) << " turn = " << turn << " output = " << cumulativeOutput;
-//            if (i > 0) os << ", delta = " << boost::get<2>(growthLadder[i]); 
-//        }
-//#endif
-    }
-
-    std::vector<PlayerAnalysis::CityGrowthLadder> PlayerAnalysis::getCityGrowthLadder(IDInfo city) const
-    {
-        CityOutputsMap::const_iterator ci(cityOutputsMap_.find(city));
-        return ci == cityOutputsMap_.end() ? std::vector<CityGrowthLadder>() : ci->second;
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+        os << "\nBest specialists:";
+        for (std::map<OutputTypes, SpecialistTypes>::const_iterator ci(bestSpecialistTypesMap_.begin()), ciEnd(bestSpecialistTypesMap_.end()); ci != ciEnd; ++ci)
+        {
+            os << "\nOutput type: " << ci->first << " = " << (ci->second == NO_SPECIALIST ? "NO_SPECIALIST" : gGlobals.getSpecialistInfo(ci->second).getType());
+        }
+#endif
     }
 
     SpecialistTypes PlayerAnalysis::getBestSpecialist(OutputTypes outputType) const
     {
         std::map<OutputTypes, SpecialistTypes>::const_iterator ci = bestSpecialistTypesMap_.find(outputType);
         return  ci != bestSpecialistTypesMap_.end() ? ci->second : NO_SPECIALIST;
+    }
+
+    SpecialistTypes PlayerAnalysis::getBestSpecialist(const std::vector<OutputTypes>& outputTypes) const
+    {
+        TotalOutputWeights outputWeights = makeOutputW(1, 1, 1, 1, 1, 1);
+        const CvCity* pCity = player_.getCvPlayer()->getCapitalCity();
+        TotalOutputPriority outputPriorities = makeTotalOutputPriorities(outputTypes);
+        MixedWeightedOutputOrderFunctor<TotalOutput> valueF(outputPriorities, outputWeights);
+        SpecialistTypes bestSpecialistType = NO_SPECIALIST;
+
+        if (pCity)
+        {
+            const CityDataPtr& pCityData = player_.getCity(pCity).getCityData();
+
+            YieldModifier yieldModifier = pCityData->getModifiersHelper()->getTotalYieldModifier(*pCityData);
+            CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+            bestSpecialistType = AltAI::getBestSpecialist(player_, yieldModifier, commerceModifier, valueF);
+        }
+        else
+        {
+            bestSpecialistType = AltAI::getBestSpecialist(player_, valueF);
+        }
+
+        return bestSpecialistType;
+    }
+
+    std::vector<SpecialistTypes> PlayerAnalysis::getBestSpecialists(const std::vector<OutputTypes>& outputTypes, size_t count) const
+    {
+        TotalOutputWeights outputWeights = makeOutputW(1, 1, 1, 1, 1, 1);
+        const CvCity* pCity = player_.getCvPlayer()->getCapitalCity();
+        TotalOutputPriority outputPriorities = makeTotalOutputPriorities(outputTypes);
+        MixedWeightedOutputOrderFunctor<TotalOutput> valueF(outputPriorities, outputWeights);
+        const CityDataPtr& pCityData = player_.getCity(pCity).getCityData();
+
+        YieldModifier yieldModifier = pCityData->getModifiersHelper()->getTotalYieldModifier(*pCityData);
+        CommerceModifier commerceModifier = makeCommerce(100, 100, 100, 100);
+
+        return AltAI::getBestSpecialists(player_, yieldModifier, commerceModifier, count, valueF);
+    }
+
+    std::vector<SpecialistTypes> PlayerAnalysis::getMixedSpecialistTypes() const
+    {
+        return mixedSpecialistTypes_;
     }
 
     int PlayerAnalysis::getPlayerUnitProductionModifier(UnitTypes unitType) const
@@ -429,6 +431,51 @@ namespace AltAI
     {
         std::map<BuildingTypes, int>::const_iterator ci = buildingProductionModifiersMap_.find(buildingType);
         return ci == buildingProductionModifiersMap_.end() ? 0 : ci->second;
+    }
+
+    std::vector<UnitTypes> PlayerAnalysis::getSpecialBuildingUnits(BuildingTypes buildingType) const
+    {
+        std::map<BuildingTypes, std::vector<UnitTypes> >::const_iterator ci = unitSpecialBuildingsMap_.find(buildingType);
+        if (ci != unitSpecialBuildingsMap_.end())
+        {
+            return ci->second;
+        }
+        else
+        {
+            return std::vector<UnitTypes>();
+        }
+    }
+
+    int PlayerAnalysis::getUnitLevel(int experience) const
+    {
+        // std::map<int, int> experienceLevelsMap_;  // exp -> level
+        // returns first value which is greater than passed in experience, e.g. 11 -> {17, 4}. So need to go back one to get current level
+        std::map<int, int>::const_iterator levelIter = experienceLevelsMap_.upper_bound(experience);
+        if (levelIter == experienceLevelsMap_.begin())  // unless at beginning - e.g. passed in 1 or 0 -> {2, 1} - treat this as level 0 (no promotions available)
+        {
+            return 0;
+        }
+        else if (levelIter == experienceLevelsMap_.end())  // past the end - just treat as max level we analysed (any unit at this level {145, 12} is crazy enough anyway)
+        {
+            return experienceLevelsMap_.rbegin()->second;
+        }
+        else
+        {
+            return (--levelIter)->second;
+        }
+    }
+
+    int PlayerAnalysis::getRequiredUnitExperience(int level) const
+    {
+        std::map<int, int>::const_iterator expIter = levelExperienceMap_.find(level);
+        if (expIter != levelExperienceMap_.end())
+        {
+            return expIter->second;
+        }
+        else
+        {
+            return getRequiredUnitExperience_(player_.getPlayerID(), level);
+        }
     }
 
     boost::shared_ptr<UnitInfo> PlayerAnalysis::getUnitInfo(UnitTypes unitType) const
@@ -455,8 +502,28 @@ namespace AltAI
             return buildingsIter->second;
         }
         
+#ifdef ALTAI_DEBUG
+        if (!getSpecialBuildingInfo(buildingType))
+        {
+            std::ostream& os = ErrorLog::getLog(*player_.getCvPlayer())->getStream();
+            os << "\nFailed to find building information for building: " << gGlobals.getBuildingInfo(buildingType).getType();
+        }
+#endif
+
+        return boost::shared_ptr<BuildingInfo>();
+    }
+
+    boost::shared_ptr<BuildingInfo> PlayerAnalysis::getSpecialBuildingInfo(BuildingTypes buildingType) const
+    {
+        std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> >::const_iterator buildingsIter = specialBuildingsInfo_.find(buildingType);
+
+        if (buildingsIter != specialBuildingsInfo_.end())
+        {
+            return buildingsIter->second;
+        }
+        
         std::ostream& os = ErrorLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nFailed to find building information for building: " << gGlobals.getBuildingInfo(buildingType).getType();
+        os << "\nFailed to find special building information for building: " << gGlobals.getBuildingInfo(buildingType).getType();
 
         return boost::shared_ptr<BuildingInfo>();
     }
@@ -545,7 +612,7 @@ namespace AltAI
         {
             if (!pCivHelper->hasTech((TechTypes)i))
             {
-                if (getTechResearchDepth((TechTypes)i) == depth)
+                if (getTechResearchDepth((TechTypes)i) <= depth)
                 {
                     techs.push_back((TechTypes)i);
                 }
@@ -561,394 +628,7 @@ namespace AltAI
         {
             return tacticsTech;
         }
-
-//        CvPlayer* pPlayer = player_.getCvPlayer();
-//        PlayerTypes playerType = player_.getPlayerID();
-//
-//#ifdef ALTAI_DEBUG
-//        // debug
-//        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*pPlayer);
-//        std::ostream& os = pCivLog->getStream();
-//#endif
-//
-//        std::map<TechTypes, WorkerTechData> workerTechData = PlayerAnalysis::getWorkerTechData_();
-//
-//        std::map<TechTypes, int, std::greater<int> > workerBonusTechMap, workerImprovementTechMap;
-//        TechTypes bestBonusTech = NO_TECH, bestImprovementTech = NO_TECH;
-//        int bestBonusValue = 0;
-//        int bestImprovementValue = 0;  // not likely to have equal best values for different techs (no need for map to keep track of values)
-//
-//        typedef std::multimap<int, TechTypes, std::greater<int> > MostChosenTechsMap;
-//        MostChosenTechsMap mostChosenTechs;
-//
-//        for (std::map<TechTypes, WorkerTechData>::const_iterator ci(workerTechData.begin()), ciEnd(workerTechData.end()); ci != ciEnd; ++ci)
-//        {
-//            int thisBonusValue = 0;
-//            int thisImprovementValue = 0;
-//
-//            // new bonuses we can improve (todo? distinguish between bonus types we can access and those we can't? (bit of an edge case, as usually get the wheel quite early))
-//            for (std::map<BonusTypes, int>::const_iterator iter(ci->second.newBonusAccessCounts.begin()), endIter(ci->second.newBonusAccessCounts.end()); iter != endIter; ++iter)
-//            {
-//                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(iter->first);
-//                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
-//
-//                ResourceHappyInfo happyInfo = getResourceHappyInfo(pResourceInfo);
-//                ResourceHealthInfo healthInfo = getResourceHealthInfo(pResourceInfo);
-//
-//                thisBonusValue += 1 + happyInfo.actualHappy + healthInfo.actualHealth + 2 * unitCounts.first + unitCounts.second;
-//            }
-//
-//            // new bonuses we can connect
-//            for (std::set<BonusTypes>::const_iterator iter(ci->second.newConnectableBonuses.begin()), endIter(ci->second.newConnectableBonuses.end()); iter != endIter; ++iter)
-//            {
-//                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(*iter);
-//
-//                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
-//
-//                ResourceHappyInfo happyInfo = getResourceHappyInfo(pResourceInfo);
-//                ResourceHealthInfo healthInfo = getResourceHealthInfo(pResourceInfo);
-//
-//                thisBonusValue += 1 + happyInfo.actualHappy + healthInfo.actualHealth + 2 * unitCounts.first + unitCounts.second;
-//            }
-//
-//            // new bonuses we can potentially access through new cities (todo? - include ones from border expansions? - useful for v. early?) 
-//            for (std::set<BonusTypes>::const_iterator iter(ci->second.newPotentialWorkableBonuses.begin()), endIter(ci->second.newPotentialWorkableBonuses.end()); iter != endIter; ++iter)
-//            {
-//                boost::shared_ptr<ResourceInfo> pResourceInfo = getResourceInfo(*iter);
-//
-//                std::pair<int, int> unitCounts = getResourceMilitaryUnitCount(pResourceInfo);
-//
-//                thisBonusValue += 1 + unitCounts.first;
-//            }
-//
-//            for (std::map<ImprovementTypes, std::pair<TotalOutput, int> >::const_iterator iter(ci->second.newValuedImprovements.begin()), endIter(ci->second.newValuedImprovements.end());
-//                iter != endIter; ++iter)
-//            {
-//                thisImprovementValue += iter->second.second;
-//            }
-//
-//            workerBonusTechMap.insert(std::make_pair(ci->first, thisBonusValue));
-//            mostChosenTechs.insert(std::make_pair(thisBonusValue, ci->first));
-//            workerImprovementTechMap.insert(std::make_pair(ci->first, thisImprovementValue));
-//
-//            if (thisBonusValue > bestBonusValue)
-//            {
-//                bestBonusTech = ci->first;
-//                bestBonusValue = thisBonusValue;
-//            }
-//
-//            if (thisImprovementValue > bestImprovementValue)
-//            {
-//                bestImprovementTech = ci->first;
-//                bestImprovementValue = thisImprovementValue;
-//            }
-//#ifdef ALTAI_DEBUG
-//            os << "\n" << gGlobals.getTechInfo(ci->first).getType() << ": bonus value = " << thisBonusValue << ", improvement value = " << thisImprovementValue;
-//#endif
-//        }
-//
-//        if (!mostChosenTechs.empty())
-//        {
-//            std::pair<MostChosenTechsMap::const_iterator, MostChosenTechsMap::const_iterator> itPair = mostChosenTechs.equal_range(mostChosenTechs.begin()->first);
-//
-//            std::vector<TechTypes> possibleTechs;
-//            for (; itPair.first != itPair.second; ++itPair.first)
-//            {
-//                possibleTechs.push_back(itPair.first->second);
-//            }
-//
-//            if (possibleTechs.size() > 1)
-//            {
-//                int bestImprovementValueOfBonusTechs = 0;
-//                TechTypes bestImprovementTechOfBonusTechs = NO_TECH;
-//
-//                for (size_t i = 0, count = possibleTechs.size(); i < count; ++i)
-//                {
-//                    std::map<TechTypes, int, std::greater<int> >::const_iterator ci(workerImprovementTechMap.find(possibleTechs[i]));
-//                    if (ci != workerImprovementTechMap.end())
-//                    {
-//                        if (ci->second > bestImprovementValueOfBonusTechs)
-//                        {
-//                            bestImprovementValueOfBonusTechs = ci->second;
-//                            bestImprovementTechOfBonusTechs = possibleTechs[i];
-//                        }
-//                    }
-//
-//                }
-//                if (bestImprovementTechOfBonusTechs != NO_TECH)
-//                {
-//                    bestBonusTech = bestImprovementTechOfBonusTechs;
-//                }
-//                else
-//                {
-//                    bestBonusTech = possibleTechs[0];
-//                }
-//            }
-//            else
-//            {
-//                bestBonusTech = possibleTechs[0];
-//            }
-//        }
-//
-//        if (bestBonusTech != NO_TECH)
-//        {
-//#ifdef ALTAI_DEBUG
-//            os << "\nBest worker tech (bonuses) = " << gGlobals.getTechInfo(bestBonusTech).getType() << ": bonus value = " << bestBonusValue;
-//#endif
-//        }
-//
-//        if (bestImprovementTech != NO_TECH)
-//        {
-//#ifdef ALTAI_DEBUG
-//            os << "\nBest worker tech (improvements) = " << gGlobals.getTechInfo(bestImprovementTech).getType() << ": improvement value = " << bestImprovementValue;
-//#endif
-//        }
-//
-//        if (bestBonusTech != NO_TECH && sanityCheckTech_(bestBonusTech))
-//        {
-//            const CvTechInfo& techInfo = gGlobals.getTechInfo(bestBonusTech);
-//            std::vector<TechTypes> orTechs = getOrTechs(getTechInfo(bestBonusTech));
-//            bool haveOrTech = false;
-//            int bestOrBonusValue = 0, bestOrImprovementValue = 0;
-//            TechTypes bestOrBonusTech = NO_TECH, bestOrImprovementTech = NO_TECH;
-//            if (orTechs.size() > 1)
-//            {
-//                for (int i = 0, count = orTechs.size(); i < count; ++i)
-//                {
-//                    if (CvTeamAI::getTeam(player_.getTeamID()).isHasTech(orTechs[i]))
-//                    {
-//                        haveOrTech = true;
-//                        break;
-//                    }
-//                    else
-//                    {
-//                        int thisOrBonusValue = workerBonusTechMap[orTechs[i]];
-//                        if (thisOrBonusValue > bestOrBonusValue)
-//                        {
-//                            bestOrBonusTech = orTechs[i];
-//                        }
-//                        int thisOrImprovementValue = workerImprovementTechMap[orTechs[i]];
-//                        if (thisOrImprovementValue > bestOrImprovementValue)
-//                        {
-//                            bestOrImprovementTech = orTechs[i];
-//                        }
-//                    }
-//                }
-//            }
-//
-//            if (!haveOrTech)
-//            {
-//                if (bestOrBonusTech != NO_TECH)
-//                {
-//                    if (sanityCheckTech_(bestOrBonusTech))
-//                    {
-//                        pPlayer->pushResearch(bestOrBonusTech);
-//                    }
-//                }
-//                else if (bestOrImprovementTech != NO_TECH)
-//                {
-//                    if (sanityCheckTech_(bestOrImprovementTech))
-//                    {
-//                        pPlayer->pushResearch(bestOrImprovementTech);
-//                    }
-//                }
-//            }
-//            return sanityCheckTech_(bestBonusTech) ? bestBonusTech : NO_TECH;
-//
-//        }
-//        else if (bestImprovementTech != NO_TECH && bestImprovementValue > 10000 * pPlayer->getNumCities())
-//        {
-//            return sanityCheckTech_(bestImprovementTech) ? bestImprovementTech : NO_TECH;
-//        }
-
         return ResearchTech();
-    }
-
-    std::map<TechTypes, PlayerAnalysis::WorkerTechData> PlayerAnalysis::getWorkerTechData_()
-    {
-        const CvPlayer* pPlayer = player_.getCvPlayer();
-
-#ifdef ALTAI_DEBUG
-        // debug
-        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*pPlayer);
-        std::ostream& os = pCivLog->getStream();
-#endif
-
-        std::vector<TechTypes> availableWorkerTechs;
-        std::vector<TechTypes> availableTechs(getTechsWithDepth(1)), oneAwayTechs(getTechsWithDepth(2));
-
-        for (int i = 0, count = availableTechs.size(); i < count; ++i)
-        {
-            if (techIsWorkerTech(getTechInfo(availableTechs[i])))
-            {
-                availableWorkerTechs.push_back(availableTechs[i]);
-            }
-        }
-
-        for (int i = 0, count = oneAwayTechs.size(); i < count; ++i)
-        {
-            if (techIsWorkerTech(getTechInfo(oneAwayTechs[i])))
-            {
-                availableWorkerTechs.push_back(oneAwayTechs[i]);
-            }
-        }
-
-#ifdef ALTAI_DEBUG
-        // debug
-        {
-            os << "\nAvailable worker techs = ";
-            for (size_t i = 0, count = availableWorkerTechs.size(); i < count; ++i)
-            {
-                os << (!(i % 4) ? "\n" : "") << gGlobals.getTechInfo(availableWorkerTechs[i]).getType() << " (depth = " << getTechResearchDepth(availableWorkerTechs[i]) << "),";
-            }
-        }
-#endif
-
-        CivHelperPtr civHelper = gGlobals.getGame().getAltAI()->getPlayer(player_.getPlayerID())->getCivHelper();
-        std::set<BonusTypes> potentialBonusTypes = gGlobals.getGame().getAltAI()->getPlayer(player_.getPlayerID())->getSettlerManager()->getBonusesForSites(2);
-
-        std::map<TechTypes, WorkerTechData> techData;
-
-        for (size_t i = 0, count = availableWorkerTechs.size(); i < count; ++i)
-        {
-            std::vector<BonusTypes> workableBonuses = getWorkableBonuses(getTechInfo(availableWorkerTechs[i]));
-
-            for (size_t bonusIndex = 0, bonusCount = workableBonuses.size(); bonusIndex < bonusCount; ++bonusIndex)
-            {
-                if (potentialBonusTypes.find(workableBonuses[bonusIndex]) != potentialBonusTypes.end())
-                {
-                    std::map<TechTypes, WorkerTechData>::iterator iter = techData.find(availableWorkerTechs[i]);
-                    if (iter == techData.end())
-                    {
-                        iter = techData.insert(std::make_pair(availableWorkerTechs[i], WorkerTechData())).first;
-                        iter->second.techType = availableWorkerTechs[i];
-                    }
-
-                    iter->second.newPotentialWorkableBonuses.insert(workableBonuses[bonusIndex]);
-                }
-            }
-        }
-
-        CityIter cityIter(*pPlayer);
-        CvCity* pCity;
-        while (pCity = cityIter())
-        {
-            CityImprovementManager improvementManager(pCity->getIDInfo(), true);
-            const City& city = gGlobals.getGame().getAltAI()->getPlayer(player_.getPlayerID())->getCity(pCity);
-            TotalOutputWeights outputWeights = city.getPlotAssignmentSettings().outputWeights;
-
-            improvementManager.simulateImprovements(outputWeights);
-            std::vector<CityImprovementManager::PlotImprovementData> baseImprovements = improvementManager.getImprovements();
-
-            
-
-#ifdef ALTAI_DEBUG
-            // debug
-            os << "\nBase improvements:";
-            for (size_t index = 0, count = baseImprovements.size(); index < count; ++index)
-            {
-                improvementManager.logImprovement(os, baseImprovements[index]);
-            }
-#endif
-
-            for (size_t i = 0, count = availableWorkerTechs.size(); i < count; ++i)
-            {
-                civHelper->addTech(availableWorkerTechs[i]);
-                bool canBuildRoute = !availableRoutes(getTechInfo(availableWorkerTechs[i])).empty();
-
-                std::map<TechTypes, WorkerTechData>::iterator iter = techData.find(availableWorkerTechs[i]);
-                if (iter == techData.end())
-                {
-                    iter = techData.insert(std::make_pair(availableWorkerTechs[i], WorkerTechData())).first;
-                    iter->second.techType = availableWorkerTechs[i];
-                }
-
-                // check for existing bonus improvements which we might be able to connect now
-                for (size_t index = 0, count = baseImprovements.size(); index < count; ++index)
-                {
-                    if (boost::get<6>(baseImprovements[index]) & CityImprovementManager::ImprovementMakesBonusValid)
-                    {
-                        XYCoords coords = boost::get<0>(baseImprovements[index]);
-                        const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
-    
-                        if (canBuildRoute && pPlot->getOwner() == player_.getPlayerID() && !pPlot->isConnectedTo(pCity))
-                        {
-                            BonusTypes bonusType = pPlot->getBonusType(player_.getTeamID());
-                            iter->second.newConnectableBonuses.insert(bonusType);
-                        }
-                    }
-                }
-
-                improvementManager.simulateImprovements(outputWeights);
-                std::vector<CityImprovementManager::PlotImprovementData> newImprovements = improvementManager.getImprovements();
-
-#ifdef ALTAI_DEBUG
-                // debug
-                os << "\nNew improvements with tech: " << gGlobals.getTechInfo(availableWorkerTechs[i]).getType();
-                for (size_t index = 0, count = newImprovements.size(); index < count; ++index)
-                {
-                    improvementManager.logImprovement(os, newImprovements[index]);
-                }
-#endif
-
-                std::vector<CityImprovementManager::PlotImprovementData> delta = findNewImprovements(baseImprovements, newImprovements);
-
-#ifdef ALTAI_DEBUG
-                // debug
-                os << "\nDifferent/new improvements with tech: " << gGlobals.getTechInfo(availableWorkerTechs[i]).getType();
-#endif
-                for (size_t index = 0, count = delta.size(); index < count; ++index)
-                {
-#ifdef ALTAI_DEBUG
-                    improvementManager.logImprovement(os, delta[index]);
-#endif
-                    if (boost::get<6>(delta[index]) & CityImprovementManager::ImprovementMakesBonusValid)
-                    {
-                        XYCoords coords = boost::get<0>(delta[index]);
-                        const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
-                        BonusTypes bonusType = pPlot->getBonusType(player_.getTeamID());
-                        ++iter->second.newBonusAccessCounts[bonusType];
-
-                        if (canBuildRoute && !pPlot->isConnectedTo(pCity))
-                        {
-                            iter->second.newConnectableBonuses.insert(bonusType);
-                        }
-                    }
-
-                    // selected and has TotalOutput value - indicating simulation was positive
-                    if (boost::get<5>(delta[index]) == CityImprovementManager::Not_Built)
-                    {
-                        if (!isEmpty(boost::get<4>(delta[index])))
-                        {
-                            // add its TotalOutput to total for this improvement type
-                            iter->second.newValuedImprovements[boost::get<2>(delta[index])].first += boost::get<4>(delta[index]);
-                            iter->second.newValuedImprovements[boost::get<2>(delta[index])].second += TotalOutputValueFunctor(outputWeights)(boost::get<4>(delta[index]));
-                        }
-                        else
-                        {
-                            // count improvement
-                            ++iter->second.newUnvaluedImprovements[boost::get<2>(delta[index])];
-                        }
-                    }
-                    else if (boost::get<5>(delta[index]) == CityImprovementManager::Not_Selected)
-                    {
-                        // count improvement
-                        ++iter->second.newUnvaluedImprovements[boost::get<2>(delta[index])];
-                    }
-                }
-
-                civHelper->removeTech(availableWorkerTechs[i]);
-            }
-
-#ifdef ALTAI_DEBUG
-            for (std::map<TechTypes, WorkerTechData>::const_iterator ci(techData.begin()), ciEnd(techData.end()); ci != ciEnd; ++ci)
-            {
-                ci->second.debug(os);
-            }
-#endif
-        }
-
-        return techData;
     }
 
     // todo - team logic for pushing research?
@@ -969,7 +649,7 @@ namespace AltAI
         const int approxTurns = std::max<int>(1, cost / rate);
 
 #ifdef ALTAI_DEBUG
-        os << "\nTech = " << gGlobals.getTechInfo(techType).getType() << "cost = " << cost << ", rate = " << rate << ", turns = " << approxTurns;
+        os << "\nTech = " << gGlobals.getTechInfo(techType).getType() << " cost = " << cost << ", rate = " << rate << ", turns = " << approxTurns;
 #endif
 
         if (approxTurns > (4 * gGlobals.getGame().getMaxTurns() / 100))
@@ -982,36 +662,36 @@ namespace AltAI
 
     void PlayerAnalysis::updateTechDepths_()
     {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nTech depths:";
-        std::multimap<int, TechTypes> techDepthsMap;
-#endif
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+//        os << "\nTech depths:";
+//        std::multimap<int, TechTypes> techDepthsMap;
+//#endif
         const int count = gGlobals.getNumTechInfos();
         techDepths_.resize(count);
 
         for (int i = 0; i < count; ++i)
         {
             techDepths_[i] = calculateTechResearchDepth((TechTypes)i, player_.getPlayerID());
-#ifdef ALTAI_DEBUG
-            techDepthsMap.insert(std::make_pair(techDepths_[i], (TechTypes)i));
-#endif
+//#ifdef ALTAI_DEBUG
+//            techDepthsMap.insert(std::make_pair(techDepths_[i], (TechTypes)i));
+//#endif
         }
-#ifdef ALTAI_DEBUG
-        int currentDepth = -1, techCount = 0;
-        for (std::multimap<int, TechTypes>::const_iterator ci(techDepthsMap.begin()), ciEnd(techDepthsMap.end()); ci != ciEnd; ++ci)
-        {
-            if (ci->first != currentDepth)
-            {
-                os << "\ndepth = " << ci->first << " ";
-                currentDepth = ci->first;
-                techCount = 0;
-            }
-
-            os << gGlobals.getTechInfo(ci->second).getType() << ", ";
-            if (!(++techCount % 10)) os << "\n\t";
-        }
-#endif
+//#ifdef ALTAI_DEBUG
+//        int currentDepth = -1, techCount = 0;
+//        for (std::multimap<int, TechTypes>::const_iterator ci(techDepthsMap.begin()), ciEnd(techDepthsMap.end()); ci != ciEnd; ++ci)
+//        {
+//            if (ci->first != currentDepth)
+//            {
+//                os << "\ndepth = " << ci->first << " ";
+//                currentDepth = ci->first;
+//                techCount = 0;
+//            }
+//
+//            os << gGlobals.getTechInfo(ci->second).getType() << ", ";
+//            if (!(++techCount % 10)) os << "\n\t";
+//        }
+//#endif
     }
 
     void PlayerAnalysis::write(FDataStreamBase* pStream) const
@@ -1022,57 +702,5 @@ namespace AltAI
     void PlayerAnalysis::read(FDataStreamBase* pStream)
     {
         playerTactics_->read(pStream);
-    }
-
-    void PlayerAnalysis::WorkerTechData::debug(std::ostream& os) const
-    {
-#ifdef ALTAI_DEBUG
-        if (techType == NO_TECH)
-        {
-            os << "\nNo tech?";
-            return;
-        }
-
-        os << "\n" << gGlobals.getTechInfo(techType).getType();
-
-        for (std::set<BonusTypes>::const_iterator ci(newPotentialWorkableBonuses.begin()), ciEnd(newPotentialWorkableBonuses.end()); ci != ciEnd; ++ci)
-        {
-            if (ci != newPotentialWorkableBonuses.begin()) os << ", ";
-            else os << "\nnew potential resource types: ";
-            os << gGlobals.getBonusInfo(*ci).getType();
-        }
-
-        for (std::set<BonusTypes>::const_iterator ci(newConnectableBonuses.begin()), ciEnd(newConnectableBonuses.end()); ci != ciEnd; ++ci)
-        {
-            if (ci != newConnectableBonuses.begin()) os << ", ";
-            else os << "\nnew connectable resource types: ";
-            os << gGlobals.getBonusInfo(*ci).getType();
-        }
-
-        for (std::map<BonusTypes, int>::const_iterator ci(newBonusAccessCounts.begin()), ciEnd(newBonusAccessCounts.end()); ci != ciEnd; ++ci)
-        {
-            if (ci != newBonusAccessCounts.begin()) os << ", ";
-            else os << "\nnew resource types:\n";
-
-            os << gGlobals.getBonusInfo(ci->first).getType() << ", count = " << ci->second;
-        }
-
-        for (std::map<ImprovementTypes, std::pair<TotalOutput, int> >::const_iterator ci(newValuedImprovements.begin()), ciEnd(newValuedImprovements.end()); ci != ciEnd; ++ci)
-        {
-            if (ci != newValuedImprovements.begin()) os << ", ";
-            else os << "\n";
-
-            os << gGlobals.getImprovementInfo(ci->first).getType() << ", output = " << ci->second.first << ", total value = " << ci->second.second;
-        }
-        
-        for (std::map<ImprovementTypes, int>::const_iterator ci(newUnvaluedImprovements.begin()), ciEnd(newUnvaluedImprovements.end()); ci != ciEnd; ++ci)
-        {
-            if (ci != newUnvaluedImprovements.begin()) os << ", ";
-            else os << "\n";
-
-            os << gGlobals.getImprovementInfo(ci->first).getType() << ", count = " << ci->second;
-        }
-        os << "\n";
-#endif
     }
 }

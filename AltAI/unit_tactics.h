@@ -22,13 +22,14 @@ namespace AltAI
         void debug(const MapT& unitCombatData, std::ostream& os) const;
     };
 
-    //ConstructList makeUnitTactics(Player& player);
-
-    //ConstructItem selectExpansionUnitTactics(const Player& player, const ConstructItem& constructItem);
-
-    //UnitTypes getConstructItem(const PlayerTactics& playerTactics);
-
-    ConstructItem getSpecialistBuild(const PlayerTactics& playerTactics, UnitTypes unitType);
-
+    bool getSpecialistBuild(const PlayerTactics& playerTactics, CvUnitAI* pUnit);
+    
     std::pair<std::vector<UnitTypes>, std::vector<UnitTypes> > getActualAndPossibleCombatUnits(const Player& player, const CvCity* pCity, DomainTypes domainType);
+
+    struct UnitAction
+    {
+        XYCoords targetPlot;
+    };
+
+    const CvPlot* getEscapePlot(const Player& player, CvUnit* pUnit, const std::set<const CvPlot*>& dangerPlots, const std::map<const CvPlot*, std::vector<const CvUnit*> >& nearbyHostiles);
 }

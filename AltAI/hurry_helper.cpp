@@ -48,17 +48,24 @@ namespace AltAI
         return calcHurryPercentAnger_();
     }
 
+    int HurryHelper::getFlatHurryAngryLength() const
+    {
+        return flatHurryAngerLength_;
+    }
+
+    int HurryHelper::getAngryTimer() const
+    {
+        return hurryAngryTimer_;
+    }
+
     void HurryHelper::updateAngryTimer()
     {
         hurryAngryTimer_ += flatHurryAngerLength_;
     }
 
-    void HurryHelper::advanceTurn()
+    void HurryHelper::advanceTurns(int nTurns)
     {
-        if (--hurryAngryTimer_ < 0)
-        {
-            hurryAngryTimer_ = 0;
-        }
+        hurryAngryTimer_ = std::max<int>(0, hurryAngryTimer_ - nTurns);
     }
 
     void HurryHelper::updateFlatHurryAngerLength_()
@@ -68,6 +75,7 @@ namespace AltAI
 
     int HurryHelper::calcHurryPercentAnger_() const
     {
+        // CvCity: return ((((((getHurryAngerTimer() - 1) / flatHurryAngerLength()) + 1) * GC.getDefineINT("HURRY_POP_ANGER") * GC.getPERCENT_ANGER_DIVISOR()) / std::max(1, getPopulation() + iExtra)) + 1);
         return hurryAngryTimer_ > 0 ? 1 + ((1 + (hurryAngryTimer_ - 1) / flatHurryAngerLength_) * HURRY_POP_ANGER_ * PERCENT_ANGER_DIVISOR_) / std::max<int>(1, population_) : 0;
     }
 
@@ -76,7 +84,7 @@ namespace AltAI
         HurryData hurryData(hurryType);
         bool costsPopulation = productionPerPopulation_[hurryType] != 0, costsGold = goldPerProduction_[hurryType] != 0;
 
-        if ((!costsPopulation && !costsGold) || data.getBuildQueue().empty())
+        if ((!costsPopulation && !costsGold) || data.getBuildQueue().empty() || data.getBuildQueue().top().first == ProcessItem)
         {
             return std::make_pair(false, hurryData);
         }
@@ -95,42 +103,42 @@ namespace AltAI
         std::pair<BuildQueueTypes, int> buildItem = data.getBuildQueue().top();
 
         int hurryCostModifierModifier = 0;
-        int productionModifier = 0;
+        int productionModifier = data.getModifiersHelper()->getTotalYieldModifier(data)[OUTPUT_PRODUCTION];
         if (buildItem.first == BuildingItem)
         {
             hurryCostModifierModifier = gGlobals.getBuildingInfo((BuildingTypes)buildItem.second).getHurryCostModifier();
-            productionModifier = data.getModifiersHelper()->getBuildingProductionModifier(data, (BuildingTypes)buildItem.second);
+            productionModifier += data.getModifiersHelper()->getBuildingProductionModifier(data, (BuildingTypes)buildItem.second);
         }
         else if (buildItem.first == UnitItem)
         {
             hurryCostModifierModifier = gGlobals.getUnitInfo((UnitTypes)buildItem.second).getHurryCostModifier();
-            productionModifier = data.getModifiersHelper()-> getUnitProductionModifier((UnitTypes)buildItem.second);
+            productionModifier += data.getModifiersHelper()-> getUnitProductionModifier((UnitTypes)buildItem.second);
         }
 
-        int hurryCostModifier = getHurryCostModifier_(hurryCostModifierModifier, data.getCurrentProduction() == 0);
+        int hurryCostModifier = getHurryCostModifier_(hurryCostModifierModifier, data.getAccumulatedProduction() == 0);
 
-        int production = (((data.getRequiredProduction() - data.getCurrentProduction()) / 100) * hurryCostModifier + 99) / 100;
+        int production = (((data.getRequiredProduction() - data.getAccumulatedProduction()) / 100) * hurryCostModifier + 99) / 100;
 
         if (costsPopulation) // this is only included for whipping, not rush-buying
         {
             int extraProduction = (production * productionModifier) / 100;
 
-	        if (extraProduction > 0)
-    	    {
-	    	    production = (production * production + (extraProduction - 1)) / extraProduction;
-	        }
+            if (extraProduction > 0)
+            {
+                production = (production * production + (extraProduction - 1)) / extraProduction;
+            }
         }
         
-	    int hurryCost = std::max<int>(0, production);
+        int hurryCost = std::max<int>(0, production);
         HurryData hurryData(hurryType);
 
         if (costsPopulation)
         {
             hurryData.hurryPopulation = (hurryCost - 1) / productionPerPopulation_[hurryType];
-	        hurryData.hurryPopulation = std::max<int>(1, 1 + hurryData.hurryPopulation);
+            hurryData.hurryPopulation = std::max<int>(1, 1 + hurryData.hurryPopulation);
 
-            hurryData.extraProduction = 100 * (data.getRequiredProduction() / 100 - 
-                (hurryData.hurryPopulation * productionPerPopulation_[hurryType] * productionModifier / 100) / std::max<int>(1, hurryCostModifier));
+            hurryData.extraProduction = 100 * (hurryData.hurryPopulation * productionPerPopulation_[hurryType] * productionModifier) / std::max<int>(1, hurryCostModifier) -
+                (data.getRequiredProduction() - data.getAccumulatedProduction());
         }
         
         if (costsGold)
@@ -146,13 +154,13 @@ namespace AltAI
         int hurryCostModifier = std::max<int>(0, 100 + baseHurryCostModifier);
 
         if (isNew)
-	    {
-		    hurryCostModifier *= std::max<int>(0, NEW_HURRY_MODIFIER_ + 100);
-		    hurryCostModifier /= 100;
-	    }
+        {
+            hurryCostModifier *= std::max<int>(0, NEW_HURRY_MODIFIER_ + 100);
+            hurryCostModifier /= 100;
+        }
 
-	    hurryCostModifier *= std::max<int>(0, globalHurryCostModifier_ + 100);
-	    hurryCostModifier /= 100;
+        hurryCostModifier *= std::max<int>(0, globalHurryCostModifier_ + 100);
+        hurryCostModifier /= 100;
 
         return hurryCostModifier;
     }
@@ -162,7 +170,7 @@ namespace AltAI
         if (hurryData.hurryType != NO_HURRY)
         {
             const CvHurryInfo& hurryInfo = gGlobals.getHurryInfo(hurryData.hurryType);
-            os << hurryInfo.getType() << " ";
+            os << " " << hurryInfo.getType() << " ";
             if (hurryData.hurryPopulation > 0)
             {
                 os << "Pop cost = " << hurryData.hurryPopulation << " ";

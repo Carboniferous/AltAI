@@ -173,21 +173,20 @@ namespace AltAI
 
         int multiplier = player.getProductionModifier(buildingType);  // this is constant afaict
 
-	    for (int bonusType = 0, count = gGlobals.getNumBonusInfos(); bonusType < count; ++bonusType)
-	    {
-		    if (data.getBonusHelper()->getNumBonuses((BonusTypes)bonusType) > 0)
-		    {
-			    multiplier += buildingInfo.getBonusProductionModifier(bonusType);
-		    }
+        for (int bonusType = 0, count = gGlobals.getNumBonusInfos(); bonusType < count; ++bonusType)
+        {
+            if (data.getBonusHelper()->getNumBonuses((BonusTypes)bonusType) > 0)
+            {
+                multiplier += buildingInfo.getBonusProductionModifier(bonusType);
+            }
         }
 
-        ReligionTypes stateReligion = data.getReligionHelper()->getStateReligion();
-	    if (stateReligion != NO_RELIGION && data.getReligionHelper()->isHasReligion(stateReligion))
-    	{
-			multiplier += player.getStateReligionBuildingProductionModifier(); // todo - use civic helper
-		}
+        if (data.getReligionHelper()->hasStateReligion())
+        {
+            multiplier += player.getStateReligionBuildingProductionModifier(); // todo - use civic helper
+        }
 
-	    return std::max<int>(0, multiplier);
+        return std::max<int>(0, multiplier);
     }
 
     Commerce BuildingsHelper::getBuildingCommerce(const CityData& data, BuildingTypes buildingType) const
@@ -202,9 +201,9 @@ namespace AltAI
 
         ReligionTypes stateReligion = data.getReligionHelper()->getStateReligion();
 
-	    if (buildingCount > 0)
-	    {
-		    const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
+        if (buildingCount > 0)
+        {
+            const CvBuildingInfo& buildingInfo = gGlobals.getBuildingInfo(buildingType);
             //os << "\nCalculating commerce for building: " << buildingInfo.getType();
 
             // TODO - check this
@@ -215,45 +214,45 @@ namespace AltAI
             ReligionTypes globalReligionType = (ReligionTypes)buildingInfo.getGlobalReligionCommerce();
 
             if (globalReligionType != NO_RELIGION)  // shrine
-    	    {
-			    totalCommerce += Commerce(gGlobals.getReligionInfo(globalReligionType).getGlobalReligionCommerceArray()) * 
+            {
+                totalCommerce += Commerce(gGlobals.getReligionInfo(globalReligionType).getGlobalReligionCommerceArray()) * 
                     data.getReligionHelper()->getReligionCount(globalReligionType) * activeBuildingCount;
-		    }
+            }
 
             for (int commerceType = 0; commerceType < NUM_COMMERCE_TYPES; ++commerceType)
             {
                 int commerce = 0;
-		        if (!(buildingInfo.isCommerceChangeOriginalOwner(commerceType)) || getBuildingOriginalOwner(buildingType) == owner_)
-		        {
-			        commerce += buildingInfo.getObsoleteSafeCommerceChange(commerceType) * buildingCount;
+                if (!(buildingInfo.isCommerceChangeOriginalOwner(commerceType)) || getBuildingOriginalOwner(buildingType) == owner_)
+                {
+                    commerce += buildingInfo.getObsoleteSafeCommerceChange(commerceType) * buildingCount;
 
-			        if (activeBuildingCount > 0)
-			        {
-				        if (buildingReligionType != NO_RELIGION && buildingReligionType == stateReligion)  // todo ? make isStateReligionBuilding() fn in ReligionHelper?
-					    {
+                    if (activeBuildingCount > 0)
+                    {
+                        if (buildingReligionType != NO_RELIGION && buildingReligionType == stateReligion)  // todo ? make isStateReligionBuilding() fn in ReligionHelper?
+                        {
                             //commerce += CvPlayerAI::getPlayer(owner_).getStateReligionBuildingCommerce((CommerceTypes)commerceType) * activeBuildingCount;
                             commerce += data.getModifiersHelper()->getStateReligionBuildingCommerce()[commerceType] * activeBuildingCount;
-					    }
-				    }
+                        }
+                    }
 
                     // todo corps
-				    //if (GC.getBuildingInfo(buildingType).getGlobalCorporationCommerce() != NO_CORPORATION)
-				    //{
-					//    iCommerce += (GC.getCorporationInfo((CorporationTypes)(GC.getBuildingInfo(buildingType).getGlobalCorporationCommerce())).getHeadquarterCommerce(eIndex) * GC.getGameINLINE().countCorporationLevels((CorporationTypes)(GC.getBuildingInfo(buildingType).getGlobalCorporationCommerce()))) * getNumActivbuildingType(buildingType);
-				    //}
-			    }
+                    //if (GC.getBuildingInfo(buildingType).getGlobalCorporationCommerce() != NO_CORPORATION)
+                    //{
+                    //    iCommerce += (GC.getCorporationInfo((CorporationTypes)(GC.getBuildingInfo(buildingType).getGlobalCorporationCommerce())).getHeadquarterCommerce(eIndex) * GC.getGameINLINE().countCorporationLevels((CorporationTypes)(GC.getBuildingInfo(buildingType).getGlobalCorporationCommerce()))) * getNumActivbuildingType(buildingType);
+                    //}
+                }
 
-			    if (buildingInfo.getCommerceChangeDoubleTime(commerceType) != 0 && originalBuildTime != MIN_INT &&
-				    gameTurnYear - originalBuildTime >= buildingInfo.getCommerceChangeDoubleTime(commerceType))
-			    {
-				    commerce *= 2;
-			    }
+                if (buildingInfo.getCommerceChangeDoubleTime(commerceType) != 0 && originalBuildTime != MIN_INT &&
+                    gameTurnYear - originalBuildTime >= buildingInfo.getCommerceChangeDoubleTime(commerceType))
+                {
+                    commerce *= 2;
+                }
                 //os << " total = " << commerce;
                 totalCommerce[commerceType] += commerce;
-		    }
-	    }
+            }
+        }
 
-	    return totalCommerce;
+        return totalCommerce;
     }
 
     void BuildingsHelper::updatePower(bool isDirty, bool isAdding)
@@ -275,7 +274,7 @@ namespace AltAI
 
     bool BuildingsHelper::isPower() const
     {
-    	return powerCount_ > 0 || isAreaCleanPower_;
+        return powerCount_ > 0 || isAreaCleanPower_;
     }
 
     bool BuildingsHelper::isDirtyPower() const

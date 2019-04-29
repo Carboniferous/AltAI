@@ -8,6 +8,8 @@
 #include "./city_unit_tactics.h"
 #include "./player_tech_tactics.h"
 #include "./tech_tactics_items.h"
+#include "./civic_tactics.h"
+#include "./resource_tactics.h"
 
 namespace AltAI
 {
@@ -20,20 +22,26 @@ namespace AltAI
 
         switch (ID)
         {
-        case 0:
+        case ResearchTechDependency::ID:
             pDependentTactic = IDependentTacticPtr(new ResearchTechDependency());
             break;
-        case 1:
+        case CityBuildingDependency::ID:
             pDependentTactic = IDependentTacticPtr(new CityBuildingDependency());
             break;
-        case 2:
+        case CivBuildingDependency::ID:
             pDependentTactic = IDependentTacticPtr(new CivBuildingDependency());
             break;
-        case 3:
+        case ReligiousDependency::ID:
             pDependentTactic = IDependentTacticPtr(new ReligiousDependency());
             break;
-        case 4:
+        case StateReligionDependency::ID:
+            pDependentTactic = IDependentTacticPtr(new StateReligionDependency());
+            break;
+        case CityBonusDependency::ID:
             pDependentTactic = IDependentTacticPtr(new CityBonusDependency());
+            break;
+        case CivUnitDependency::ID:
+            pDependentTactic = IDependentTacticPtr(new CivUnitDependency());
             break;
         default:
             break;
@@ -52,38 +60,44 @@ namespace AltAI
 
         switch (ID)
         {
-        case 0:
+        case EconomicBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new EconomicBuildingTactic());
             break;
-        case 1:
+        case FoodBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new FoodBuildingTactic());
             break;
-        case 2:
+        case HappyBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new HappyBuildingTactic());
             break;
-        case 3:
+        case HealthBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new HealthBuildingTactic());
             break;
-        case 4:
+        case ScienceBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new ScienceBuildingTactic());
             break;
-        case 5:
+        case GoldBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new GoldBuildingTactic());
             break;
-        case 6:
+        case CultureBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new CultureBuildingTactic());
             break;
-        case 7:
+        case EspionageBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new EspionageBuildingTactic());
             break;
-        case 8:
+        case SpecialistBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new SpecialistBuildingTactic());
             break;
-        case 9:
+        case GovCenterTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new GovCenterTactic());
             break;
-        case 10:
+        case UnitExperienceTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new UnitExperienceTactic());
+            break;
+        case CityDefenceBuildingTactic::ID:
+            pBuildingTactic = ICityBuildingTacticPtr(new CityDefenceBuildingTactic());
+            break;
+        case FreeTechBuildingTactic::ID:
+            pBuildingTactic = ICityBuildingTacticPtr(new FreeTechBuildingTactic());
             break;
         default:
             break;
@@ -112,6 +126,9 @@ namespace AltAI
         case CityBonusDependency::ID:
             os << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "");
             break;
+        case CivUnitDependency::ID:
+            os << (depItem.second != NO_UNIT ? gGlobals.getUnitInfo((UnitTypes)depItem.second).getType() : "");
+            break;
         case -1:
             os << "No Dependencies ";
             break;
@@ -136,7 +153,8 @@ namespace AltAI
         {
             if (!deps[i]->required(pCity, ignoreFlags))
             {
-                depItems.push_back(deps[i]->getDependencyItem());
+                const std::vector<DependencyItem>& thisDepItems = deps[i]->getDependencyItems();
+                std::copy(thisDepItems.begin(), thisDepItems.end(), std::back_inserter(depItems));
             }
             else
             {
@@ -149,38 +167,8 @@ namespace AltAI
         {
             if (!techDeps[i]->required(pCity, ignoreFlags))
             {
-                depItems.push_back(techDeps[i]->getDependencyItem());
-            }
-            else
-            {
-                allDependenciesSatisfied = false;
-            }
-        }
-
-        if (allDependenciesSatisfied && depItems.empty())
-        {
-            depItems.push_back(std::make_pair(-1, -1));
-        }
-
-        return depItems;
-    }
-
-    std::vector<DependencyItem> ICityUnitTactics::getDepItems(int ignoreFlags) const
-    {
-        std::vector<DependencyItem> depItems;
-        const CvCity* pCity = ::getCity(getCity());
-        if (!pCity)
-        {
-            return depItems;
-        }
-        bool allDependenciesSatisfied = true;
-
-        const std::vector<IDependentTacticPtr> deps = getDependencies();      
-        for (size_t i = 0, count = deps.size(); i < count; ++i)
-        {
-            if (!deps[i]->required(pCity, ignoreFlags))
-            {
-                depItems.push_back(deps[i]->getDependencyItem());
+                const std::vector<DependencyItem>& thisDepItems = techDeps[i]->getDependencyItems();
+                std::copy(thisDepItems.begin(), thisDepItems.end(), std::back_inserter(depItems));
             }
             else
             {
@@ -205,7 +193,7 @@ namespace AltAI
 
         switch (ID)
         {
-        case 0:
+        case CityBuildingTactic::ID:
             pCityBuildingTactics = ICityBuildingTacticsPtr(new CityBuildingTactic());
             break;
         default:
@@ -225,22 +213,22 @@ namespace AltAI
 
         switch (ID)
         {
-        case 0:
+        case EconomicImprovementTactic::ID:
             pWorkerBuildTactic = IWorkerBuildTacticPtr(new EconomicImprovementTactic());
             break;
-        case 1:
+        case RemoveFeatureTactic::ID:
             pWorkerBuildTactic = IWorkerBuildTacticPtr(new RemoveFeatureTactic());
             break;
-        case 2:
+        case ProvidesResourceTactic::ID:
             pWorkerBuildTactic = IWorkerBuildTacticPtr(new ProvidesResourceTactic());
             break;
-        case 3:
+        case HappyImprovementTactic::ID:
             pWorkerBuildTactic = IWorkerBuildTacticPtr(new HappyImprovementTactic());
             break;
-        case 4:
+        case HealthImprovementTactic::ID:
             pWorkerBuildTactic = IWorkerBuildTacticPtr(new HealthImprovementTactic());
             break;
-        case 5:
+        case MilitaryImprovementTactic::ID:
             pWorkerBuildTactic = IWorkerBuildTacticPtr(new MilitaryImprovementTactic());
             break;
         default:
@@ -260,11 +248,8 @@ namespace AltAI
 
         switch (ID)
         {
-        case 0:
-            pGlobalBuildingTactics = ILimitedBuildingTacticsPtr(new GlobalBuildingTactic());
-            break;
-        case 1:
-            pGlobalBuildingTactics = ILimitedBuildingTacticsPtr(new NationalBuildingTactic());
+        case LimitedBuildingTactic::ID:
+            pGlobalBuildingTactics = ILimitedBuildingTacticsPtr(new LimitedBuildingTactic());
             break;
         default:
             break;
@@ -272,26 +257,6 @@ namespace AltAI
 
         pGlobalBuildingTactics->read(pStream);
         return pGlobalBuildingTactics;
-    }
-
-    ICityImprovementTacticsPtr ICityImprovementTactics::factoryRead(FDataStreamBase* pStream)
-    {
-        ICityImprovementTacticsPtr pCityImprovementTactics;
-
-        int ID;
-        pStream->Read(&ID);
-
-        switch (ID)
-        {
-        case 0:
-            pCityImprovementTactics = ICityImprovementTacticsPtr(new CityImprovementTactics());
-            break;
-        default:
-            break;
-        }
-
-        pCityImprovementTactics->read(pStream);
-        return pCityImprovementTactics;
     }
 
     IProcessTacticsPtr IProcessTactics::factoryRead(FDataStreamBase* pStream)
@@ -303,7 +268,7 @@ namespace AltAI
 
         switch (ID)
         {
-        case 0:
+        case ProcessTactic::ID:
             pProcessTactics = IProcessTacticsPtr(new ProcessTactic());
             break;
         default:
@@ -323,29 +288,35 @@ namespace AltAI
 
         switch (ID)
         {
-        case 0:
+        case CityDefenceUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new CityDefenceUnitTactic());
             break;
-        case 1:
+        case ThisCityDefenceUnitTactic::ID:
+            pCityUnitTactic = ICityUnitTacticPtr(new ThisCityDefenceUnitTactic());
+            break;
+        case CityAttackUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new CityAttackUnitTactic());
             break;
-        case 2:
+        case CollateralUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new CollateralUnitTactic());
             break;
-        case 3:
+        case FieldDefenceUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new FieldDefenceUnitTactic());
             break;
-        case 4:
+        case FieldAttackUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new FieldAttackUnitTactic());
             break;
-        case 5:
+        case BuildCityUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new BuildCityUnitTactic());
             break;
-        case 6:
+        case BuildImprovementsUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new BuildImprovementsUnitTactic());
             break;
-        case 7:
+        case SeaAttackUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new SeaAttackUnitTactic());
+            break;
+        case ScoutUnitTactic::ID:
+            pCityUnitTactic = ICityUnitTacticPtr(new ScoutUnitTactic());
             break;
         default:
             break;
@@ -355,46 +326,32 @@ namespace AltAI
         return pCityUnitTactic;
     }
 
-    ICityUnitTacticsPtr ICityUnitTactics::factoryRead(FDataStreamBase* pStream)
+    IBuiltUnitTacticPtr IBuiltUnitTactic::factoryRead(FDataStreamBase* pStream)
     {
-        ICityUnitTacticsPtr pCityUnitTactics;
+        IBuiltUnitTacticPtr pUnitTactic;
 
         int ID;
         pStream->Read(&ID);
 
         switch (ID)
         {
-        case 0:
-            pCityUnitTactics = ICityUnitTacticsPtr(new CityUnitTactic());
+        case DiscoverTechUnitTactic::ID:
+            pUnitTactic = IBuiltUnitTacticPtr(new DiscoverTechUnitTactic());
             break;
-        default:
+        case BuildSpecialBuildingUnitTactic::ID:
+            pUnitTactic = IBuiltUnitTacticPtr(new BuildSpecialBuildingUnitTactic());
             break;
-        }
-
-        pCityUnitTactics->read(pStream);
-        return pCityUnitTactics;
-    }
-
-    IUnitTacticPtr IUnitTactic::factoryRead(FDataStreamBase* pStream)
-    {
-        IUnitTacticPtr pUnitTactic;
-
-        int ID;
-        pStream->Read(&ID);
-
-        switch (ID)
-        {
-        case 0:
-            pUnitTactic = IUnitTacticPtr(new DiscoverTechUnitTactic());
+        case CreateGreatWorkUnitTactic::ID:
+            pUnitTactic = IBuiltUnitTacticPtr(new CreateGreatWorkUnitTactic());
             break;
-        case 1:
-            pUnitTactic = IUnitTacticPtr(new BuildSpecialBuildingUnitTactic());
+        case TradeMissionUnitTactic::ID:
+            pUnitTactic = IBuiltUnitTacticPtr(new TradeMissionUnitTactic());
             break;
-        case 2:
-            pUnitTactic = IUnitTacticPtr(new CreateGreatWorkUnitTactic());
+        case JoinCityUnitTactic::ID:
+            pUnitTactic = IBuiltUnitTacticPtr(new JoinCityUnitTactic());
             break;
-        case 3:
-            pUnitTactic = IUnitTacticPtr(new TradeMissionUnitTactic());
+        case HurryBuildingUnitTactic::ID:
+            pUnitTactic = IBuiltUnitTacticPtr(new HurryBuildingUnitTactic());
             break;
         default:
             break;
@@ -402,28 +359,6 @@ namespace AltAI
 
         pUnitTactic->read(pStream);
         return pUnitTactic;
-    }
-
-    IUnitTacticsPtr IUnitTactics::factoryRead(FDataStreamBase* pStream)
-    {
-        IUnitTacticsPtr pUnitTactics;
-
-        int ID;
-        pStream->Read(&ID);
-
-        switch (ID)
-        {
-        case -1:
-            return IUnitTacticsPtr();  // Null tactic - valid for unit tactics if no city can build the unit currently
-        case 0:
-            pUnitTactics = IUnitTacticsPtr(new UnitTactic());
-            break;
-        default:
-            break;
-        }
-
-        pUnitTactics->read(pStream);
-        return pUnitTactics;
     }
 
     ITechTacticPtr ITechTactic::factoryRead(FDataStreamBase* pStream)
@@ -437,11 +372,20 @@ namespace AltAI
         {
         default:
             break;
-        case 0:
+        case FreeTechTactic::ID:
             pTechTactic = ITechTacticPtr(new FreeTechTactic());
             break;
-        case 1:
+        case FoundReligionTechTactic::ID:
             pTechTactic = ITechTacticPtr(new FoundReligionTechTactic());
+            break;
+        case ConnectsResourcesTechTactic::ID:
+            pTechTactic = ITechTacticPtr(new ConnectsResourcesTechTactic());
+            break;
+        case ConstructBuildingTechTactic::ID:
+            pTechTactic = ITechTacticPtr(new ConstructBuildingTechTactic());
+            break;
+        case ProvidesResourceTechTactic::ID:
+            pTechTactic = ITechTacticPtr(new ProvidesResourceTechTactic());
             break;
         }
 
@@ -458,14 +402,60 @@ namespace AltAI
 
         switch (ID)
         {
-        default:
-            break;
-        case 0:
+        case -1:
+            return boost::shared_ptr<PlayerTechTactics>();  // Null tactic - valid for tech tactics - some techs have no tactics of type ITechTactic
+        case PlayerTechTactics::ID:
             pTechTactics = ITechTacticsPtr(new PlayerTechTactics());
             break;
+        default:
+            break;
+        
         }
 
         pTechTactics->read(pStream);
         return pTechTactics;
+    }
+
+    ICivicTacticPtr ICivicTactic::factoryRead(FDataStreamBase* pStream)
+    {
+        ICivicTacticPtr pCivicTactic;
+
+        int ID;
+        pStream->Read(&ID);
+
+        switch (ID)
+        {
+        case EconomicCivicTactic::ID:
+            pCivicTactic = ICivicTacticPtr(new EconomicCivicTactic());
+            break;
+        case HurryCivicTactic::ID:
+            pCivicTactic = ICivicTacticPtr(new HurryCivicTactic());
+            break;
+        default:
+            break;
+        }
+
+        pCivicTactic->read(pStream);
+        return pCivicTactic;
+    }
+
+    IResourceTacticPtr IResourceTactic::factoryRead(FDataStreamBase* pStream)
+    {
+        IResourceTacticPtr pResourceTactic;
+
+        int ID;
+        pStream->Read(&ID);
+
+        switch (ID)
+        {
+        case EconomicResourceTactic::ID:
+            pResourceTactic = IResourceTacticPtr(new EconomicResourceTactic());
+            break;
+        default:
+            break;
+        }
+
+        pResourceTactic->read(pStream);
+        return pResourceTactic;
     }
 }

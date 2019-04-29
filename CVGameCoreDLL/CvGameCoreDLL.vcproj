@@ -240,12 +240,12 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="boost_python-vc71-mt-1_32.lib winmm.lib msvcprt.lib AltAI.lib"
-				OutputFile="C:\Program Files (x86)\Firaxis Games\Sid Meier&apos;s Civilization 4\Beyond the Sword\Mods\AltAI\Assets\CvGameCoreDLL.dll"
+				OutputFile="C:\Program Files (x86)\Firaxis Games\Sid Meier&apos;s Civilization 4\Beyond the Sword\Assets\CvGameCoreDLL.dll"
 				LinkIncremental="2"
 				AdditionalLibraryDirectories="Python24\libs;&quot;boost-1.32.0\libs\&quot;;..\AltAI\Debug\"
 				IgnoreDefaultLibraryNames="msvcprtd.lib"
 				GenerateDebugInformation="TRUE"
-				ProgramDatabaseFile="C:\Program Files (x86)\Firaxis Games\Sid Meier&apos;s Civilization 4\Beyond the Sword\Mods\AltAI\Assets/CvGameCoreDLL_DEBUG.pdb"
+				ProgramDatabaseFile="C:\Program Files (x86)\Firaxis Games\Sid Meier&apos;s Civilization 4\Beyond the Sword\Assets/CvGameCoreDLL_DEBUG.pdb"
 				SubSystem="2"
 				LargeAddressAware="2"
 				ImportLibrary="$(OutDir)/CvGameCoreDLL.lib"
@@ -305,11 +305,11 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/FIXED:NO"
 				AdditionalDependencies="boost_python-vc71-mt-1_32.lib winmm.lib AltAI.lib"
-				OutputFile="C:\Program Files (x86)\Firaxis Games\Sid Meier&apos;s Civilization 4\Beyond the Sword\Mods\AltAI\Assets\CvGameCoreDLL.dll"
+				OutputFile="C:\Program Files (x86)\Firaxis Games\Sid Meier&apos;s Civilization 4\Beyond the Sword\Assets\CvGameCoreDLL.dll"
 				LinkIncremental="1"
 				AdditionalLibraryDirectories="Python24\libs;&quot;boost-1.32.0\libs\&quot;;..\AltAI\Logged_release\"
 				GenerateDebugInformation="TRUE"
-				ProgramDatabaseFile="C:\Program Files (x86)\Firaxis Games\Sid Meier&apos;s Civilization 4\Beyond the Sword\Mods\AltAI\Assets/CvGameCoreDLL.pdb"
+				ProgramDatabaseFile="C:\Program Files (x86)\Firaxis Games\Sid Meier&apos;s Civilization 4\Beyond the Sword\Assets/CvGameCoreDLL.pdb"
 				SubSystem="2"
 				LargeAddressAware="2"
 				OptimizeReferences="2"
@@ -1232,6 +1232,9 @@
 			Name="Header Files"
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}">
+			<File
+				RelativePath=".\AdvancedCombatOdds.h">
+			</File>
 			<File
 				RelativePath=".\AI_Defines.h">
 			</File>

@@ -16,11 +16,13 @@ namespace AltAI
         explicit CultureHelper(const CvCity* pCity);
         CultureHelperPtr clone() const;
 
-        void advanceTurn(CityData& data, bool includeUnclaimedPlots);
+        void advanceTurns(CityData& data, int nTurns);
+        CultureLevelTypes getCultureLevel() const;
+        int getTurnsToNextLevel(CityData& data) const;
 
     private:
         bool checkCulturalLevel_();
-        bool updatePlot_(PlotData& plotData, bool culturalLevelChange, const CvCity* pCity, int cultureOutput);
+        bool updatePlot_(PlotData& plotData, bool culturalLevelChange, const CvCity* pCity, int cultureOutput, int nTurns);
 
         PlayerTypes owner_;
         int cityCulture_;

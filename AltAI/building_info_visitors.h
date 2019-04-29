@@ -47,9 +47,13 @@ namespace AltAI
     PlotYield getExtraConditionalYield(XYCoords cityCoords, XYCoords plotCoords,
         const std::vector<ConditionalPlotYieldEnchancingBuilding>& conditionalYieldEnchancingBuildings);
 
-    std::vector<IProjectionEventPtr> getPossibleEvents(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int baseEventTurn);
+    //std::vector<IProjectionEventPtr> getPossibleEvents(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int baseEventTurn);
 
     bool couldConstructBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, bool ignoreRequiredBuildings);
+
+    bool couldConstructBuilding(const Player& player, const CvPlot* pPlot, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
+
+    bool couldConstructUnitBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);    
 
     bool couldConstructSpecialBuilding(const Player& player, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 }

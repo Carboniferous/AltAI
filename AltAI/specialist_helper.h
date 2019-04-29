@@ -21,6 +21,12 @@ namespace AltAI
         int getTotalFreeSpecialistSlotCount() const;
         int getFreeSpecialistCountPerImprovement(ImprovementTypes improvementType) const;
 
+        std::vector<SpecialistTypes> getAvailableSpecialistTypes() const;
+
+        int getPlayerGPPModifier() const;
+        int getCityGPPModifier() const;
+        int getStateReligionGPPModifier() const;
+
         void changePlayerFreeSpecialistSlotCount(int change);
         void changeImprovementFreeSpecialistSlotCount(int change);
         void changeFreeSpecialistCountPerImprovement(ImprovementTypes improvementType, int change);
@@ -31,5 +37,6 @@ namespace AltAI
         std::vector<int> improvementFreeSpecialists_;
 
         int cityFreeSpecSlotCount_, areaFreeSpecSlotCount_, playerFreeSpecSlotCount_, improvementFreeSpecSlotCount_;
+        int playerGPPModifier_, cityGPPModifier_, stateReligionGPPModifier_;
     };
 }

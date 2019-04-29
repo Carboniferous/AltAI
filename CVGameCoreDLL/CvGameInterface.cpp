@@ -11,6 +11,8 @@
 #include "CvGameTextMgr.h"
 #include "CvMessageControl.h"
 
+#include "AltAI.h"
+
 void CvGame::updateColoredPlots()
 {
 	PROFILE_FUNC();
@@ -2356,7 +2358,7 @@ void CvGame::cheatSpaceship() const
 			TechTypes eRequiredTech = (TechTypes) kProject.getTechPrereq();
 			if (!kTeam.isHasTech(eRequiredTech))
 			{
-				kTeam.setHasTech(eRequiredTech, true, getActivePlayer(), true, true);
+				kTeam.setHasTech(eRequiredTech, true, getActivePlayer(), true, true, AltAI::CHEAT_TECH);
 			}
 
 			//cheat one space component

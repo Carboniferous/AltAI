@@ -31,7 +31,6 @@
 #include "team.h"
 #include "player.h"
 #include "city.h"
-#include "plot_events.h"
 #include "iters.h"
 
 #define STANDARD_MINIMAP_ALPHA		(0.6f)
@@ -4629,7 +4628,7 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
 				if (pLoopUnit->isBlockading())
 				{
 					pLoopUnit->setBlockading(false);
-					pLoopUnit->getGroup()->clearMissionQueue();
+					pLoopUnit->getGroup()->clearMissionQueue(__FUNCTION__);
 					pLoopUnit->getGroup()->setActivityType(ACTIVITY_AWAKE);
 				}
 			}
@@ -5437,6 +5436,12 @@ void CvPlot::setImprovementType(ImprovementTypes eNewValue)
 			}
 		}
 
+		// improvements like goody huts and city ruins can have no owner
+		if (m_eOwner != NO_PLAYER && GET_PLAYER((PlayerTypes)m_eOwner).isUsingAltAI())
+		{
+			GC.getGame().getAltAI()->getPlayer((PlayerTypes)m_eOwner)->updatePlotImprovement(this, eOldImprovement);
+		}
+
 		// Building or removing a fort will now force a plotgroup update to verify resource connections.
 		if ( (NO_IMPROVEMENT != getImprovementType() && GC.getImprovementInfo(getImprovementType()).isActsAsCity()) !=
 			 (NO_IMPROVEMENT != eOldImprovement && GC.getImprovementInfo(eOldImprovement).isActsAsCity()) )
@@ -5518,6 +5523,29 @@ void CvPlot::setRouteType(RouteTypes eNewValue, bool bUpdatePlotGroups)
 			if (bOldRoute != isRoute())
 			{
 				updatePlotGroup();
+			}
+		}
+
+        //AltAI
+        for (iI = 0; iI < NUM_CITY_PLOTS; ++iI)
+		{
+			CvPlot* pLoopPlot = plotCity(getX_INLINE(), getY_INLINE(), iI);
+
+			if (pLoopPlot != NULL)
+			{
+				CvCity* pLoopCity = pLoopPlot->getPlotCity();
+
+				if (pLoopCity != NULL)
+				{
+                    // AltAI
+                    if (m_eOwner == pLoopCity->getOwner())
+                    {
+                        if (GET_PLAYER(pLoopCity->getOwner()).isUsingAltAI())
+                        {
+                            GC.getGame().getAltAI()->getPlayer(pLoopCity->getOwner())->getCity(pLoopCity->getID()).updateRoutes(this, eNewValue);
+                        }
+                    }
+				}
 			}
 		}
 
@@ -5830,6 +5858,11 @@ void CvPlot::changeRiverCrossingCount(int iChange)
 
 
 short* CvPlot::getYield()
+{
+	return m_aiYield;
+}
+
+const short* const CvPlot::getYield() const
 {
 	return m_aiYield;
 }
@@ -6740,9 +6773,9 @@ void CvPlot::changeVisibilityCount(TeamTypes eTeam, int iChange, InvisibleTypes 
 			changeInvisibleVisibilityCount(eTeam, eSeeInvisible, iChange);
 		}
 
-		if (bOldVisible != isVisible(eTeam, false))
+		if (bOldVisible != isVisible(eTeam, false))  // visibility has changed...
 		{
-			if (isVisible(eTeam, false))
+			if (isVisible(eTeam, false))  // ...and plot is now visible
 			{
 				setRevealed(eTeam, true, false, NO_TEAM, bUpdatePlotGroups);
 
@@ -6939,7 +6972,8 @@ void CvPlot::setRevealedOwner(TeamTypes eTeam, PlayerTypes eNewValue)
 	FAssertMsg(eTeam >= 0, "eTeam is expected to be non-negative (invalid Index)");
 	FAssertMsg(eTeam < MAX_TEAMS, "eTeam is expected to be within maximum bounds (invalid Index)");
 
-	if (getRevealedOwner(eTeam, false) != eNewValue)
+    PlayerTypes previousRevealedOwner = getRevealedOwner(eTeam, false);
+	if (previousRevealedOwner != eNewValue)
 	{
 		if (NULL == m_aiRevealedOwner)
 		{
@@ -6951,6 +6985,21 @@ void CvPlot::setRevealedOwner(TeamTypes eTeam, PlayerTypes eNewValue)
 		}
 
 		m_aiRevealedOwner[eTeam] = eNewValue;
+
+        // AltAI
+        if (previousRevealedOwner != eNewValue && GC.getGame().getAltAI()->isInit())
+        {
+            // update all players on this team
+            AltAI::PlayerIDIter playerIter(eTeam);
+            PlayerTypes playerType = NO_PLAYER;
+            while ((playerType = playerIter()) != NO_PLAYER)
+            {
+                if (GET_PLAYER(playerType).isUsingAltAI())
+                {
+                    GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotCulture(this, previousRevealedOwner, eNewValue);
+                }
+            }
+        }
 
 		if (eTeam == GC.getGameINLINE().getActiveTeam())
 		{
@@ -6978,18 +7027,19 @@ void CvPlot::updateRevealedOwner(TeamTypes eTeam)
 	FAssertMsg(eTeam >= 0, "eTeam is expected to be non-negative (invalid Index)");
 	FAssertMsg(eTeam < MAX_TEAMS, "eTeam is expected to be within maximum bounds (invalid Index)");
 
+	//bRevealed = false;
+
+	//if (!bRevealed)  // utterly pointless test
+	//{
+	//	if (isVisible(eTeam, false))
+	//	{
+	//		bRevealed = true;
+	//	}
+	//}
+
     // AltAI
-    PlayerTypes currentRevealedOwner = getRevealedOwner(eTeam, false);
-
-	bRevealed = false;
-
-	if (!bRevealed)  // utterly pointless test
-	{
-		if (isVisible(eTeam, false))
-		{
-			bRevealed = true;
-		}
-	}
+    PlayerTypes previousRevealedOwner = getRevealedOwner(eTeam, false);
+    bRevealed = isVisible(eTeam, false);
 
 	if (!bRevealed)  // look for a neighbouring plot that is revealed to this team
 	{
@@ -7010,23 +7060,8 @@ void CvPlot::updateRevealedOwner(TeamTypes eTeam)
 
 	if (bRevealed)
 	{
-		setRevealedOwner(eTeam, getOwnerINLINE());
-
-        // AltAI
-        if (currentRevealedOwner != getOwnerINLINE() && GC.getGame().getAltAI()->isInit())
-        {
-            AltAI::PlayerIDIter playerIter(eTeam);
-            PlayerTypes playerType = NO_PLAYER;
-            while ((playerType = playerIter()) != NO_PLAYER)
-            {
-                if (GET_PLAYER(playerType).isUsingAltAI())
-                {
-                    // if we own this plot, or think no-one owns it, add it - otherwise remove it as we think someone else owns it
-                    bool addPlot = getOwnerINLINE() == NO_PLAYER || getOwnerINLINE() == playerType;
-                    GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotCulture(this, !addPlot);
-                }
-            }
-        }
+        const PlayerTypes newRevealedOwner = getOwnerINLINE();
+		setRevealedOwner(eTeam, newRevealedOwner);
 	}
 }
 
@@ -7233,7 +7268,9 @@ void CvPlot::setRevealed(TeamTypes eTeam, bool bNewValue, bool bTerrainOnly, Tea
 
 	pCity = getPlotCity();
 
-	if (isRevealed(eTeam, false) != bNewValue)
+    // change in visibility
+    bool wasRevealed = isRevealed(eTeam, false);
+	if (wasRevealed != bNewValue)
 	{
 		if (NULL == m_abRevealed)
 		{
@@ -7248,7 +7285,7 @@ void CvPlot::setRevealed(TeamTypes eTeam, bool bNewValue, bool bTerrainOnly, Tea
 
 		if (area())
 		{
-			area()->changeNumRevealedTiles(eTeam, ((isRevealed(eTeam, false)) ? 1 : -1));
+			area()->changeNumRevealedTiles(eTeam, (bNewValue ? 1 : -1));
 		}
 
 		if (bUpdatePlotGroup)
@@ -7275,28 +7312,29 @@ void CvPlot::setRevealed(TeamTypes eTeam, bool bNewValue, bool bTerrainOnly, Tea
 			gDLL->getInterfaceIFace()->setDirty(GlobeLayer_DIRTY_BIT, true);
 		}
 
-		if (isRevealed(eTeam, false))
-		{
-			// ONEVENT - PlotRevealed
-			CvEventReporter::getInstance().plotRevealed(this, eTeam);
+		//if (bNewValue)  // plot revealed for first time
+		//{
+		//	// ONEVENT - PlotRevealed
+		//	CvEventReporter::getInstance().plotRevealed(this, eTeam);
 
-            // AltAI
-            AltAI::PlayerIDIter playerIter(eTeam);
-            PlayerTypes playerType = NO_PLAYER;
-            while ((playerType = playerIter()) != NO_PLAYER)
-            {
-                if (GET_PLAYER(playerType).isUsingAltAI())
-                {
-                    // todo - this is ugly - sort out team/player AI use
-                    GC.getGame().getAltAI()->getTeam(eTeam)->pushPlotEvent(boost::shared_ptr<AltAI::IPlotEvent>(new AltAI::RevealPlotEvent(this, bTerrainOnly)));
-                }
-            }
-		}
+  //          // AltAI
+  //          AltAI::PlayerIDIter playerIter(eTeam);
+  //          PlayerTypes playerType = NO_PLAYER;
+  //          while ((playerType = playerIter()) != NO_PLAYER)
+  //          {
+  //              if (GET_PLAYER(playerType).isUsingAltAI())
+  //              {
+  //                  GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotInfo(this, true, __FUNCTION__);
+  //              }
+  //          }
+
+  //          GC.getGame().getAltAI()->getTeam(eTeam)->updatePlotRevealed(this);
+		//}
 	}
 
 	if (!bTerrainOnly)
 	{
-		if (isRevealed(eTeam, false))
+		if (isRevealed(eTeam, false)) // updating already revealed plot with latest view
 		{
 			if (eFromTeam == NO_TEAM)
 			{
@@ -7334,6 +7372,20 @@ void CvPlot::setRevealed(TeamTypes eTeam, bool bNewValue, bool bTerrainOnly, Tea
 					}
 				}
 			}
+
+            // AltAI - update here now plot data has been updated from reveal
+            AltAI::PlayerIDIter playerIter(eTeam);
+            PlayerTypes playerType = NO_PLAYER;
+            while ((playerType = playerIter()) != NO_PLAYER)
+            {
+                if (GET_PLAYER(playerType).isUsingAltAI())
+                {
+                    GC.getGame().getAltAI()->getPlayer(playerType)->updatePlotInfo(this, wasRevealed != bNewValue, __FUNCTION__);
+                }
+            }
+
+            // also updates units which have been revealed at this plot
+            GC.getGame().getAltAI()->getTeam(eTeam)->updatePlotRevealed(this, !wasRevealed);            
 		}
 		else
 		{
@@ -7418,7 +7470,10 @@ void CvPlot::setRevealedImprovementType(TeamTypes eTeam, ImprovementTypes eNewVa
 	FAssertMsg(eTeam >= 0, "eTeam is expected to be non-negative (invalid Index)");
 	FAssertMsg(eTeam < MAX_TEAMS, "eTeam is expected to be within maximum bounds (invalid Index)");
 
-	if (getRevealedImprovementType(eTeam, false) != eNewValue)
+    // AltAI
+    ImprovementTypes previousImpType = getRevealedImprovementType(eTeam, false);
+
+	if (previousImpType != eNewValue)
 	{
 		if (NULL == m_aeRevealedImprovementType)
 		{
@@ -7437,6 +7492,38 @@ void CvPlot::setRevealedImprovementType(TeamTypes eTeam, ImprovementTypes eNewVa
 			setLayoutDirty(true);
 			//gDLL->getEngineIFace()->SetDirty(GlobeTexture_DIRTY_BIT, true);
 		}
+
+        // AltAI...
+        // keep track of forts
+        if (previousImpType != NO_IMPROVEMENT)
+        {
+            if (GC.getImprovementInfo(previousImpType).isActsAsCity())
+            {
+                AltAI::PlayerIter playerIter(eTeam);
+                while (const CvPlayerAI* player = playerIter())
+                {
+                    if (player->isUsingAltAI())
+                    {
+                        GC.getGame().getAltAI()->getPlayer(player->getID())->updatePlotImprovement(this, previousImpType);
+                    }
+                }
+            }
+        }
+
+        // AltAI...
+        // this happens when a city is destroyed, which changes the plot info key
+        // - by the call to CvCity::kill() - which is called even if the city is not destroyed
+        if (eNewValue == gGlobals.getDefineINT("RUINS_IMPROVEMENT"))
+        {
+            AltAI::PlayerIter playerIter(eTeam);
+            while (const CvPlayerAI* player = playerIter())
+            {
+                if (player->isUsingAltAI())
+                {
+                    GC.getGame().getAltAI()->getPlayer(player->getID())->updatePlotInfo(this, false, __FUNCTION__);
+                }
+            }
+        }
 	}
 }
 

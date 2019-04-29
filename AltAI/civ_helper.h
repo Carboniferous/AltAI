@@ -29,10 +29,10 @@ namespace AltAI
 
         bool isInCivic(CivicTypes civicType) const;
         CivicTypes currentCivic(CivicOptionTypes civicOptionType) const;
-        bool civicIsAvailable(CivicTypes civicType);
-        void addCivic(CivicTypes civicType);
+        //bool civicIsAvailable(CivicTypes civicType);
+        //void addCivic(CivicTypes civicType);
         void adoptCivic(CivicTypes civicType);
-        void makeAllCivicsAvailable();
+        //void makeAllCivicsAvailable();
 
         const std::vector<CivicTypes>& getCurrentCivics() const;
 
@@ -42,7 +42,7 @@ namespace AltAI
         const Player& player_;
         std::set<TechTypes> techs_;
         std::list<TechTypes> techsToResearch_;
-        std::set<CivicTypes> availableCivics_;
+        //std::set<CivicTypes> availableCivics_;
         std::vector<CivicTypes> currentCivics_;
 
         std::vector<int> specialBuildingNotRequiredCounts_;

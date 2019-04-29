@@ -15,12 +15,14 @@
 #include <vector>
 #include <set>
 #include <string>
+#include <stack>
+#include <queue>
 
-#include "CvGameCoreDLL.h"
-#include "CvStructs.h"
-#include "CvMap.h"
-#include "CvPlayer.h"
-#include "CvPlotGroup.h"
+#include "../CvGameCoreDLL/CvGameCoreDLL.h"
+#include "../CvGameCoreDLL/CvStructs.h"
+#include "../CvGameCoreDLL/CvMap.h"
+#include "../CvGameCoreDLL/CvPlayer.h"
+#include "../CvGameCoreDLL/CvPlotGroup.h"
 
 #include "boost/shared_ptr.hpp"
 #include "boost/enable_shared_from_this.hpp"
@@ -32,18 +34,6 @@
 #define NUM_DOMAIN_TYPES 4  // hidden by _USRDLL in CvEnums.h
 #define NUM_COMMERCE_TYPES 4
 #define NUM_YIELD_TYPES 3
-
-enum OutputTypes
-{
-	NO_OUTPUT = -1,
-	OUTPUT_FOOD,
-	OUTPUT_PRODUCTION,
-	OUTPUT_GOLD,
-	OUTPUT_RESEARCH,
-    OUTPUT_CULTURE,
-    OUTPUT_ESPIONAGE,
-	NUM_OUTPUT_TYPES
-};
 
 namespace boost
 {
@@ -60,6 +50,32 @@ namespace boost
 
 namespace AltAI
 {
+    enum OutputTypes
+    {
+        NO_OUTPUT = -1,
+        OUTPUT_FOOD,
+        OUTPUT_PRODUCTION,
+        OUTPUT_GOLD,
+        OUTPUT_RESEARCH,
+        OUTPUT_CULTURE,
+        OUTPUT_ESPIONAGE,
+        NUM_OUTPUT_TYPES
+    };
+
+    enum TechSources
+    {
+        NOT_KNOWN = -1,
+        RESEARCH_TECH,
+        INITIAL_TECH,
+        TEAM_TECH,
+        SHARE_TECH,
+        TRADE_TECH,
+        GOODY_TECH,
+        STOLEN_TECH,
+        FREE_TECH,
+        CHEAT_TECH
+    };
+
     template <int N, typename T = int>
         struct Output
     {
@@ -72,7 +88,7 @@ namespace AltAI
             data.assign(0);
         }
 
-        explicit Output(T* data_)
+        explicit Output(const T* data_)
         {
             for (int i = 0; i < N; ++i)
             {
@@ -81,7 +97,7 @@ namespace AltAI
         }
 
         template <typename U>
-            Output(U* data_)
+            Output(const U* data_)
         {
             for (int i = 0; i < N; ++i)
             {
@@ -542,8 +558,17 @@ namespace AltAI
     };
 
     std::ostream& operator << (std::ostream& os, const XYCoords& coords);
+    std::ostream& operator << (std::ostream& os, const IDInfo& idInfo);
 
     typedef bool (CvPlot::*CvPlotFnPtr)(void) const;
+
+    struct CvPlotOrderF
+    {
+        bool operator() (const CvPlot* pPlot1, const CvPlot* pPlot2) const
+        {
+            return pPlot1->getCoords() < pPlot2->getCoords();
+        }
+    };
 
     struct LessThanZero
     {

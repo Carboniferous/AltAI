@@ -7,6 +7,8 @@
 #include "./player.h"
 #include "./player_analysis.h"
 #include "./city.h"
+#include "./city_data.h"
+#include "./specialist_helper.h"
 #include "./iters.h"
 #include "./helper_fns.h"
 #include "./civ_log.h"
@@ -29,11 +31,24 @@ namespace AltAI
         return node.techTypes;
     }
 
+    void updateRequestData(CityData& data, SpecialistTypes specialistType)
+    {
+        data.getSpecialistHelper()->changeFreeSpecialistCount(specialistType, 1);
+        data.recalcOutputs();
+    }
+
     class CouldConstructUnitVisitor : public boost::static_visitor<bool>
     {
     public:
         CouldConstructUnitVisitor(const Player& player, int lookaheadDepth, bool ignoreRequiredResources)
-            : player_(player), lookaheadDepth_(lookaheadDepth), ignoreRequiredResources_(ignoreRequiredResources)
+            : player_(player), pCity_(NULL), lookaheadDepth_(lookaheadDepth), ignoreRequiredResources_(ignoreRequiredResources)
+        {
+            civHelper_ = player.getCivHelper();
+            pAnalysis_ = player.getAnalysis();
+        }
+
+        CouldConstructUnitVisitor(const Player& player, const CvCity* pCity, int lookaheadDepth, bool ignoreRequiredResources)
+            : player_(player), pCity_(pCity), lookaheadDepth_(lookaheadDepth), ignoreRequiredResources_(ignoreRequiredResources)
         {
             civHelper_ = player.getCivHelper();
             pAnalysis_ = player.getAnalysis();
@@ -49,6 +64,11 @@ namespace AltAI
         {
             if (node.prereqReligion != NO_RELIGION)
             {
+                if (pCity_)
+                {
+                    return pCity_->isHasReligion(node.prereqReligion);
+                }
+
                 CityIter cityIter(*player_.getCvPlayer());
                 CvCity* pCity;
 
@@ -68,6 +88,11 @@ namespace AltAI
         {
             if (node.prereqCorporation != NO_CORPORATION)
             {
+                if (pCity_)
+                {
+                    return pCity_->isHasCorporation(node.prereqCorporation);
+                }
+
                 CityIter cityIter(*player_.getCvPlayer());
                 CvCity* pCity;
 
@@ -89,9 +114,17 @@ namespace AltAI
             //std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
 #endif
             // includes great people
-            if (node.cost < 0)
+            if (node.cost < 1)
             {
+#ifdef ALTAI_DEBUG
+                //os << "\nskipping unit: " << gGlobals.getUnitInfo(node.unitType).getType() << " cost = " << node.cost;
+#endif
                 // do great people if city can produce the right type of great people points from specialists
+                return false;
+            }
+
+            if (pCity_ && node.domainType == DOMAIN_SEA && !pCity_->isCoastal(gGlobals.getUnitInfo(node.unitType).getMinAreaSize()))
+            {
                 return false;
             }
 
@@ -122,7 +155,8 @@ namespace AltAI
             }
 
             // todo - add religion and any other checks
-            bool passedAreaCheck = node.minAreaSize < 0, passedBonusCheck = ignoreRequiredResources_ || (node.andBonusTypes.empty() && node.orBonusTypes.empty());
+            bool passedAreaCheck = node.minAreaSize < 0;
+            bool passedBonusCheck = ignoreRequiredResources_ || (node.andBonusTypes.empty() && node.orBonusTypes.empty());
             bool passedBuildingCheck = node.prereqBuildingType == NO_BUILDING;
 
             if (!passedBuildingCheck)
@@ -137,69 +171,91 @@ namespace AltAI
             //os << "\narea check = " << passedAreaCheck << ", bonus check = " << passedBonusCheck << ", building check = " << passedBuildingCheck;
 #endif
 
+            if (pCity_)
+            {
+                checkCity_(pCity_, node, passedAreaCheck, passedBonusCheck, passedBuildingCheck);
+                if (passedAreaCheck && passedBonusCheck && passedBuildingCheck)
+                {
+                    return true;
+                }
+                // will never be able to build whatever other cities do
+                if (!passedAreaCheck)
+                {
+                    return false;
+                }
+            }
+
             CityIter cityIter(*player_.getCvPlayer());
             CvCity* pCity;
 
             while (pCity = cityIter())
             {
-                if (!passedAreaCheck)
-                {
-                    if (node.domainType == DOMAIN_SEA)
-                    {
-                        if (pCity->isCoastal(node.minAreaSize))
-                        {
-                            passedAreaCheck = true;
-                        }
-                    }
-                    else if (node.domainType == DOMAIN_LAND)
-                    {
-                        if (pCity->area()->getNumTiles() >= node.minAreaSize)
-                        {
-                            passedAreaCheck = true;
-                        }
-                    }
-                }
-
-                if (!passedBonusCheck)
-                {
-                    bool foundAllAndBonuses = true, foundOrBonus = node.orBonusTypes.empty();
-                    for (size_t i = 0, count = node.andBonusTypes.size(); i < count; ++i)
-                    {
-                        if (!pCity->hasBonus(node.andBonusTypes[i]))
-                        {
-                            foundAllAndBonuses = false;
-                            break;
-                        }
-                    }
-
-                    if (foundAllAndBonuses)
-                    {
-                        for (size_t i = 0, count = node.orBonusTypes.size(); i < count; ++i)
-                        {
-                            if (pCity->hasBonus(node.orBonusTypes[i]))
-                            {
-                                foundOrBonus = true;
-                                break;
-                            }
-                        }
-
-                        if (foundOrBonus)
-                        {
-                            passedBonusCheck = true;
-                        }
-                    }
-                }
-
-                if (!passedBuildingCheck)
-                {
-                    passedBuildingCheck = pCity->getNumBuilding(node.prereqBuildingType) > 0;
-                }
+                checkCity_(pCity, node, passedAreaCheck, passedBonusCheck, passedBuildingCheck);
             }
+
             return passedAreaCheck && passedBonusCheck && passedBuildingCheck;
         }
 
     private:
+        void checkCity_(const CvCity* pCity, const UnitInfo::BaseNode& node, 
+                        bool& passedAreaCheck, bool& passedBonusCheck, bool& passedBuildingCheck) const
+        {
+            if (!passedAreaCheck)
+            {
+                if (node.domainType == DOMAIN_SEA)
+                {
+                    if (pCity->isCoastal(node.minAreaSize))
+                    {
+                        passedAreaCheck = true;
+                    }
+                }
+                else if (node.domainType == DOMAIN_LAND)
+                {
+                    if (pCity->area()->getNumTiles() >= node.minAreaSize)
+                    {
+                        passedAreaCheck = true;
+                    }
+                }
+            }
+
+            if (!passedBonusCheck)
+            {
+                bool foundAllAndBonuses = true, foundOrBonus = node.orBonusTypes.empty();
+                for (size_t i = 0, count = node.andBonusTypes.size(); i < count; ++i)
+                {
+                    if (!pCity->hasBonus(node.andBonusTypes[i]))
+                    {
+                        foundAllAndBonuses = false;
+                        break;
+                    }
+                }
+
+                if (foundAllAndBonuses)
+                {
+                    for (size_t i = 0, count = node.orBonusTypes.size(); i < count; ++i)
+                    {
+                        if (pCity->hasBonus(node.orBonusTypes[i]))
+                        {
+                            foundOrBonus = true;
+                            break;
+                        }
+                    }
+
+                    if (foundOrBonus)
+                    {
+                        passedBonusCheck = true;
+                    }
+                }
+            }
+
+            if (!passedBuildingCheck)
+            {
+                passedBuildingCheck = pCity->getNumBuilding(node.prereqBuildingType) > 0;
+            }
+        }
+
         const Player& player_;
+        const CvCity* pCity_;
         int lookaheadDepth_;
         bool ignoreRequiredResources_;
         boost::shared_ptr<CivHelper> civHelper_;
@@ -209,6 +265,12 @@ namespace AltAI
     bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources)
     {
         CouldConstructUnitVisitor visitor(player, lookaheadDepth, ignoreRequiredResources);
+        return boost::apply_visitor(visitor, pUnitInfo->getInfo());
+    }
+
+    bool couldConstructUnit(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources)
+    {
+        CouldConstructUnitVisitor visitor(player, city.getCvCity(), lookaheadDepth, ignoreRequiredResources);
         return boost::apply_visitor(visitor, pUnitInfo->getInfo());
     }
 
@@ -509,6 +571,47 @@ namespace AltAI
         return visitor.getFreePromotions();
     }
 
+    class SettledSpecialistsVisitor : public boost::static_visitor<>
+    {
+    public:
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const UnitInfo::BaseNode& node)
+        {
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                boost::apply_visitor(*this, node.nodes[i]);
+            }
+        }
+
+        void operator() (const UnitInfo::MiscAbilityNode& node)
+        {
+            for (size_t i = 0, count = node.settledSpecialists.size(); i < count; ++i)
+            {
+                specialists_.push_back(node.settledSpecialists[i]);
+            }
+        }
+
+        const std::vector<SpecialistTypes> & getSpecTypes() const
+        {
+            return specialists_;
+        }
+
+    private:
+        std::vector<SpecialistTypes> specialists_;
+    };
+
+    std::vector<SpecialistTypes> getCityJoinSpecs(const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    {
+        SettledSpecialistsVisitor visitor;
+        boost::apply_visitor(visitor, pUnitInfo->getInfo());
+
+        return visitor.getSpecTypes();
+    }
+
     class UpgradeVisitor : public boost::static_visitor<bool>
     {
     public:
@@ -561,5 +664,46 @@ namespace AltAI
     {
         UpgradeVisitor visitor(player);
         return boost::apply_visitor(visitor, pUnitInfo->getInfo());
+    }
+
+    class UnitSpecialBuildingsVisitor : public boost::static_visitor<>
+    {
+    public:
+        template <typename T>
+            void operator() (const T&)
+        {
+        }
+
+        void operator() (const UnitInfo::BaseNode& node)
+        {
+            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            {
+                boost::apply_visitor(*this, node.nodes[i]);
+            }
+        }
+
+        void operator() (const UnitInfo::MiscAbilityNode& node)
+        {
+            for (size_t i = 0, count = node.specialBuildings.buildings.size(); i < count; ++i)
+            {
+                specialBuildings_.push_back(node.specialBuildings.buildings[i]);
+            }
+        }
+
+        const std::vector<BuildingTypes> & getSpecialBuildings() const
+        {
+            return specialBuildings_;
+        }
+
+    private:
+        std::vector<BuildingTypes> specialBuildings_;
+    };
+
+    std::vector<BuildingTypes> getUnitSpecialBuildings(const boost::shared_ptr<UnitInfo>& pUnitInfo)
+    {
+        UnitSpecialBuildingsVisitor visitor;
+        boost::apply_visitor(visitor, pUnitInfo->getInfo());
+
+        return visitor.getSpecialBuildings();
     }
 }

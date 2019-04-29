@@ -190,6 +190,18 @@ namespace AltAI
         }
     }
 
+    template <typename K, typename T>
+        void writeComplexMap(FDataStreamBase* pStream, const std::map<K, T>& m)
+    {
+        const size_t size = m.size();
+        pStream->Write(size);
+        for (std::map<K, T>::const_iterator ci(m.begin()), ciEnd(m.end()); ci != ciEnd; ++ci)
+        {
+            ci->first.write(pStream);
+            ci->second.write(pStream);
+        }
+    }
+
     template <typename K, typename T, typename C1, typename C2>
         void readMap(FDataStreamBase* pStream, std::map<K, T>& m)
     {
@@ -203,6 +215,24 @@ namespace AltAI
             T value;
             pStream->Read((C1*)&key);
             pStream->Read((C2*)&value);
+            m.insert(std::make_pair(key, value));
+        }
+    }
+
+    template <typename K, typename T>
+        void readComplexMap(FDataStreamBase* pStream, std::map<K, T>& m)
+    {
+        size_t size;
+        pStream->Read(&size);
+        m.clear();
+
+        for (size_t i = 0; i < size; ++i)
+        {
+            K key;
+            T value;
+
+            key.read(pStream);
+            value.read(pStream);
             m.insert(std::make_pair(key, value));
         }
     }

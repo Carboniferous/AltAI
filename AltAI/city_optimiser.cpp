@@ -31,54 +31,6 @@ namespace AltAI
             return MixedOutputOrderFunctor<PlotYield>(yieldPriority, weights);
         }
 
-        struct IsWorked
-        {
-            bool operator() (const PlotData& plotData) const
-            {
-                return plotData.isWorked;
-            }
-        };
-
-        struct Unworked
-        {
-            bool operator() (const PlotData& plotData) const
-            {
-                return !plotData.isWorked;
-            }
-        };
-
-        struct IsWorkable
-        {
-            bool operator() (const PlotData& plotData) const
-            {
-                return plotData.ableToWork && plotData.controlled;
-            }
-        };
-
-        struct PlotDataFinder
-        {
-            explicit PlotDataFinder(const PlotData& plot_) : plot(plot_) {}
-
-            bool operator() (const PlotData& other) const
-            {
-                return plot.coords == other.coords && plot.isWorked == other.isWorked;
-            }
-
-            const PlotData& plot;
-        };
-
-        struct PlotCoordsFinder
-        {
-            explicit PlotCoordsFinder(const PlotData& plot_) : plot(plot_) {}
-
-            bool operator() (const PlotData& other) const
-            {
-                return plot.coords == other.coords;
-            }
-
-            const PlotData& plot;
-        };
-
         bool PlotWasSwappedOut(const CityOptimiser::SwapData& swapData, const PlotData& plot)
         {
             for (size_t i = 0, count = swapData.size(); i < count; ++i)
@@ -118,9 +70,11 @@ namespace AltAI
                 if (!(p1.output[OUTPUT_FOOD] == p2.output[OUTPUT_FOOD] ||
                     (ignoreDeficitFoodDiffs && p1.output[OUTPUT_FOOD] < foodPerPop && p2.output[OUTPUT_FOOD] < foodPerPop)))
                 {
+                    // if plots' food differs or ignore deficit food and both less than food per pop (2) 
                     return p1.output[OUTPUT_FOOD] > p2.output[OUTPUT_FOOD];
                 }
 
+                // otherwise use predicate to compare whole output
                 return pred(p1.output, p2.output);
             }
 
@@ -167,6 +121,67 @@ namespace AltAI
         };
 
         template <typename P>
+            struct PlotDataPtrAdaptor
+        {
+            typedef typename P Pred;
+            PlotDataPtrAdaptor(P pred_) : pred(pred_) {}
+
+            bool operator () (const PlotData* p1, const PlotData* p2) const
+            {
+                return pred(p1->output, p2->output);
+            }
+
+            bool operator () (const PlotData* p) const
+            {
+                return pred(*p);
+            }
+
+            P pred;
+        };
+
+        template <typename P>
+            struct PlotDataGPPPtrAdaptor
+        {
+            typedef typename P Pred;
+            PlotDataGPPPtrAdaptor(P pred_, const std::vector<UnitTypes>& mixedSpecialistTypes_) : pred(pred_), mixedSpecialistTypes(mixedSpecialistTypes_) {}
+
+            bool operator () (const PlotData* p1, const PlotData* p2) const
+            {
+                const bool firstIsSpec = p1->greatPersonOutput.output > 0 &&
+                    std::find(mixedSpecialistTypes.begin(), mixedSpecialistTypes.end(), p1->greatPersonOutput.unitType) != mixedSpecialistTypes.end();
+
+                const bool secondIsSpec = p2->greatPersonOutput.output > 0 &&
+                    std::find(mixedSpecialistTypes.begin(), mixedSpecialistTypes.end(), p2->greatPersonOutput.unitType) != mixedSpecialistTypes.end();
+
+                if ((firstIsSpec && secondIsSpec) || (!firstIsSpec && !secondIsSpec))
+                {
+                    return pred(p1->output, p2->output);
+                }
+                
+                return firstIsSpec;
+            }
+
+            bool operator () (const PlotData& p1, const PlotData& p2) const
+            {
+                const bool firstIsSpec = p1.greatPersonOutput.output > 0 &&
+                    std::find(mixedSpecialistTypes.begin(), mixedSpecialistTypes.end(), p1.greatPersonOutput.unitType) != mixedSpecialistTypes.end();
+
+                const bool secondIsSpec = p2.greatPersonOutput.output > 0 &&
+                    std::find(mixedSpecialistTypes.begin(), mixedSpecialistTypes.end(), p2.greatPersonOutput.unitType) != mixedSpecialistTypes.end();
+
+                if ((firstIsSpec && secondIsSpec) || (!firstIsSpec && !secondIsSpec))
+                {
+                    return pred(p1.output, p2.output);
+                }
+                
+                return firstIsSpec;
+            }
+
+            P pred;
+            std::vector<UnitTypes> mixedSpecialistTypes;
+        };
+
+        template <typename P>
             struct SpecialistPlotDataAdaptor
         {
             typedef typename P Pred;
@@ -193,6 +208,30 @@ namespace AltAI
 
             P pred;
             UnitTypes specType;
+        };
+
+        template <typename P>
+            struct YieldCountPred
+        {
+            typedef typename P Pred;
+            YieldCountPred(P pred_) : pred(pred_)
+            {
+            }
+
+            bool operator () (const PlotData& p1, const PlotData& p2) const
+            {
+                if (p1.isActualPlot() && p2.isActualPlot())
+                {
+                    return p1.plotYield[YIELD_FOOD] + p1.plotYield[YIELD_PRODUCTION] + p1.plotYield[YIELD_COMMERCE] >
+                        p2.plotYield[YIELD_FOOD] + p2.plotYield[YIELD_PRODUCTION] + p2.plotYield[YIELD_COMMERCE];
+                }
+                else
+                {
+                    return pred(p1.output, p2.output);
+                }
+            }
+
+            P pred;
         };
 
         std::pair<CityOptimiser::GrowthType, std::vector<OutputTypes> > convertEmphasis(TotalOutputWeights weights, const CvCity* pCity)
@@ -242,6 +281,16 @@ namespace AltAI
     {
     }
 
+    void PlotAssignmentSettings::debug(std::ostream& os) const
+    {
+        os << " output weights = " << outputWeights << ", priorities = " << outputPriorities << " " << CityOptimiser::getGrowthTypeString(growthType)
+            << " target food = " << targetFoodYield;
+        if (specialistType != NO_SPECIALIST)
+        {
+            os << " spec = " << gGlobals.getSpecialistInfo(specialistType).getType();
+        }
+    }
+
     template CityOptimiser::OptState CityOptimiser::optimise<MixedWeightedTotalOutputOrderFunctor>(TotalOutputPriority, TotalOutputWeights, Range<>, bool);
     template CityOptimiser::OptState CityOptimiser::optimise<MixedWeightedTotalOutputOrderFunctor>(TotalOutputPriority, TotalOutputWeights, CityOptimiser::GrowthType, bool);
 
@@ -261,19 +310,12 @@ namespace AltAI
     PlotAssignmentSettings makePlotAssignmentSettings(const CityDataPtr& pCityData, const CvCity* pCity, const ConstructItem& constructItem)
     {
         PlotAssignmentSettings plotAssignmentSettings;
-        boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
         bool haveConstructItem = constructItem.buildingType != NO_BUILDING || constructItem.unitType != NO_UNIT || constructItem.processType != NO_PROCESS;
 
-        if ((pCity->isProductionBuilding() && pCity->getProductionBuilding() != constructItem.buildingType) ||
-            (pCity->isProductionUnit() && pCity->getProductionUnit() != constructItem.unitType) ||
-            (pCity->isProductionProcess() && pCity->getProductionProcess() != constructItem.processType))
-        {
-            haveConstructItem = false;  // can happen if constructItem left over from auto play
-        }
-
-        const int angryPop = pCity->angryPopulation();
+        const int angryPop = pCityData->getHappyHelper()->angryPopulation(*pCityData);
         const int happyCap = pCityData->getHappyCap();
-        const bool noUnhappiness = pCity->isNoUnhappiness();
+        const bool noUnhappiness = pCityData->getHappyHelper()->isNoUnhappiness();
         const bool canPopRush = pPlayer->getCvPlayer()->canPopRush();
         const int maxResearchRate = pPlayer->getMaxResearchRate();
         const int cityCount = pPlayer->getCvPlayer()->getNumCities();
@@ -292,7 +334,7 @@ namespace AltAI
         CityOptimiser::GrowthType growthType = CityOptimiser::Not_Set;
         bool isWonder = false;
 
-        if (pCity->isProductionBuilding())
+        if (constructItem.buildingType != NO_BUILDING)
         {
             bool isWonder = false;
             /*if (haveConstructItem)
@@ -301,7 +343,7 @@ namespace AltAI
             }*/
             //else
             //{
-                BuildingClassTypes buildingClassType = (BuildingClassTypes)(gGlobals.getBuildingInfo(pCity->getProductionBuilding()).getBuildingClassType());
+                BuildingClassTypes buildingClassType = (BuildingClassTypes)(gGlobals.getBuildingInfo(constructItem.buildingType).getBuildingClassType());
                 isWonder = isWorldWonderClass(buildingClassType) || isNationalWonderClass(buildingClassType) || isTeamWonderClass(buildingClassType);
             //}
 
@@ -314,26 +356,26 @@ namespace AltAI
             //{
             //    outputTypes.push_back(OUTPUT_PRODUCTION);
             //}
-            else if (canPopRush && angryPop < 4)
-            {
-                outputTypes.push_back(OUTPUT_FOOD);
-                outputTypes.push_back(OUTPUT_PRODUCTION);
-            }
+            //else if (canPopRush && angryPop < 4)
+            //{
+                //outputTypes.push_back(OUTPUT_FOOD);
+                //outputTypes.push_back(OUTPUT_GOLD);
+                //outputTypes.push_back(OUTPUT_PRODUCTION);
+            //}
             else
             {
                 if (maxResearchRate < 30)
                 {
                     outputTypes.push_back(OUTPUT_GOLD);
-                    outputTypes.push_back(OUTPUT_PRODUCTION);
                 }
                 else
                 {
-                    outputTypes.push_back(OUTPUT_PRODUCTION);
-                    outputTypes.push_back(OUTPUT_RESEARCH);
+                    //outputTypes.push_back(OUTPUT_GOLD);
+                    //outputTypes.push_back(OUTPUT_PRODUCTION);                    
                 }
             }
         }
-        else if (pCity->isProductionUnit())
+        else if (constructItem.unitType != NO_UNIT)
         {
             // Building a unit which can build improvments (likely a workboat, since worker production consumes food and won't hit this check)
             //if (haveConstructItem && !constructItem.possibleBuildTypes.empty())
@@ -354,19 +396,21 @@ namespace AltAI
                 }
                 else if (maxResearchRate < 30)
                 {
-                    outputTypes.push_back(OUTPUT_GOLD);
-                    outputTypes.push_back(OUTPUT_PRODUCTION);
+                    outputWeights = makeOutputW(2, 3, 5, 2, 1, 1);
+                    //outputTypes.push_back(OUTPUT_GOLD);
+                    //outputTypes.push_back(OUTPUT_PRODUCTION);
                 }
                 else
-                {
-                    outputTypes.push_back(OUTPUT_FOOD);
-                    outputTypes.push_back(OUTPUT_PRODUCTION);
+                {     
+                    outputWeights = makeOutputW(2, 3, 4, 4, 1, 1);
+                    //outputTypes.push_back(OUTPUT_PRODUCTION);
+                    //outputTypes.push_back(OUTPUT_FOOD);
                 }
             //}
         }
-        else if (pCity->isProductionProcess())
+        else if (constructItem.processType != NO_PROCESS)
         {
-            ProcessTypes processType = pCity->getProductionProcess();
+            ProcessTypes processType = constructItem.processType;
 
             const CvProcessInfo& processInfo = gGlobals.getProcessInfo(processType);
             if (processInfo.getProductionToCommerceModifier(COMMERCE_GOLD) > 0)
@@ -472,6 +516,39 @@ namespace AltAI
         return plotAssignmentSettings;
     }
 
+    std::vector<TotalOutputPriority> makeSimpleOutputPriorities(const CityDataPtr& pCityData)
+    {
+        std::vector<TotalOutputPriority> outputPriorities;
+        std::vector<OutputTypes> outputTypes;
+
+        if (pCityData->getPopulation() > 3)
+        {
+            outputTypes.clear();
+            outputTypes.push_back(OUTPUT_PRODUCTION);                
+            outputPriorities.push_back(makeTotalOutputPriorities(outputTypes));
+
+            outputTypes.clear();
+            outputTypes.push_back(OUTPUT_FOOD);
+            outputTypes.push_back(OUTPUT_RESEARCH);
+            outputTypes.push_back(OUTPUT_GOLD);
+            outputPriorities.push_back(makeTotalOutputPriorities(outputTypes));
+        }
+        else
+        {
+            outputTypes.clear();
+            outputTypes.push_back(OUTPUT_FOOD);
+            outputPriorities.push_back(makeTotalOutputPriorities(outputTypes));
+
+            outputTypes.clear();
+            outputTypes.push_back(OUTPUT_PRODUCTION);
+            outputTypes.push_back(OUTPUT_RESEARCH);
+            outputTypes.push_back(OUTPUT_GOLD);
+            outputPriorities.push_back(makeTotalOutputPriorities(outputTypes));
+        }
+
+        return outputPriorities;
+    }
+
     CityOptimiser::OptState CityOptimiser::optimise(OutputTypes outputType, GrowthType growthType, bool debug)
     {
         targetYield_ = calcTargetYieldSurplus(growthType);
@@ -508,7 +585,8 @@ namespace AltAI
             os << "\nOutput priorities: " << outputPriorities << " output weights = " << outputWeights << " target yield = " << targetYield_ << " growthtype = " << getGrowthTypeString(growthType);
         }
 #endif
-        return optimise_(PlotDataAdaptor<F>(F(outputPriorities, outputWeights)), debug);
+        //return optimise_(PlotDataAdaptor<F>(F(outputPriorities, outputWeights)), debug);
+        return optimise_(YieldCountPred<F>(F(outputPriorities, outputWeights)), debug);
     }
 
     template <typename F>
@@ -642,10 +720,230 @@ namespace AltAI
             ++plotIter;
         }
 
-        output += data_->getCityPlotOutput().actualOutput[OUTPUT_FOOD];
+        output += data_->getCityPlotData().actualOutput[OUTPUT_FOOD];
         output -= data_->getLostFood();
 
         return output;
+    }
+
+    void CityOptimiser::optimise(const std::vector<TotalOutputPriority>& outputPriorities, const std::vector<SpecialistTypes>& mixedSpecialistTypes, bool debug)
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
+#endif
+        std::vector<UnitTypes> mixedSpecialistUnitTypes;
+        for (size_t i = 0, specCount = mixedSpecialistTypes.size(); i < specCount; ++i)
+        {
+            UnitClassTypes unitClassType = (UnitClassTypes)gGlobals.getSpecialistInfo(mixedSpecialistTypes[i]).getGreatPeopleUnitClass();
+            mixedSpecialistUnitTypes.push_back((UnitTypes)gGlobals.getUnitClassInfo(unitClassType).getDefaultUnitIndex());
+        }
+
+        targetYield_ = calcTargetYieldSurplus(Not_Set);
+
+        const int plotCount = data_->getPlotOutputs().size();
+
+        reclaimSpecialistSlots_();
+
+        if (plotCount < 2 || data_->getPopulation() > plotCount)
+        {
+            for (PlotDataListIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
+            {
+                iter->isWorked = true;
+            }
+            return;
+        }
+
+        for (PlotDataListIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
+        {
+            iter->isWorked = false;
+        }
+
+        for (PlotDataListIter iter(data_->getFreeSpecOutputs().begin()), endIter(data_->getFreeSpecOutputs().end()); iter != endIter; ++iter)
+        {
+            iter->isWorked = false;
+        }
+
+        const int freeSpecCount = data_->getSpecialistHelper()->getTotalFreeSpecialistSlotCount();
+        if (freeSpecCount > 0)
+        {
+            // use mixed spec list, even if it's not passed for use in main optimisation
+            std::vector<SpecialistTypes> targetFreeSpecTypes = data_->getBestMixedSpecialistTypes();
+            std::vector<UnitTypes> mixedFreeSpecialistUnitTypes;
+            for (size_t i = 0, specCount = targetFreeSpecTypes.size(); i < specCount; ++i)
+            {
+                UnitClassTypes unitClassType = (UnitClassTypes)gGlobals.getSpecialistInfo(targetFreeSpecTypes[i]).getGreatPeopleUnitClass();
+                mixedFreeSpecialistUnitTypes.push_back((UnitTypes)gGlobals.getUnitClassInfo(unitClassType).getDefaultUnitIndex());
+            }
+
+            PlotDataGPPPtrAdaptor<TotalOutputValueFunctor> valueAdaptor(TotalOutputValueFunctor(makeOutputW(1, 1, 1, 1, 1, 1)), mixedFreeSpecialistUnitTypes);
+            data_->getFreeSpecOutputs().sort(valueAdaptor);
+
+            PlotDataListIter plotIter = data_->getFreeSpecOutputs().begin();
+            for (int i = 0; i < freeSpecCount; ++i)
+            {
+#ifdef ALTAI_DEBUG
+                if (debug)
+                {
+                    os << " claimed spec slot : " << gGlobals.getSpecialistInfo((SpecialistTypes)plotIter->coords.iY).getType();
+                }
+#endif
+                plotIter->isWorked = true;
+                removeSpecialistSlot_((SpecialistTypes)plotIter->coords.iY);  // used a 'free' slot, so make sure we don't use it again in the main plots' slots
+                ++plotIter;
+            }
+        }
+
+        typedef std::list<PlotData*> PlotDataPtrList;
+        PlotDataPtrList plotDataPtrList;
+        for (PlotDataListIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
+        {            
+            plotDataPtrList.push_back(&*iter);            
+        }
+
+        TotalOutputPriority foodOp = makeTotalOutputSinglePriority(OUTPUT_FOOD);
+        PlotDataPtrAdaptor<MixedWeightedTotalOutputOrderFunctor> foodValueAdaptor(MixedWeightedTotalOutputOrderFunctor(foodOp, makeOutputW(1, 1, 1, 1, 1, 1)));
+        plotDataPtrList.sort(foodValueAdaptor);
+
+        std::vector<PlotDataPtrList> outputPriorityLists;
+        std::vector<PlotDataPtrList::iterator> plotListIters;
+
+        const bool doSpecialists = !mixedSpecialistTypes.empty();
+
+        if (doSpecialists)
+        {
+            outputPriorityLists.push_back(PlotDataPtrList(plotDataPtrList));
+        }
+
+        for (size_t i = 0, count = outputPriorities.size(); i < count; ++i)
+        {
+            outputPriorityLists.push_back(PlotDataPtrList(plotDataPtrList));
+        }
+
+        if (doSpecialists)
+        {
+            // sort GPP list
+            PlotDataGPPPtrAdaptor<MixedWeightedTotalOutputOrderFunctor> valueAdaptor(
+                MixedWeightedTotalOutputOrderFunctor(outputPriorities[0], makeOutputW(1, 1, 1, 1, 1, 1)), mixedSpecialistUnitTypes);
+            outputPriorityLists[0].sort(valueAdaptor);
+            plotListIters.push_back(outputPriorityLists[0].begin());
+        }
+
+        for (size_t i = (doSpecialists ? 1 : 0), count = outputPriorityLists.size(); i < count; ++i)
+        {
+            PlotDataPtrAdaptor<MixedWeightedTotalOutputOrderFunctor> valueAdaptor(MixedWeightedTotalOutputOrderFunctor(outputPriorities[i - (doSpecialists ? 1 : 0)], makeOutputW(1, 1, 1, 1, 1, 1)));
+            outputPriorityLists[i].sort(valueAdaptor);
+            plotListIters.push_back(outputPriorityLists[i].begin());
+        }
+
+        size_t listIndex = 0;
+        for (int i = 0; i < data_->getWorkingPopulation() && i < plotCount; ++i)
+        {
+            plotListIters[listIndex] = std::find_if(plotListIters[listIndex], outputPriorityLists[listIndex].end(), PlotDataPtrAdaptor<Unworked>(Unworked()));
+            if (plotListIters[listIndex] != outputPriorityLists[listIndex].end())
+            {
+                (*plotListIters[listIndex])->isWorked = true;
+                ++plotListIters[listIndex];
+            }
+
+            ++listIndex;
+            if (listIndex == outputPriorityLists.size())
+            {
+                listIndex = 0;
+            }
+        }
+
+        std::vector<PlotDataPtrList::reverse_iterator> plotListRIters;
+        for (size_t i = 0, count = plotListIters.size(); i < count; ++i)
+        {
+            // note reversing the iterator moves it back one - (on to the last plot we marked as worked - unless the next plot was marked via another list)
+            plotListRIters.push_back(std::reverse_iterator<PlotDataPtrList::iterator>(plotListIters[i]));
+        }
+
+        const int maxSwapCount = std::min<int>(data_->getPlotOutputs().size(), data_->getWorkingPopulation());
+        int swapCount = 0;
+
+        int actualYield = data_->getFood();
+        PlotDataPtrList::iterator foodPlotIter = plotDataPtrList.begin();
+#ifdef ALTAI_DEBUG
+        if (debug)
+        {
+            os << "\nPlots:";
+            for (size_t i = 0, count = outputPriorityLists.size(); i < count; ++i)
+            {
+                os << "\n\t";
+                for (PlotDataPtrList::const_iterator ci(outputPriorityLists[i].begin()); ci != outputPriorityLists[i].end(); ++ci)
+                {
+                    if ((*ci)->isWorked)
+                    {
+                        (*ci)->debug(os);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+            os << "\nSwaps: ";
+        }
+#endif
+        while (targetYield_.valueBelow(actualYield) && swapCount++ < maxSwapCount)
+        {
+            ++listIndex;
+            if (listIndex == outputPriorityLists.size())
+            {
+                listIndex = 0;
+            }
+
+            foodPlotIter = std::find_if(foodPlotIter, plotDataPtrList.end(), PlotDataPtrAdaptor<Unworked>(Unworked()));
+            for (size_t li = 0; li < outputPriorityLists.size(); ++li)
+            {
+                plotListRIters[li] = std::find_if(plotListRIters[li], outputPriorityLists[li].rend(), PlotDataPtrAdaptor<IsWorked>(IsWorked()));
+            }
+
+            if (plotListRIters[listIndex] != outputPriorityLists[listIndex].rend())
+            {
+                for (size_t li = 0; li < outputPriorityLists.size(); ++li)
+                {
+                    // pick alternative plot to swap if strictly worse by checking back of each priority list
+                    if (plotListRIters[li] != outputPriorityLists[li].rend() && isStrictlyGreater((*plotListRIters[listIndex])->actualOutput, (*plotListRIters[li])->actualOutput))
+                    {
+                        listIndex = li;
+                    }
+                }
+            }
+            
+            if (foodPlotIter != plotDataPtrList.end() && plotListRIters[listIndex] != outputPriorityLists[listIndex].rend())
+            {
+                int oldFood = (*plotListRIters[listIndex])->actualOutput[OUTPUT_FOOD], newFood = (*foodPlotIter)->actualOutput[OUTPUT_FOOD];
+                if (newFood > oldFood)
+                {
+#ifdef ALTAI_DEBUG
+                    if (debug)
+                    {
+                        os << " ";
+                        (*plotListRIters[listIndex])->debug(os);
+                        os << " to: ";
+                        (*foodPlotIter)->debug(os);
+                    }
+#endif
+                    (*foodPlotIter)->isWorked = true;
+                    (*plotListRIters[listIndex])->isWorked = false;                
+
+                    actualYield = actualYield - oldFood + newFood;
+                    ++foodPlotIter;                    
+                }
+
+                ++plotListRIters[listIndex];
+            }
+            else
+            {
+                break;
+            }
+        }
+//#ifdef ALTAI_DEBUG
+//        os << "\nnew opt:";
+//        debug(os);
+//#endif
     }
 
     template <class ValueAdaptor>
@@ -688,6 +986,20 @@ namespace AltAI
         else
         {
             data_->getPlotOutputs().sort(valueAdaptor);
+#ifdef ALTAI_DEBUG
+            if (debug)
+            {
+                std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
+                os << "\n(sort) plots ";
+                int i = 0;
+                for (PlotDataListConstIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
+                {
+                    if (i++ > 0) os << ", ";
+                    os << iter->output << ".{" << iter->actualOutput << "}";
+                }
+                os << "\n";
+            }
+#endif
 
             plotIter = data_->getPlotOutputs().begin();
             for (int i = 0; i < data_->getWorkingPopulation() && i < plotCount; ++i)
@@ -703,7 +1015,7 @@ namespace AltAI
             if (debug)
             {
                 std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
-                os << "\nPop = " << data_->getPopulation() << " (working = " << data_->getWorkingPopulation() << ") "
+                os << "\n(1) Pop = " << data_->getPopulation() << " (working = " << data_->getWorkingPopulation() << ") "
                     << "Reqd = " << targetYield_ << ", actual = " << actualYield;
             }
 #endif
@@ -767,7 +1079,7 @@ namespace AltAI
                 std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
                 if (targetYield_.valueBelow(actualYield) || targetYield_.valueAbove(actualYield))
                 {
-                    os << "\nPop = " << data_->getPopulation() << " (working = " << data_->getWorkingPopulation() << ") "
+                    os << "\n(2) Pop = " << data_->getPopulation() << " (working = " << data_->getWorkingPopulation() << ") "
                        << "Reqd = " << 100 * (data_->getPopulation() * foodPerPop_) << ", actual = " << actualYield
                        << ", target = " << targetYield_
                        << " achieved = " << actualYield << " weights = " << valueAdaptor.pred.outputWeights
@@ -799,6 +1111,15 @@ namespace AltAI
 
         // find worst worked plots not in swap data according to pred
         data_->getPlotOutputs().sort(valueAdaptor);
+
+//#ifdef ALTAI_DEBUG
+//        if (debug)
+//        {
+//            std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
+//            os << "\nCityOptimiser::juggle_ (initial sort):";
+//            this->debug(os, true);
+//        }
+//#endif
 
         SpecialFoodOutputOrderF<ValueAdaptor::Pred> foodP(valueAdaptor.pred);
 
@@ -834,19 +1155,31 @@ namespace AltAI
 
             if (worstPlots.first != endIter && worstPlots.second != endIter && bestUnworkedPlots.first != endIter && bestUnworkedPlots.second != endIter)
             {
-                TotalOutput worstPlotsOutput = worstPlots.first->actualOutput + worstPlots.second->actualOutput;
-                TotalOutput bestPlotsOutput = bestUnworkedPlots.first->actualOutput + bestUnworkedPlots.second->actualOutput;
+                TotalOutput workedPlotOuputs[2] = {worstPlots.first->actualOutput, worstPlots.second->actualOutput},
+                            unworkedPlotOutputs[2] = {bestUnworkedPlots.first->actualOutput, bestUnworkedPlots.second->actualOutput};
+
+                TotalOutput worstPlotsOutput = workedPlotOuputs[0] + workedPlotOuputs[1];
+                TotalOutput bestPlotsOutput = unworkedPlotOutputs[0] + unworkedPlotOutputs[1];
 
                 if (worstPlotsOutput[OUTPUT_FOOD] <= bestPlotsOutput[OUTPUT_FOOD] && valueAdaptor.pred(bestPlotsOutput, worstPlotsOutput))
                 {
-                    worstPlots.first->isWorked = false;
-                    worstPlots.second->isWorked = false;
+//#ifdef ALTAI_DEBUG
+                    //std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
+                    //os << "\nworstPlotsOutput = " << worstPlotsOutput << ", bestPlotsOutput = " << bestPlotsOutput;
+//#endif
+                    if (!isStrictlyGreater(workedPlotOuputs[0], unworkedPlotOutputs[0]))
+                    {
+                        worstPlots.first->isWorked = false;
+                        bestUnworkedPlots.first->isWorked = true;
+                        juggledSwapData.push_back(std::make_pair(*bestUnworkedPlots.first, *worstPlots.first));
+                    }
 
-                    bestUnworkedPlots.first->isWorked = true;
-                    bestUnworkedPlots.second->isWorked = true;
-    
-                    juggledSwapData.push_back(std::make_pair(*bestUnworkedPlots.first, *worstPlots.first));
-                    juggledSwapData.push_back(std::make_pair(*bestUnworkedPlots.second, *worstPlots.second));
+                    if (!isStrictlyGreater(workedPlotOuputs[1], unworkedPlotOutputs[1]))
+                    {
+                        worstPlots.second->isWorked = false;
+                        bestUnworkedPlots.second->isWorked = true;
+                        juggledSwapData.push_back(std::make_pair(*bestUnworkedPlots.second, *worstPlots.second));
+                    }
                 }
                 else
                 {
@@ -880,6 +1213,15 @@ namespace AltAI
         bool ignoreDeficitFoodDiffs = true;
 
         data_->getPlotOutputs().sort(SpecialFoodOutputOrderF<ValueAdaptor::Pred>(valueAdaptor.pred));
+
+//#ifdef ALTAI_DEBUG
+//        if (true)
+//        {
+//            std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
+//            os << "\nCityOptimiser::optimiseOutputs_ (initial sort):";
+//            debug(os, true);
+//        }
+//#endif
 
         SwapData swapData;
         int actualYield = data_->getFood();
@@ -933,6 +1275,15 @@ namespace AltAI
         bool ignoreDeficitFoodDiffs = true;
 
         data_->getPlotOutputs().sort(ReverseSpecialFoodOutputOrderF<ValueAdaptor::Pred>(valueAdaptor.pred));
+
+//#ifdef ALTAI_DEBUG
+//        if (true)
+//        {
+//            std::ostream& os = CityLog::getLog(data_->getCity())->getStream();
+//            os << "\nCityOptimiser::optimiseExcessFood_ (initial sort):";
+//            debug(os, true);
+//        }
+//#endif
 
         SwapData swapData;
         int actualYield = data_->getFood();
@@ -988,7 +1339,7 @@ namespace AltAI
         if (printAllPlots)
         {
             int i = 0;
-            os << "\n (home plot): " << data_->getCityPlotOutput().output << " ";
+            os << "\n (home plot): " << data_->getCityPlotData().output << " ";
             for (PlotDataListConstIter iter(data_->getPlotOutputs().begin()), endIter(data_->getPlotOutputs().end()); iter != endIter; ++iter)
             {
                 if (i++ > 0) os << ", ";
@@ -1065,20 +1416,16 @@ namespace AltAI
         // bump up target if we have a lot of food (maxOutputs_ will be zero when calibrating - so this won't be triggered)
         if (growthType == MajorGrowth)
         {
-            if (maxFood > requiredYield + 200 * foodPerPop_)
+            if (maxFood > requiredYield)
             {
-                requiredYield += (300 * foodPerPop_) / 2;
-            }
-            else if (maxFood > requiredYield)
-            {
-                requiredYield = (maxFood + requiredYield) / 2;
+                requiredYield += std::max<int>(1, (maxFood - requiredYield) / 200) * 100;
             }
         }
         else if (growthType == MinorGrowth)
         {
-            if (maxFood >= requiredYield + 200 * foodPerPop_)
+            if (maxFood > requiredYield)
             {
-                requiredYield += 200 * foodPerPop_;
+                requiredYield += std::max<int>(1, (maxFood - requiredYield) / 400) * 100;
             }
         }
 
@@ -1182,7 +1529,14 @@ namespace AltAI
         {
             if (plotIter->possibleImprovements.size() < 2)
             {
-                plotIter->workedImprovement = plotIter->possibleImprovements.empty() ? -1 : 0;
+                if (plotIter->possibleImprovements.empty())
+                {
+                    plotIter->workedImprovement = -1;
+                }
+                else if (isStrictlyGreater(plotIter->possibleImprovements[0].first, plotIter->getPlotYield()))
+                {
+                    plotIter->workedImprovement = 0;
+                }
                 donePlots.insert(plotIter->coords);
             }
             else
@@ -1342,7 +1696,7 @@ namespace AltAI
         DotMapItem::PlotDataIter endPlotIter(dotMapItem_.plotData.end());
 
 #ifdef ALTAI_DEBUG
-        os << "\n\nPlot: " << dotMapItem_.coords << " target Yield  = " << targetYield;
+//        os << "\n\nPlot: " << dotMapItem_.coords << " target Yield  = " << targetYield;
 #endif
         PlotYield plotYield = dotMapItem_.cityPlotYield;
         std::set<XYCoords> donePlots;

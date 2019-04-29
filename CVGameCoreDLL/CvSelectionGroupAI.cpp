@@ -150,7 +150,7 @@ bool CvSelectionGroupAI::AI_update()
 
 	if (isForceUpdate())
 	{
-		clearMissionQueue(); // XXX ???
+		clearMissionQueue(__FUNCTION__); // XXX ???
 		setActivityType(ACTIVITY_AWAKE);
 		setForceUpdate(false);
 

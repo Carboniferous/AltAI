@@ -5,29 +5,35 @@
 
 namespace AltAI
 {
-    class CityUnitTactic : public ICityUnitTactics, public boost::enable_shared_from_this<CityUnitTactic>
+    class CityUnitTactics : public boost::enable_shared_from_this<CityUnitTactics>
     {
     public:
-        CityUnitTactic() : unitType_(NO_UNIT) {}
-        CityUnitTactic(UnitTypes unitType, IDInfo city);
+        CityUnitTactics() : unitType_(NO_UNIT) {}
+        CityUnitTactics(UnitTypes unitType, IDInfo city);
 
-        virtual IDInfo getCity() const;
-        virtual void addTactic(const ICityUnitTacticPtr& pBuildingTactic);
-        virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
-        virtual const std::vector<IDependentTacticPtr>& getDependencies() const;
-        virtual void update(const Player& player, const CityDataPtr& pCityData);
-        virtual void updateDependencies(const Player& player, const CvCity* pCity);
-        virtual bool areDependenciesSatisfied(int ignoreFlags) const;
-        virtual void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
-        virtual void apply(TacticSelectionData& selectionData);
+        IDInfo getCity() const;
+        void addTactic(const ICityUnitTacticPtr& pBuildingTactic);
+        void addDependency(const IDependentTacticPtr& pDependentTactic);
+        const std::vector<IDependentTacticPtr>& getDependencies() const;
+        void update(const Player& player, const CityDataPtr& pCityData);
+        void updateDependencies(const Player& player, const CvCity* pCity);
+        bool areDependenciesSatisfied(int ignoreFlags) const;
+        void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
+        void apply(TacticSelectionData& selectionData, int ignoreFlags);
+        std::list<ICityUnitTacticPtr> getUnitTactics() const;
 
-        virtual UnitTypes getUnitType() const;
-        virtual ProjectionLadder getProjection() const;
+        UnitTypes getUnitType() const;
+        ProjectionLadder getProjection() const;
+        CityDataPtr getCityData() const;
 
-        virtual void debug(std::ostream& os) const;
+        void debug(std::ostream& os) const;
 
-        virtual void write(FDataStreamBase* pStream) const;
-        virtual void read(FDataStreamBase* pStream);
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
+
+        std::vector<DependencyItem> getDepItems(int ignoreFlags) const;
+
+        static CityUnitTacticsPtr factoryRead(FDataStreamBase* pStream);
 
         static const int ID = 0;
 
@@ -37,47 +43,52 @@ namespace AltAI
         std::vector<IDependentTacticPtr> dependentTactics_;
         std::list<ICityUnitTacticPtr> unitTactics_;
         ProjectionLadder projection_;
+        CityDataPtr pCityData_;
         UnitTypes unitType_;
         IDInfo city_;
     };
 
 
-    class UnitTactic : public IUnitTactics, public boost::enable_shared_from_this<UnitTactic>
+    class UnitTactics : public boost::enable_shared_from_this<UnitTactics>
     {
     public:
-        UnitTactic() : unitType_(NO_UNIT) {}
-        explicit UnitTactic(UnitTypes unitType);
+        UnitTactics() : playerType_(NO_PLAYER), unitType_(NO_UNIT) {}
+        UnitTactics(PlayerTypes playerType, UnitTypes unitType);
 
-        virtual void addTactic(const IUnitTacticPtr& pPlayerTactic);
-        virtual void addTactic(const ICityUnitTacticPtr& pBuildingTactic);
-        virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
-        virtual void addTechDependency(const ResearchTechDependencyPtr& pTechDependency);
-        virtual void update(const Player& player);
-        virtual void updateDependencies(const Player& player);
-        virtual void addCityTactic(IDInfo city, const ICityUnitTacticsPtr& pCityTactic);
-        virtual ICityUnitTacticsPtr getCityTactics(IDInfo city) const;
-        virtual bool areDependenciesSatisfied(const Player& player, int ignoreFlags) const;
-        virtual const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const;
-        virtual void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
-        virtual void apply(TacticSelectionData& selectionData);
-        virtual void removeCityTactics(IDInfo city);
-        virtual bool empty() const;
+        void addTactic(const IBuiltUnitTacticPtr& pPlayerTactic);
+        void addTactic(const ICityUnitTacticPtr& pBuildingTactic);
+        void addDependency(const IDependentTacticPtr& pDependentTactic);
+        void addTechDependency(const ResearchTechDependencyPtr& pTechDependency);
+        void update(const Player& player);
+        void updateDependencies(const Player& player);
+        void addCityTactic(IDInfo city, const CityUnitTacticsPtr& pCityTactic);
+        CityUnitTacticsPtr getCityTactics(IDInfo city) const;
+        bool areDependenciesSatisfied(const Player& player, int ignoreFlags) const;
+        bool areTechDependenciesSatisfied(const Player& player) const;
+        const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const;
+        void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
+        void apply(TacticSelectionData& selectionData);
+        void removeCityTactics(IDInfo city);
+        bool empty() const;
 
-        virtual UnitTypes getUnitType() const;
+        UnitTypes getUnitType() const;
+        PlayerTypes getPlayerType() const;
 
-        virtual void debug(std::ostream& os) const;
+        void debug(std::ostream& os) const;
 
-        virtual void write(FDataStreamBase* pStream) const;
-        virtual void read(FDataStreamBase* pStream);
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
 
         static const int ID = 0;
+        static UnitTacticsPtr factoryRead(FDataStreamBase* pStream);
 
     private:
+        PlayerTypes playerType_;
         UnitTypes unitType_;
-        typedef std::map<IDInfo, ICityUnitTacticsPtr> CityTacticsMap;
-        typedef std::list<IUnitTacticPtr> PlayerUnitTacticsList;
+        typedef std::map<IDInfo, CityUnitTacticsPtr> CityTacticsMap;
+        typedef std::list<IBuiltUnitTacticPtr> BuiltUnitTacticsList;
         std::vector<ResearchTechDependencyPtr> techDependencies_;
         CityTacticsMap cityTactics_;
-        PlayerUnitTacticsList playerUnitTacticsList_;
+        BuiltUnitTacticsList playerUnitTacticsList_;
     };
 }

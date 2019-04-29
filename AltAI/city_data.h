@@ -5,11 +5,6 @@
 #include "./hurry_helper.h"
 #include "./city_improvements.h"
 
-#include "boost/enable_shared_from_this.hpp"
-
-#include <stack>
-#include <queue>
-
 namespace AltAI
 {
     class CityOptimiser;
@@ -29,6 +24,8 @@ namespace AltAI
     class ReligionHelper;
     class SpecialistHelper;
     class TradeRouteHelper;
+    class UnitHelper;
+    class VoteHelper;
 
     typedef boost::shared_ptr<AreaHelper> AreaHelperPtr;
     typedef boost::shared_ptr<BonusHelper> BonusHelperPtr;
@@ -44,6 +41,8 @@ namespace AltAI
     typedef boost::shared_ptr<ReligionHelper> ReligionHelperPtr;
     typedef boost::shared_ptr<SpecialistHelper> SpecialistHelperPtr;
     typedef boost::shared_ptr<TradeRouteHelper> TradeRouteHelperPtr;
+    typedef boost::shared_ptr<UnitHelper> UnitHelperPtr;
+    typedef boost::shared_ptr<VoteHelper> VoteHelperPtr;
 
     template <class T> class IEvent;
 
@@ -57,6 +56,7 @@ namespace AltAI
     typedef std::list<PlotData> PlotDataList;
     typedef PlotDataList::const_iterator PlotDataListConstIter;
     typedef PlotDataList::iterator PlotDataListIter;
+    
     typedef boost::shared_ptr<CityData> CityDataPtr;
     typedef boost::shared_ptr<const CityData> ConstCityDataPtr;
 
@@ -65,8 +65,12 @@ namespace AltAI
         friend class CultureHelper;
 
     public:
-        explicit CityData(const CvCity* pCity_, bool includeUnclaimedPlots = false);
-        CityData(const CvCity* pCity_, const std::vector<CityImprovementManager::PlotImprovementData>& improvements, bool includeUnclaimedPlots = false);
+        ~CityData();
+
+        explicit CityData(const CvCity* pCity_, bool includeUnclaimedPlots = false, int lookaheadDepth = 0);
+        CityData(const CvCity* pCity_, const std::vector<PlotImprovementData>& improvements, bool includeUnclaimedPlots = false);
+
+        void addPlot(const CvPlot* pPlot);
 
         CityDataPtr clone() const;
 
@@ -85,6 +89,7 @@ namespace AltAI
         void recalcOutputs();
 
         void advanceTurn();
+        void doImprovementUpgrades(int nTurns);
 
         // current food, stored food
         std::pair<int, int> getAccumulatedFood(int nTurns);
@@ -92,6 +97,9 @@ namespace AltAI
         void pushBuilding(BuildingTypes buildingType);
         void pushUnit(UnitTypes unitType);
         void pushProcess(ProcessTypes processType);
+        void clearBuildQueue();
+
+        bool isFoodProductionBuildItem() const;
 
         int getNumBuildings(BuildingTypes buildingType) const;
         void hurry(const HurryData& hurryData);
@@ -151,7 +159,7 @@ namespace AltAI
         }
 
         int getNonWorkingPopulation() const;
-
+        
         TotalOutput getOutput() const;
         TotalOutput getProcessOutput() const;
         TotalOutput getActualOutput() const;  // account for lost and consumed food
@@ -173,6 +181,13 @@ namespace AltAI
             return requiredProduction_;
         }
 
+        int getAccumulatedProduction() const
+        {
+            return accumulatedProduction_;
+        }
+
+        void updateProduction(int nTurns);
+
         int getCommerceYieldModifier() const
         {
             return commerceYieldModifier_;
@@ -186,12 +201,12 @@ namespace AltAI
         void debugCultureData(std::ostream& os) const;
         void debugUpgradeData(std::ostream& os) const;
 
-        const PlotData& getCityPlotOutput() const
+        const PlotData& getCityPlotData() const
         {
             return cityPlotOutput_;
         }
 
-        PlotData& getCityPlotOutput()
+        PlotData& getCityPlotData()
         {
             return cityPlotOutput_;
         }
@@ -226,15 +241,20 @@ namespace AltAI
             return freeSpecOutputs_;
         }
 
+        int getNextImprovementUpgradeTime() const;
+
         PlotDataListIter findPlot(XYCoords coords);
         PlotDataListConstIter findPlot(XYCoords coords) const;
 
+        int getSpecialistSlotCount() const;
         int getNumPossibleSpecialists(SpecialistTypes specialistType) const;
         // todo - call this when grow if have unlimited specs
         void addSpecialistSlots(SpecialistTypes specialistType, int count);
         void changePlayerFreeSpecialistSlotCount(int change);
         void changeImprovementFreeSpecialistSlotCount(int change);
         void changeFreeSpecialistCountPerImprovement(ImprovementTypes improvementType, int change);
+
+        std::vector<SpecialistTypes> getBestMixedSpecialistTypes() const;
 
         CommerceModifier getCommercePercent() const { return commercePercent_; }
         void setCommercePercent(CommerceModifier commercePercent);
@@ -383,24 +403,53 @@ namespace AltAI
             return tradeRouteHelper_;
         }
 
+        UnitHelperPtr& getUnitHelper()
+        {
+            return unitHelper_;
+        }
+
+        const UnitHelperPtr& getUnitHelper() const
+        {
+            return unitHelper_;
+        }
+
+        VoteHelperPtr& getVoteHelper()
+        {
+            return voteHelper_;
+        }
+
+        const VoteHelperPtr& getVoteHelper() const
+        {
+            return voteHelper_;
+        }
+
+        // save/load functions
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
+
+        void debugSummary(std::ostream& os) const;
+
     private:
         CityData(const CityData& other);
 
         void initHelpers_(const CvCity* pCity);
         void init_(const CvCity* pCity);
-        void initPlot_(const CvPlot* pPlot, PlotYield plotYield, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType);
+        void initPlot_(const CvPlot* pPlot, PlotYield plotYield, ImprovementTypes improvementType, 
+                       BonusTypes bonusType, FeatureTypes featureType, RouteTypes routeType);
 
         int getCurrentProduction_(TotalOutput currentOutput) const;
         int getCurrentProductionModifier_() const;
 
-        void calcOutputsFromPlotData_(const CvCity* pCity);
-        void calcOutputsFromPlannedImprovements_(const std::vector<CityImprovementManager::PlotImprovementData>& improvements);
+        void calcOutputsFromPlotData_(const CvCity* pCity, int lookaheadDepth);
+        void calcOutputsFromPlannedImprovements_(const std::vector<PlotImprovementData>& improvements);
         void calcCityOutput_();
         void calculateSpecialistOutput_();
-
-        void doUpgrades_();
+        void recalcBestSpecialists_();
+        
         void updateFreeSpecialistSlots_(int change);
-        bool canWork_(const CvPlot* pPlot) const;
+        
+        bool canWork_(const CvPlot* pPlot, int lookaheadDepth) const;
+        bool avoidGrowth_() const;
 
         int cityPopulation_, workingPopulation_, happyCap_;
 
@@ -424,6 +473,7 @@ namespace AltAI
         PlotDataList freeSpecOutputs_;
         PlotData cityPlotOutput_;
         GreatPersonOutputMap cityGreatPersonOutput_;
+        std::vector<SpecialistTypes> bestMixedSpecialistTypes_;
 
         AreaHelperPtr areaHelper_;
         BonusHelperPtr bonusHelper_;
@@ -439,6 +489,8 @@ namespace AltAI
         ReligionHelperPtr religionHelper_;
         SpecialistHelperPtr specialistHelper_;
         TradeRouteHelperPtr tradeRouteHelper_;
+        UnitHelperPtr unitHelper_;
+        VoteHelperPtr voteHelper_;
 
         std::queue<CitySimulationEventPtr> events_;
         bool includeUnclaimedPlots_;

@@ -21,7 +21,6 @@ namespace AltAI
 
         std::pair<bool, int> isUniqueUnit(PlayerTypes playerID, int unitClassID) const;
 
-        // todo - do these need to be cleared on reinit of game in case loaded mod changes?
         static TechTypes getCanWorkWaterTech();
         static std::vector<TechTypes> getIgnoreIrrigationTechs();
         static std::vector<TechTypes> getCarriesIrrigationTechs();
@@ -37,6 +36,7 @@ namespace AltAI
         static TechTypes getTechTypeForRouteType(RouteTypes routeType);
         static BuildTypes getBuildTypeToRemoveFeature(FeatureTypes featureType);
         static TechTypes getTechTypeToRemoveFeature(FeatureTypes featureType);
+        static TechTypes getTechTypeForResourceBuild(BonusTypes bonusType);
 
         static GreatPersonOutput getSpecialistUnitTypeAndOutput(SpecialistTypes specialistType, PlayerTypes playerType);
 
@@ -54,6 +54,9 @@ namespace AltAI
         static std::vector<TechTypes> getCarriesIrrigationTechs_();
         typedef std::multimap<BuildTypes, BonusTypes> BuildsResourcesMap;
         static BuildsResourcesMap getBonusTypesForBuildTypes_();
+
+        typedef std::map<BonusTypes, BuildTypes> ResourcesBuildMap;
+        static ResourcesBuildMap getResourcesBuildMap_();
 
         struct PlayerData
         {

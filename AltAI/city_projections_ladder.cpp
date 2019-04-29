@@ -5,20 +5,34 @@
 
 namespace AltAI
 {
+    void ProjectionLadder::ConstructedUnit::debug(std::ostream& os) const
+    {
+        os << " Unit: " << (unitType == NO_UNIT ? "none" : gGlobals.getUnitInfo(unitType).getType())
+            << " turns = " << turns
+            << " level = " << level << " exp = " << experience;
+        for (Promotions::const_iterator ci(promotions.begin()), ciEnd(promotions.end()); ci != ciEnd; ++ci)
+        {
+            os << gGlobals.getPromotionInfo(*ci).getType() << " ";
+        }
+    }
+
     void ProjectionLadder::debug(std::ostream& os) const
     {
         int turn = 0;
-        TotalOutput cumulativeOutput, lastOutput;
+        TotalOutput cumulativeOutput;
         int cumulativeCost = 0;
 
-        for (size_t i = 0, count = entries.size(); i < count; ++i)
-        {
-            os << "\n\tTurns = " << entries[i].turns << ", pop = " << entries[i].pop << ", " << entries[i].output << ", " << entries[i].cost;
-            if (!isEmpty(entries[i].processOutput))
-            {
-                os << ", process output = " << entries[i].processOutput;
-            }
-        }
+//        for (size_t i = 0, count = entries.size(); i < count; ++i)
+//        {
+//            os << "\n\tTurns = " << entries[i].turns << ", pop = " << entries[i].pop << ", output = " << entries[i].output << ", cost = " << entries[i].cost;
+//            if (!isEmpty(entries[i].processOutput))
+//            {
+//                os << ", process output = " << entries[i].processOutput;
+//            }
+//#ifdef ALTAI_DEBUG
+//            os << entries[i].debugSummary;
+//#endif
+//        }
 
         for (size_t i = 0, count = entries.size(); i < count; ++i)
         {         
@@ -26,20 +40,31 @@ namespace AltAI
             cumulativeOutput += entries[i].output * entries[i].turns;
             cumulativeCost += entries[i].cost * entries[i].turns;
 
-            os << "\n\tPop = " << entries[i].pop << " turn = " << turn << " output = " << cumulativeOutput << " cost = " << cumulativeCost;
-            if (i > 0)
-            {
-                os << ", delta = " << entries[i].output - lastOutput;
-                lastOutput = entries[i].output;
-            }
-        }
+            os << "\nPop = " << entries[i].pop << " turn = " << turn << " output = " << entries[i].output << " * " << entries[i].turns << " cost = " << entries[i].cost
+               << " prod = " << entries[i].accumulatedProduction;
+#ifdef ALTAI_DEBUG
+            os << " " << entries[i].debugSummary;
+#endif
 
-        for (size_t i = 0, count = entries.size(); i < count; ++i)
-        {
-            if (!entries[i].gpp.empty()) os << "\n";
+            if (!isEmpty(entries[i].processOutput))
+            {
+                os << ", process output = " << entries[i].processOutput;
+            }
+
+            if (!entries[i].gpp.empty()) os << ", GPP data: ";
             for (GreatPersonOutputMap::const_iterator ci(entries[i].gpp.begin()), ciEnd(entries[i].gpp.end()); ci != ciEnd; ++ci)
             {
                 os << gGlobals.getUnitInfo(ci->first).getType() << " = " << ci->second * entries[i].turns;
+            }
+
+            for (size_t j = 0, hurryCount = entries[i].hurryData.size(); j < hurryCount; ++j)
+            {
+                os << entries[i].hurryData[j];
+            }
+
+            if (i > 0)
+            {
+                os << ", delta = " << entries[i].output - entries[i - 1].output;
             }
         }
 
@@ -50,19 +75,37 @@ namespace AltAI
 
         for (size_t i = 0, count = units.size(); i < count; ++i)
         {
-            os << "\n\tUnit: " << gGlobals.getUnitInfo(units[i].second).getType() << " built: " << units[i].first;
+            os << "\n\t";
+            units[i].debug(os);
         }
+
+        /*if (!comparisons.empty())
+        {
+            os << "\n\t" << comparisons.size() << " comparisons: ";
+            comparisons[0].debug(os);
+        }*/
     }
 
     TotalOutput ProjectionLadder::getOutput() const
     {
         TotalOutput cumulativeOutput;
-        int cumulativeCost = 0;
+        int storedFood = 0, cumulativeCost = 0;
+        int currentPop = 0;
         for (size_t i = 0, count = entries.size(); i < count; ++i)
         {            
             cumulativeOutput += entries[i].output * entries[i].turns;
             cumulativeCost += entries[i].cost * entries[i].turns;
+
+            if (entries[i].pop > currentPop)
+            {
+                // since we got the advantage from it by growing sooner
+                storedFood = 0;
+                currentPop = entries[i].pop;
+            }
+            storedFood += (entries[i].output[OUTPUT_FOOD] * entries[i].turns * entries[i].foodKeptPercent) / 100;
         }
+
+        cumulativeOutput[OUTPUT_FOOD] += storedFood;
         cumulativeOutput[OUTPUT_GOLD] -= cumulativeCost;
         return cumulativeOutput;
     }
@@ -91,7 +134,7 @@ namespace AltAI
         return total;
     }
 
-    TotalOutput ProjectionLadder::getOutputAfter(int turn) const
+    /*TotalOutput ProjectionLadder::getOutputAfter(int turn) const
     {
         bool includeAll = false;
         int currentTurn = 0;
@@ -113,11 +156,73 @@ namespace AltAI
             }            
         }
         return cumulativeOutput;
-    }
+    }*/
 
     int ProjectionLadder::getPopChange() const
     {
         return entries.empty() ? 0 : entries.rbegin()->pop - entries.begin()->pop;
+    }
+
+    std::pair<int, int> ProjectionLadder::getWorkedTurns(XYCoords coords) const
+    {
+        int firstTurnWorked = -1;
+        int totalTurnsWorked = 0;
+        int entryTurnStart = 0;
+
+        for (size_t i = 0, count = entries.size(); i < count; ++i)
+        {
+            PlotDataListConstIter iter(entries[i].workedPlots.begin()), endIter(entries[i].workedPlots.end());
+
+            for (; iter != endIter; ++iter)
+            {
+                if (iter->coords == coords)
+                {
+                    if (firstTurnWorked == -1)
+                    {
+                        firstTurnWorked = entryTurnStart;
+                    }
+                    totalTurnsWorked += entries[i].turns;
+                }
+            }
+            entryTurnStart += entries[i].turns;
+        }
+
+        return std::make_pair(firstTurnWorked, totalTurnsWorked);
+    }
+
+    int ProjectionLadder::getExpectedTurnBuilt(int cost, int itemProductionModifier, int baseModifier) const
+    {
+        // todo - add itemProductionModifier into calculation
+        int currentTurn = 0;
+        int remainingProduction = cost * 100;
+        for (size_t i = 0, count = entries.size(); i < count; ++i)
+        {
+            if (remainingProduction <= 0)
+            {
+                break;
+            }
+
+            int actualProductionRate = entries[i].output[OUTPUT_PRODUCTION];
+            actualProductionRate = ((actualProductionRate * 100) / baseModifier) * (baseModifier + itemProductionModifier) / 100;
+
+            int thisEntryProduction = entries[i].turns * actualProductionRate;
+            if (thisEntryProduction <= remainingProduction)
+            {
+                currentTurn += entries[i].turns;
+                remainingProduction -= thisEntryProduction;
+            }
+            else
+            {
+                currentTurn += remainingProduction / actualProductionRate;
+                if (remainingProduction % actualProductionRate)
+                {
+                    ++currentTurn;
+                }
+                remainingProduction = 0;
+            }
+        }
+
+        return remainingProduction <= 0 ? currentTurn : -1;
     }
 
     void ProjectionLadder::write(FDataStreamBase* pStream) const
@@ -130,13 +235,7 @@ namespace AltAI
             pStream->Write(buildings[i].second);
         }
 
-        size_t unitsCount = units.size();
-        pStream->Write(unitsCount);
-        for (size_t i = 0; i < unitsCount; ++i)
-        {
-            pStream->Write(units[i].first);
-            pStream->Write(units[i].second);
-        }
+        writeComplexVector(pStream, units);
 
         size_t entriesCount = entries.size();
         pStream->Write(entriesCount);
@@ -146,11 +245,22 @@ namespace AltAI
         }
     }
 
+    void ProjectionLadder::ConstructedUnit::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(unitType);
+        writeSet(pStream, promotions);
+        pStream->Write(turns);
+        pStream->Write(level);
+        pStream->Write(experience);
+    }
+
     void ProjectionLadder::Entry::write(FDataStreamBase* pStream) const
     {
         pStream->Write(pop);
         pStream->Write(turns);
         pStream->Write(cost);
+        pStream->Write(foodKeptPercent);
+        pStream->Write(accumulatedProduction);
         output.write(pStream);
         processOutput.write(pStream);
 
@@ -170,16 +280,7 @@ namespace AltAI
             buildings.push_back(std::make_pair(turn, buildingType));
         }
 
-        size_t unitsCount;
-        pStream->Read(&unitsCount);
-        for (size_t i = 0; i < unitsCount; ++i)
-        {
-            int turn;
-            UnitTypes unitType;
-            pStream->Read(&turn);
-            pStream->Read((int*)&unitType);
-            units.push_back(std::make_pair(turn, unitType));
-        }
+        readComplexVector<ConstructedUnit>(pStream, units);
 
         size_t entriesCount;
         pStream->Read(&entriesCount);
@@ -191,11 +292,22 @@ namespace AltAI
         }
     }
 
+    void ProjectionLadder::ConstructedUnit::read(FDataStreamBase* pStream)
+    {
+        pStream->Read((int*)&unitType);
+        readSet<PromotionTypes, int>(pStream, promotions);
+        pStream->Read(&turns);
+        pStream->Read(&level);
+        pStream->Read(&experience);
+    }
+
     void ProjectionLadder::Entry::read(FDataStreamBase* pStream)
     {
         pStream->Read(&pop);
         pStream->Read(&turns);
         pStream->Read(&cost);
+        pStream->Read(&foodKeptPercent);
+        pStream->Read(&accumulatedProduction);
         output.read(pStream);
         processOutput.read(pStream);
 

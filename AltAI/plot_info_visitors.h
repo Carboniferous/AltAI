@@ -58,7 +58,7 @@ namespace AltAI
     std::vector<std::pair<XYCoords, boost::tuple<FeatureTypes, ImprovementTypes, PlotYield> > > getBestImprovements(const CityData& data, YieldValueFunctor valueF, bool ignoreExisting);
 
     // update city data with new improvement
-    void updateCityOutputData(CityData& data, PlotData& plotData, FeatureTypes featureType, RouteTypes routeType, ImprovementTypes improvementType);
+    void updateCityOutputData(CityData& data, PlotData& plotData, FeatureTypes removedFeatureType, RouteTypes newRouteType, ImprovementTypes newImprovementType);
 
     // get city square yield
     PlotYield getPlotCityYield(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType);

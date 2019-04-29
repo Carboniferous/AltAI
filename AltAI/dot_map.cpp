@@ -11,25 +11,38 @@ namespace AltAI
     {
     }
 
-    DotMapItem::DotMapPlotData::DotMapPlotData(const CvPlot* pPlot, PlayerTypes playerType, int lookAheadDepth) :
+    DotMapItem::DotMapPlotData::DotMapPlotData(const PlotData& plotData, PlayerTypes playerType, int lookAheadDepth) :
         workedImprovement(-1), neighbourCityCount(0), workedByNeighbour(false), isPinned(false), isSelected(true), improvementMakesBonusValid(false)
     {
         TeamTypes teamType = PlayerIDToTeamID(playerType);
 
-        coords = XYCoords(pPlot->getX(), pPlot->getY());
-        possibleImprovements = getYields(PlotInfo(pPlot, playerType).getInfo(), playerType, lookAheadDepth);
-        bonusType = pPlot->getBonusType(teamType);
-        featureType = pPlot->getFeatureType();
+        coords = plotData.coords;
+        possibleImprovements = getYields(plotData.pPlotInfo->getInfo(), playerType, lookAheadDepth);
+        bonusType = plotData.bonusType;
+        featureType = plotData.featureType;
 
-        ImprovementTypes currentPlotImprovement = pPlot->getImprovementType();
+        ImprovementTypes currentImprovement = plotData.improvementType;
+        if (currentImprovement == NO_IMPROVEMENT)
+        {
+            // if we have an improvement yield will be got from its possibleImprovements entry
+            currentYield = plotData.plotYield;
+        }
+
         for (size_t i = 0, count = possibleImprovements.size(); i < count; ++i)
         {
             // todo - check featuretype too
-            if (possibleImprovements[i].second == currentPlotImprovement)
+            if (getBaseImprovement(possibleImprovements[i].second) == getBaseImprovement(currentImprovement))
             {
                 workedImprovement = i;
-                if (currentPlotImprovement != NO_IMPROVEMENT && bonusType != NO_BONUS && 
-                    gGlobals.getImprovementInfo(currentPlotImprovement).isImprovementBonusMakesValid(bonusType))
+                // leave the most upgraded improvement here, but set the actual type in city improvement manager as it will be built
+                //if (possibleImprovements[i].second != currentImprovement)
+                //{
+                //    // set the upgraded improvement type and yield
+                //    possibleImprovements[i] = std::make_pair(plotData.plotYield, currentImprovement);
+                //}
+
+                if (currentImprovement != NO_IMPROVEMENT && bonusType != NO_BONUS && 
+                    gGlobals.getImprovementInfo(currentImprovement).isImprovementBonusMakesValid(bonusType))
                 {
                     improvementMakesBonusValid = true;
                 }
@@ -234,6 +247,21 @@ namespace AltAI
         else
         {
             return PlotYield();
+        }
+    }
+
+    void DotMapItem::DotMapPlotData::debug(std::ostream& os) const
+    {
+        os << "\nCoords = " << coords;
+        for (size_t i = 0, count = possibleImprovements.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            os << (possibleImprovements[i].second == NO_IMPROVEMENT ? " none" : gGlobals.getImprovementInfo(possibleImprovements[i].second).getType())
+               << " = " << possibleImprovements[i].first;
+        }
+        if (isPinned)
+        {
+            os << " imp is pinned";
         }
     }
 

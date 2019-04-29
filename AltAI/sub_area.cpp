@@ -49,8 +49,8 @@ namespace AltAI
         const int plotCount = theMap.numPlots();
 
         for (int plotIndex = 0; plotIndex < plotCount; ++plotIndex)
-    	{
-	    	CvPlot* pPlot = theMap.plotByIndex(plotIndex);
+        {
+            CvPlot* pPlot = theMap.plotByIndex(plotIndex);
             int subAreaID = pPlot->getSubArea();
             int areaID = pPlot->getArea();
 

@@ -70,7 +70,7 @@ namespace AltAI
         {
             for (int x = 0; x < xWidth; ++x)
             {
-		        const CvPlot* pPlot = theMap.plot(x, y);
+                const CvPlot* pPlot = theMap.plot(x, y);
                 if (pPlot->isRevealed(teamType, false))
                 {
                     if (pPlot->isCity())

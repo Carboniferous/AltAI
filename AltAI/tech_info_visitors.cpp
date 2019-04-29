@@ -22,10 +22,10 @@ namespace AltAI
     namespace
     {
         // update CityData with changes resulting from gaining give techs
-        class CityOutputUpdater : public boost::static_visitor<>
+        class CityTechsUpdater : public boost::static_visitor<>
         {
         public:
-            CityOutputUpdater(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
+            CityTechsUpdater(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
             {
             }
 
@@ -138,52 +138,77 @@ namespace AltAI
     };
 
     // does tech give access to new improvements or obsolete old ones or does it change improvement yields?
-    class TechImprovementVisitor : public boost::static_visitor<bool>
+    class TechImprovementVisitor : public boost::static_visitor<void>
     {
     public:
-        TechImprovementVisitor()
+        TechImprovementVisitor() : affectsImprovements_(false)
         {
         }
 
         template <typename T>
-            result_type operator() (const T&) const
+            result_type operator() (const T&)
         {
-            return false;
         }
 
-        bool operator() (const TechInfo::BaseNode& node) const
+        void operator() (const TechInfo::BaseNode& node)
         {
             for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
             {
-                if (boost::apply_visitor(*this, node.nodes[i]))
-                {
-                    return true;
-                }
+                boost::apply_visitor(*this, node.nodes[i]);
             }
-            return false;
         }
 
-        bool operator() (const TechInfo::ImprovementNode&) const
+        void operator() (const TechInfo::ImprovementNode& node)
         {
-            return true;
+            if (node.improvementType != NO_IMPROVEMENT)
+            {
+                improvementTypes_.push_back(node.improvementType);
+                affectsImprovements_ =  true;
+            }
+            if (node.removeFeatureType != NO_FEATURE)
+            {
+                removeFeatureTypes_.push_back(node.removeFeatureType);
+                affectsImprovements_ =  true;
+            }
         }
 
-        bool operator() (const TechInfo::BonusNode&) const
+        void operator() (const TechInfo::BonusNode&)
         {
-            return true;
+            affectsImprovements_ =  true;
         }
 
-        bool operator() (const TechInfo::RouteNode&) const
+        void operator() (const TechInfo::RouteNode&)
         {
-            return true;
+            affectsImprovements_ = true;
         }
 
-        bool operator() (const TechInfo::MiscEffectNode& node) const
+        void operator() (const TechInfo::MiscEffectNode& node)
         {
-            return node.ignoreIrrigation || node.carriesIrrigation;
+            if (node.ignoreIrrigation || node.carriesIrrigation)
+            {
+                affectsImprovements_ = true;
+            }
+        }
+
+        bool affectsImprovements() const
+        {
+            return affectsImprovements_;
+        }
+
+        const std::vector<ImprovementTypes>& getAffectedImprovementTypes() const
+        {
+            return improvementTypes_;
+        }
+
+        const std::vector<FeatureTypes>& getAffectedFeatureTypes() const
+        {
+            return removeFeatureTypes_;
         }
 
     private:
+        bool affectsImprovements_;
+        std::vector<ImprovementTypes> improvementTypes_;
+        std::vector<FeatureTypes> removeFeatureTypes_;
     };
 
     // does tech give access to new improvements or route types or bonus types? (i.e. new stuff for workers to do)
@@ -503,7 +528,7 @@ namespace AltAI
         }
 
     private:
-        boost::shared_ptr<Player> pPlayer_;
+        PlayerPtr pPlayer_;
         boost::shared_ptr<CivHelper> pCivHelper_;
     };
 
@@ -576,7 +601,7 @@ namespace AltAI
         }
 
     private:
-        boost::shared_ptr<Player> pPlayer_;
+        PlayerPtr pPlayer_;
         boost::shared_ptr<CivHelper> pCivHelper_;
     };
 
@@ -593,7 +618,7 @@ namespace AltAI
     void updateRequestData(const CvCity* pCity, CityData& data, const boost::shared_ptr<TechInfo>& pTechInfo)
     {
         data.getCivHelper()->addTech(pTechInfo->getTechType());
-        boost::apply_visitor(CityOutputUpdater(pCity, data), pTechInfo->getInfo());
+        boost::apply_visitor(CityTechsUpdater(pCity, data), pTechInfo->getInfo());
         data.recalcOutputs();
     }
 
@@ -602,9 +627,14 @@ namespace AltAI
         return boost::apply_visitor(TechBuildingVisitor(), pTechInfo->getInfo());
     }
 
-    bool techAffectsImprovements(const boost::shared_ptr<TechInfo>& pTechInfo)
+    bool techAffectsImprovements(const boost::shared_ptr<TechInfo>& pTechInfo, 
+        std::vector<ImprovementTypes>& affectedImprovements, std::vector<FeatureTypes>& removeFeatureTypes)
     {
-        return boost::apply_visitor(TechImprovementVisitor(), pTechInfo->getInfo());
+        TechImprovementVisitor visitor;
+        boost::apply_visitor(visitor, pTechInfo->getInfo());
+        affectedImprovements = visitor.getAffectedImprovementTypes();
+        removeFeatureTypes = visitor.getAffectedFeatureTypes();
+        return visitor.affectsImprovements();
     }
 
     bool techIsWorkerTech(const boost::shared_ptr<TechInfo>& pTechInfo)
@@ -625,7 +655,7 @@ namespace AltAI
 
             if (techType != NO_TECH)
             {
-                boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
+                PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
                 boost::shared_ptr<CivHelper> pCivHelper = pPlayer->getCivHelper();
 
                 PushTechResearchVisitor visitor(playerType);

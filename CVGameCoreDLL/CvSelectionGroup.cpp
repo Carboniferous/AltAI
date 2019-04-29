@@ -191,7 +191,10 @@ void CvSelectionGroup::doTurn()
 		{
 			if ((getActivityType() != ACTIVITY_MISSION) || (!canFight() && (GET_PLAYER(getOwnerINLINE()).AI_getPlotDanger(plot(), 2) > 0)))
 			{
-				setForceUpdate(true);
+                //if (!CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI())
+                //{
+				    setForceUpdate(true);
+                //}
 			}
 		}
 		else
@@ -211,7 +214,7 @@ void CvSelectionGroup::doTurn()
 
 				if (bNonSpy && GET_PLAYER(getOwnerINLINE()).AI_getPlotDanger(plot(), 2) > 0)
 				{
-					clearMissionQueue();
+					clearMissionQueue(__FUNCTION__);
 				}
 			}
 		}
@@ -426,7 +429,7 @@ void CvSelectionGroup::pushMission(MissionTypes eMission, int iData1, int iData2
 			return;
 		}
 
-		clearMissionQueue();
+		clearMissionQueue(__FUNCTION__);
 	}
 
 	if (bManual)
@@ -510,7 +513,7 @@ void CvSelectionGroup::autoMission()
 
 				if (bVisibleHuman && GET_PLAYER(getOwnerINLINE()).AI_getPlotDanger(plot(), 1) > 0)
 				{
-					clearMissionQueue();
+					clearMissionQueue(__FUNCTION__);
 				}
 				else
 				{
@@ -991,8 +994,9 @@ void CvSelectionGroup::startMission()
     // not sure if AI groups workers anyway (although human can)
     // want to avoid mission being recalculated, as answer may change, and worker may waste moves going to a different plot
     // prefer to finish what we started, basically.
-    const bool usingAltAI = CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI();
-    if (canAllMove() || (usingAltAI && headMissionQueueNode()->m_data.eMissionType == MISSION_BUILD && countNumUnitAIType(UNITAI_WORKER) == getNumUnits()))
+    //const bool usingAltAI = CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI();
+    //if (canAllMove() || (usingAltAI && headMissionQueueNode()->m_data.eMissionType == MISSION_BUILD && countNumUnitAIType(UNITAI_WORKER) == getNumUnits()))
+    if (canAllMove())
 	{
 		setActivityType(ACTIVITY_MISSION);
 	}
@@ -2114,7 +2118,7 @@ bool CvSelectionGroup::isBusy()
 {
 	CLLNode<IDInfo>* pUnitNode;
 	CvUnit* pLoopUnit;
-	CvPlot* pPlot;
+	//CvPlot* pPlot;
 
 	if (getNumUnits() == 0)
 	{
@@ -2126,7 +2130,7 @@ bool CvSelectionGroup::isBusy()
 		return true;
 	}
 
-	pPlot = plot();
+	//pPlot = plot();
 
 	pUnitNode = headUnitNode();
 
@@ -3664,7 +3668,7 @@ void CvSelectionGroup::setAutomateType(AutomateTypes eNewValue)
 	{
 		m_eAutomateType = eNewValue;
 
-		clearMissionQueue();
+		clearMissionQueue(__FUNCTION__);
 		setActivityType(ACTIVITY_AWAKE);
 
 		// if canceling automation, cancel on cargo as well
@@ -3781,6 +3785,11 @@ bool CvSelectionGroup::generatePath( const CvPlot* pFromPlot, const CvPlot* pToP
 		}
 	}
 
+    if (!bSuccess && CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->logFailedPath(this, pFromPlot, pToPlot, iFlags);
+    }
+
 	return bSuccess;
 }
 
@@ -3892,7 +3901,7 @@ CLLNode<IDInfo>* CvSelectionGroup::deleteUnitNode(CLLNode<IDInfo>* pNode)
 	if (getOwnerINLINE() != NO_PLAYER)
 	{
 		setAutomateType(NO_AUTOMATE);
-		clearMissionQueue();
+		clearMissionQueue(__FUNCTION__);
 
 		switch (getActivityType())
 		{
@@ -4262,14 +4271,14 @@ TeamTypes CvSelectionGroup::getHeadTeam() const
 }
 
 
-void CvSelectionGroup::clearMissionQueue()
+void CvSelectionGroup::clearMissionQueue(const std::string& caller)
 {
 	FAssert(getOwnerINLINE() != NO_PLAYER);
 
     // AltAI
     //if (CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI())
     {
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->logClearMissions(this);
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->logClearMissions(this, caller);
     }
 
 	deactivateHeadMission();

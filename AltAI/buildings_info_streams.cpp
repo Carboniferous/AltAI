@@ -327,9 +327,17 @@ namespace AltAI
         {
             os << " hurry anger modifier change = " << node.hurryAngerModifier;
         }
+        if (node.workerSpeedModifier != 0)
+        {
+            os << " workder speed modifier change = " << node.workerSpeedModifier;
+        }
         if (node.globalPopChange != 0)
         {
             os << " global pop change = " << node.globalPopChange;
+        }
+        if (node.nFreeTechs > 0)
+        {
+            os << " gives: " << node.nFreeTechs << " free tech" << (node.nFreeTechs > 1 ? "s " : " ");
         }
         if (node.noUnhealthinessFromBuildings)
         {

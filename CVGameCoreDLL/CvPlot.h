@@ -208,6 +208,13 @@ public:
 		return m_iY;
 	}
 #endif
+
+    // AltAI
+    inline XYCoords getCoords() const
+    {
+        return XYCoords(m_iX, m_iY);
+    }
+
 	bool at(int iX, int iY) const;																																		// Exposed to Python
 	int getLatitude() const;																																					// Exposed to Python  
 	int getFOWIndex() const;
@@ -340,6 +347,7 @@ public:
 	void changeRiverCrossingCount(int iChange);
 
 	short* getYield();
+    const short* const getYield() const;
 	DllExport int getYield(YieldTypes eIndex) const;																										// Exposed to Python
 	int calculateNatureYield(YieldTypes eIndex, TeamTypes eTeam, bool bIgnoreFeature = false) const;		// Exposed to Python
 	int calculateBestNatureYield(YieldTypes eIndex, TeamTypes eTeam) const;															// Exposed to Python

@@ -8,6 +8,11 @@ namespace AltAI
 {
     typedef std::vector<std::pair<XYCoords, std::vector<std::pair<FeatureTypes, ImprovementTypes> > > > PlotsAndImprovements;
 
+    std::string shortTerrainType(TerrainTypes terrainType);
+    std::string shortFeatureType(FeatureTypes featureType);
+    std::string shortImprovementType(ImprovementTypes improvementType);
+    std::string shortBonusType(BonusTypes bonusType);
+
     // TODO - add route yield data in
     class PlotInfo
     {
@@ -48,6 +53,15 @@ namespace AltAI
             }
         };
 
+        struct HasAvailableRiverSide
+        {
+            HasAvailableRiverSide() {}
+            bool operator == (const HasAvailableRiverSide& other) const
+            {
+                return true;
+            }
+        };
+
         // farms: HasTech(Agriculture) and IsFreshWater or HasTech(CivilService) and hasFreshWaterAccess or HasTech(Biology)
         // since we know if we have freshwater access (both immediate and chained) this is not stored here, but is taken into account
         // in building up the tech conditions tree
@@ -55,7 +69,7 @@ namespace AltAI
         // todo - may wish to expand this to better handle watermills (since they also depend on the location of other 'mills)
         struct BuildOrCondition;
 
-        typedef boost::variant<NullNode, HasTech, boost::recursive_wrapper<BuildOrCondition> > BuildCondition;
+        typedef boost::variant<NullNode, HasTech, HasAvailableRiverSide, boost::recursive_wrapper<BuildOrCondition> > BuildCondition;
 
         struct BuildOrCondition
         {
@@ -136,7 +150,6 @@ namespace AltAI
         const PlotInfoNode& getInfo() const;
 
     private:
-        //static void getImprovementInfo_(PlotYieldInfo& info, int improvementIndex, int teamID, bool isHills, bool isRiver);
         int makeKey_(bool hasFreshWaterAccess, int riverMask) const;
         int makeRiverMask_() const;
         void init_(bool hasFreshWaterAccess);

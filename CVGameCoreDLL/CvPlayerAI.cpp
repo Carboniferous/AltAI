@@ -388,6 +388,12 @@ void CvPlayerAI::AI_doTurnUnitsPre()
 		AI_updateAreaTargets();
 	}
 
+    if (isUsingAltAI())
+    {
+        gGlobals.getGame().getAltAI()->getPlayer(getID())->updateMilitaryAnalysis();
+        gGlobals.getGame().getAltAI()->getPlayer(getID())->updateWorkerAnalysis();
+    }
+
 	if (isHuman())
 	{
 		return;
@@ -1620,12 +1626,6 @@ int CvPlayerAI::AI_commerceWeight(CommerceTypes eCommerce, CvCity* pCity) const
 // Improved as per Blake - thanks!
 int CvPlayerAI::AI_foundValue(int iX, int iY, int iMinRivalRange, bool bStartingLoc) const
 {
-    // AltAI - it calcs all plots' values that we can found on, and sets those on the plots
-    if (!bStartingLoc && gGlobals.getGame().getAltAI()->isInit() && m_bUsingAltAI)
-    {
-        return GC.getMapINLINE().plotINLINE(iX, iY)->getFoundValue(m_eID);
-    }
-
 	CvCity* pNearestCity;
 	CvArea* pArea;
 	CvPlot* pPlot;
@@ -1665,6 +1665,31 @@ int CvPlayerAI::AI_foundValue(int iX, int iY, int iMinRivalRange, bool bStarting
 	{
 		return 0;
 	}
+
+    // AltAI - it calcs all plots' values that we can found on, and sets those on the plots
+    if (!bStartingLoc && gGlobals.getGame().getAltAI()->isInit() && m_bUsingAltAI)
+    {
+        if (iMinRivalRange != -1)
+	    {
+		    for (iDX = -(iMinRivalRange); iDX <= iMinRivalRange; iDX++)
+		    {
+			    for (iDY = -(iMinRivalRange); iDY <= iMinRivalRange; iDY++)
+			    {
+				    pLoopPlot	= plotXY(iX, iY, iDX, iDY);
+
+				    if (pLoopPlot != NULL)
+				    {
+					    if (pLoopPlot->plotCheck(PUF_isOtherTeam, getID()) != NULL)
+					    {
+						    return 0;
+					    }
+				    }
+			    }
+		    }
+	    }
+
+        return GC.getMapINLINE().plotINLINE(iX, iY)->getFoundValue(m_eID);
+    }
 	
 	bIsCoastal = pPlot->isCoastalLand(GC.getMIN_WATER_SIZE_FOR_OCEAN());
 	pArea = pPlot->area();
@@ -3078,7 +3103,8 @@ TechTypes CvPlayerAI::AI_bestTech(int iMaxPathLength, bool bIgnoreCost, bool bAs
     if (m_bUsingAltAI && (!bIgnoreCost || eIgnoreTech != NO_TECH))
     {
         TechTypes techType = GC.getGame().getAltAI()->getPlayer(m_eID)->getResearchTech(eIgnoreTech);
-        if (techType != NO_TECH)
+        // Same limit used here as applies to the human player for defering tech selection
+        if (techType != NO_TECH  || (techType == NO_TECH && GC.getGameINLINE().getElapsedGameTurns() <= 4))
         {
             return techType;
         }
@@ -4551,7 +4577,7 @@ void CvPlayerAI::AI_chooseFreeTech()
 
 	if (eBestTech != NO_TECH)
 	{
-		GET_TEAM(getTeam()).setHasTech(eBestTech, true, getID(), true, true);
+		GET_TEAM(getTeam()).setHasTech(eBestTech, true, getID(), true, true, AltAI::FREE_TECH);
 	}
 }
 

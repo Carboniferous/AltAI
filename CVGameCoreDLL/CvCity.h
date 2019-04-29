@@ -678,6 +678,8 @@ public:
 	DllExport bool isRevealed(TeamTypes eIndex, bool bDebug) const;								// Exposed to Python
 	void setRevealed(TeamTypes eIndex, bool bNewValue);											// Exposed to Python
 
+    DllExport bool wasRevealed(TeamTypes eIndex, bool bDebug) const;
+
 	bool getEspionageVisibility(TeamTypes eTeam) const;								// Exposed to Python
 	void setEspionageVisibility(TeamTypes eTeam, bool bVisible, bool bUpdatePlotGroups);
 	void updateEspionageVisibility(bool bUpdatePlotGroups);
@@ -1059,6 +1061,7 @@ protected:
 	bool* m_abEverOwned;
 	bool* m_abTradeRoute;
 	bool* m_abRevealed;
+    bool* m_abWasRevealed;
 	bool* m_abEspionageVisibility;
 
 	CvWString m_szName;

@@ -157,7 +157,7 @@ namespace AltAI
 
         if (node.foundReligion)
         {
-            os << ", can found a religion";
+            os << ", can found a religion, default = " << gGlobals.getReligionInfo(node.defaultReligionType).getType();
         }
 
         if (node.freeUnitClass != NO_UNITCLASS)

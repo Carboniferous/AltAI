@@ -140,11 +140,12 @@ namespace AltAI
 
         struct BaseNode
         {
-            BaseNode() : health(0)
+            BaseNode() : health(0), prereqTech(NO_TECH)
             {
             }
             int health;
             std::vector<CivicInfoNode> nodes;
+            TechTypes prereqTech;
         };
 
         const CivicInfoNode& getInfo() const;

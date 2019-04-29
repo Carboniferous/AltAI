@@ -3,6 +3,7 @@
 #include "./tech_tactics_visitors.h"
 #include "./tech_info.h"
 #include "./tech_info_visitors.h"
+#include "./plot_info_visitors.h"
 #include "./building_info_visitors.h"
 #include "./civic_info_visitors.h"
 #include "./resource_info_visitors.h"
@@ -18,452 +19,64 @@
 #include "./city.h"
 #include "./civ_helper.h"
 #include "./civ_log.h"
+#include "./city_log.h"
+#include "./error_log.h"
+#include "./gamedata_analysis.h"
+#include "./map_analysis.h"
 
 namespace AltAI
 {
-    /*class MakeReligionTechConditionsVisitor : public boost::static_visitor<>
+    namespace
     {
-    public:
-        MakeReligionTechConditionsVisitor(const Player& player, TechTypes techType) : player_(player), researchTech_(techType, player.getAnalysis()->getTechResearchDepth(techType))
+        std::vector<PlotImprovementData> getProjectedTechImprovements(IDInfo city)
         {
-        }
+            CityImprovementManager improvementManager(city, true);
+            const CvCity* pCity = ::getCity(city);
+            const int lookaheadDepth = 3;
+            CityDataPtr pCityData(new CityData(pCity, true, lookaheadDepth));
+            improvementManager.simulateImprovements(pCityData, lookaheadDepth, __FUNCTION__);
 
-        template <typename T>
-            void operator() (const T&)
-        {
-        }
+#ifdef ALTAI_DEBUG
+            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(city.eOwner))->getStream();
+            os << "\ngetResearchTech: improvements = ";
+            improvementManager.logImprovements(CivLog::getLog(CvPlayerAI::getPlayer(city.eOwner))->getStream());
+#endif
+            return improvementManager.getImprovements();  // this will return improvements with all techs applied up to specified depth
+            /*const std::vector<PlotImprovementData>& improvements = improvementManager.getImprovements();
+            std::map<TechTypes, std::vector<PlotImprovementData> > techImprovementsMap;
 
-        void operator() (const TechInfo::BaseNode& node)
-        {
-            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
+            for (size_t i = 0, count = improvements.size(); i < count; ++i)
             {
-                boost::apply_visitor(*this, node.nodes[i]);
-            }
-        }
-
-        void operator() (const TechInfo::FirstToNode& node)
-        {
-            if (node.foundReligion)
-            {
-                for (int i = 0, count = gGlobals.getNumReligionInfos(); i < count; ++i)
+                if (improvements[i].isSelectedAndNotBuilt())
                 {
-                    const CvReligionInfo& religionInfo = gGlobals.getReligionInfo((ReligionTypes)i);
-                    TechTypes religionTech = (TechTypes)religionInfo.getTechPrereq();
-                    if (religionTech == researchTech_.techType)
+                    ImprovementTypes improvementType = improvements[i].improvement;
+                    TechTypes techType = GameDataAnalysis::getTechTypeForBuildType(GameDataAnalysis::getBuildTypeForImprovementType(improvementType));
+                    techImprovementsMap[techType].push_back(improvements[i]);
+                    if (improvements[i].removedFeature != NO_FEATURE)
                     {
-                        if (!gGlobals.getGame().isReligionSlotTaken((ReligionTypes)i))
+                        TechTypes removeFeatureTechType = GameDataAnalysis::getTechTypeToRemoveFeature(improvements[i].removedFeature);
+                        if (removeFeatureTechType != techType)
                         {
-                            researchTech_.techFlags |= TechFlags::Found_Religion;
+                            techImprovementsMap[removeFeatureTechType].push_back(improvements[i]);
                         }
-                        break;
                     }
                 }
+                else if (improvements[i].flags == PlotImprovementData::Built)
+                {
+                }
             }
+
+            return techImprovementsMap;*/
         }
-
-        ResearchTech getResearchTech() const
-        {
-            return researchTech_.hasFlags() ? researchTech_ : ResearchTech();
-        }
-
-    private:
-        const Player& player_;
-        ResearchTech researchTech_;
-    };*/
-
-    //class MakeEconomicTechConditionsVisitor : public boost::static_visitor<>
-    //{
-    //public:
-    //    MakeEconomicTechConditionsVisitor(const Player& player, TechTypes techType) : player_(player), researchTech_(techType, player.getAnalysis()->getTechResearchDepth(techType))
-    //    {
-    //    }
-
-    //    template <typename T>
-    //        void operator() (const T&)
-    //    {
-    //    }
-
-    //    void operator() (const TechInfo::BaseNode& node)
-    //    {
-    //        for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
-    //        {
-    //            boost::apply_visitor(*this, node.nodes[i]);
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::BuildingNode& node)
-    //    {
-    //        if (!node.obsoletes)
-    //        {
-    //            boost::shared_ptr<BuildingInfo> pBuildingInfo = player_.getAnalysis()->getBuildingInfo(node.buildingType);
-    //            if (pBuildingInfo && buildingHasPotentialEconomicImpact(pBuildingInfo))
-    //            {
-    //                researchTech_.possibleBuildings.push_back(node.buildingType);
-    //            }
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::CivicNode& node)
-    //    {
-    //        if (civicHasPotentialEconomicImpact(player_.getPlayerID(), player_.getAnalysis()->getCivicInfo(node.civicType)))
-    //        {
-    //            researchTech_.possibleCivics.push_back(node.civicType);
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::ImprovementNode& node)
-    //    {
-    //        if (node.modifier[YIELD_FOOD] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Food;
-    //        }
-    //        if (node.modifier[YIELD_PRODUCTION] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Production;
-    //        }
-    //        if (node.modifier[YIELD_COMMERCE] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Commerce;
-    //        }
-    //        if (node.workerSpeedModifier > 0)
-    //        {
-    //            researchTech_.workerFlags |= WorkerFlags::Faster_Workers;
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::BonusNode& node)
-    //    {
-    //        // if trade and reveal are same tech - both bonus types would be the same - so only need to add once
-    //        if (node.revealBonus != NO_BONUS)
-    //        {
-    //            researchTech_.possibleBonuses.push_back(node.revealBonus);
-    //        }
-    //        else if (node.tradeBonus != NO_BONUS)
-    //        {
-    //            researchTech_.possibleBonuses.push_back(node.tradeBonus);
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::CommerceNode& node)
-    //    {
-    //        researchTech_.techFlags |= TechFlags::Flexible_Commerce;
-
-    //        if (node.adjustableCommerceType == COMMERCE_GOLD)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Gold;
-    //        }
-    //        else if (node.adjustableCommerceType == COMMERCE_RESEARCH)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Research;
-    //        }
-    //        else if (node.adjustableCommerceType == COMMERCE_CULTURE)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Culture;
-    //        }
-    //        else if (node.adjustableCommerceType == COMMERCE_ESPIONAGE)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Espionage;
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::ProcessNode& node)
-    //    {
-    //        researchTech_.techFlags |= TechFlags::Flexible_Commerce;
-
-    //        if (node.productionToCommerceModifier[COMMERCE_GOLD] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Gold;
-    //        }
-    //        else if (node.productionToCommerceModifier[COMMERCE_RESEARCH] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Research;
-    //        }
-    //        else if (node.productionToCommerceModifier[COMMERCE_CULTURE] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Culture;
-    //        }
-    //        else if (node.productionToCommerceModifier[COMMERCE_ESPIONAGE] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Espionage;
-    //        }
-
-    //        researchTech_.possibleProcesses.push_back(node.processType);
-    //    }
-
-    //    void operator() (const TechInfo::TradeNode& node)
-    //    {
-    //        if (node.isRiverTrade || node.terrainType != NO_TERRAIN || node.extraTradeRoutes > 0)
-    //        {
-    //            researchTech_.techFlags |= TechFlags::Trade_Routes;
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::FirstToNode& node)
-    //    {
-    //        if (gGlobals.getGame().countKnownTechNumTeams(researchTech_.techType) == 0)
-    //        {
-    //            if (node.foundReligion)
-    //            {
-    //                for (int i = 0, count = gGlobals.getNumReligionInfos(); i < count; ++i)
-    //                {
-    //                    const CvReligionInfo& religionInfo = gGlobals.getReligionInfo((ReligionTypes)i);
-    //                    TechTypes religionTech = (TechTypes)religionInfo.getTechPrereq();
-    //                    if (religionTech == researchTech_.techType)
-    //                    {
-    //                        if (!gGlobals.getGame().isReligionSlotTaken((ReligionTypes)i))
-    //                        {
-    //                            researchTech_.economicFlags |= EconomicFlags::Output_Culture;
-    //                        }
-    //                        break;
-    //                    }
-    //                }
-    //            }
-    //            if (node.freeTechCount > 0)
-    //            {
-    //                researchTech_.techFlags |= TechFlags::Free_Tech;
-    //            }
-    //            if (node.freeUnitClass != NO_UNITCLASS)
-    //            {
-    //                researchTech_.techFlags |= TechFlags::Free_GP;
-    //            }
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::MiscEffectNode& node)
-    //    {
-    //        //bool enablesOpenBorders, enablesTechTrading, enablesGoldTrading, enablesMapTrading;
-    //        //bool enablesWaterWork, ignoreIrrigation, carriesIrrigation;
-    //        //bool extraWaterSight, centresMap;
-    //        //bool enablesBridgeBuilding;
-    //        //bool enablesDefensivePacts, enablesPermanentAlliances;
-    //    }
-
-    //    ResearchTech getResearchTech() const
-    //    {
-    //        return researchTech_.hasFlags() || !researchTech_.possibleBuildings.empty() || !researchTech_.possibleCivics.empty() ? researchTech_ : ResearchTech();
-    //    }
-
-    //private:
-
-    //    ResearchTech researchTech_;
-    //    const Player& player_;
-    //};
-
-    //class MakeMilitaryTechConditionsVisitor : public boost::static_visitor<>
-    //{
-    //public:
-    //    MakeMilitaryTechConditionsVisitor(const Player& player, TechTypes techType) : player_(player), researchTech_(techType, player.getAnalysis()->getTechResearchDepth(techType))
-    //    {
-    //    }
-
-    //    template <typename T>
-    //        void operator() (const T&)
-    //    {
-    //    }
-
-    //    void operator() (const TechInfo::BaseNode& node)
-    //    {
-    //        for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
-    //        {
-    //            boost::apply_visitor(*this, node.nodes[i]);
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::BuildingNode& node)
-    //    {
-    //        if (!node.obsoletes)
-    //        {
-    //            boost::shared_ptr<BuildingInfo> pBuildingInfo = player_.getAnalysis()->getBuildingInfo(node.buildingType);
-    //            if (pBuildingInfo && buildingHasPotentialMilitaryImpact(player_.getPlayerID(), pBuildingInfo))
-    //            {
-    //                researchTech_.possibleBuildings.push_back(node.buildingType);
-    //            }
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::CivicNode& node)
-    //    {
-    //        if (civicHasPotentialMilitaryImpact(player_.getPlayerID(), player_.getAnalysis()->getCivicInfo(node.civicType)))
-    //        {
-    //            researchTech_.possibleCivics.push_back(node.civicType);
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::UnitNode& node)
-    //    {
-    //        if (node.unitType != NO_UNIT)
-    //        {
-    //            researchTech_.possibleUnits.push_back(node.unitType);
-    //        }
-
-    //        if (!node.domainExtraMoves.empty())
-    //        {
-    //            researchTech_.militaryFlags |= MilitaryFlags::Output_Extra_Mobility;
-    //        }
-
-    //        if (!node.promotions.empty())
-    //        {
-    //            researchTech_.militaryFlags |= MilitaryFlags::Output_Experience;
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::BonusNode& node)
-    //    {
-    //        // if trade and reveal are same tech - both bonus types would be the same - so only need to add once
-    //        if (node.revealBonus != NO_BONUS)
-    //        {
-    //            std::pair<int, int> militaryUnitCounts = getResourceMilitaryUnitCount(player_.getAnalysis()->getResourceInfo(node.revealBonus));
-    //            if (militaryUnitCounts.first > 0 || militaryUnitCounts.second > 0)
-    //            {
-    //                researchTech_.possibleBonuses.push_back(node.revealBonus);
-    //            }
-    //        }
-    //        else if (node.tradeBonus != NO_BONUS)
-    //        {
-    //            std::pair<int, int> militaryUnitCounts = getResourceMilitaryUnitCount(player_.getAnalysis()->getResourceInfo(node.tradeBonus));
-    //            if (militaryUnitCounts.first > 0 || militaryUnitCounts.second > 0)
-    //            {
-    //                researchTech_.possibleBonuses.push_back(node.tradeBonus);
-    //            }
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::FirstToNode& node)
-    //    {
-    //        if (node.freeUnitClass != NO_UNITCLASS)
-    //        {
-    //            UnitTypes unitType = getPlayerVersion(player_.getPlayerID(), node.freeUnitClass);
-    //            if (unitType != NO_UNIT)
-    //            {
-    //                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
-
-    //                for (int i = 0, count = gGlobals.getNumSpecialistInfos(); i < count; ++i)
-	   //             {
-		  //              if (unitInfo.getGreatPeoples(i))
-    //                    {
-    //                        const CvSpecialistInfo& specialistInfo = gGlobals.getSpecialistInfo((SpecialistTypes)i);
-    //                        if (specialistInfo.getExperience() > 0)
-    //                        {
-    //                            researchTech_.techFlags |= TechFlags::Free_GP;
-    //                            break;
-    //                        }
-    //                    }
-    //                }
-    //            }
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::MiscEffectNode& node)
-    //    {
-    //        //bool enablesOpenBorders, enablesTechTrading, enablesGoldTrading, enablesMapTrading;
-    //        //bool enablesWaterWork, ignoreIrrigation, carriesIrrigation;
-    //        //bool extraWaterSight, centresMap;
-    //        //bool enablesBridgeBuilding;
-    //        //bool enablesDefensivePacts, enablesPermanentAlliances;
-    //    }
-
-    //    ResearchTech getResearchTech() const
-    //    {
-    //        return researchTech_.hasFlags() || !researchTech_.possibleBuildings.empty() || !researchTech_.possibleUnits.empty() || !researchTech_.possibleCivics.empty() ? researchTech_ : ResearchTech();
-    //    }
-
-    //private:
-
-    //    ResearchTech researchTech_;
-    //    const Player& player_;
-    //};
-
-    //class MakeWorkerTechConditionsVisitor : public boost::static_visitor<>
-    //{
-    //public:
-    //    MakeWorkerTechConditionsVisitor(const Player& player, TechTypes techType) : player_(player), researchTech_(techType, player.getAnalysis()->getTechResearchDepth(techType))
-    //    {
-    //    }
-
-    //    template <typename T>
-    //        void operator() (const T&)
-    //    {
-    //    }
-
-    //    void operator() (const TechInfo::BaseNode& node)
-    //    {
-    //        for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
-    //        {
-    //            boost::apply_visitor(*this, node.nodes[i]);
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::ImprovementNode& node)
-    //    {
-    //        if (node.modifier[YIELD_FOOD] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Food;
-    //            researchTech_.workerFlags |= WorkerFlags::Better_Improvements;
-    //        }
-    //        if (node.modifier[YIELD_PRODUCTION] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Production;
-    //            researchTech_.workerFlags |= WorkerFlags::Better_Improvements;
-    //        }
-    //        if (node.modifier[YIELD_COMMERCE] > 0)
-    //        {
-    //            researchTech_.economicFlags |= EconomicFlags::Output_Commerce;
-    //            researchTech_.workerFlags |= WorkerFlags::Better_Improvements;
-    //        }
-
-    //        if (node.workerSpeedModifier > 0)
-    //        {
-    //            researchTech_.workerFlags |= WorkerFlags::Faster_Workers;
-    //        }
-
-    //        if (node.allowsImprovement)
-    //        {
-    //            researchTech_.possibleImprovements.push_back(node.improvementType);
-    //            researchTech_.workerFlags |= WorkerFlags::New_Improvements;
-    //        }
-
-    //        if (node.removeFeatureType != NO_FEATURE)
-    //        {
-    //            researchTech_.workerFlags |= WorkerFlags::Remove_Features;
-    //            researchTech_.possibleRemovableFeatures.push_back(node.removeFeatureType);
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::BonusNode& node)
-    //    {
-    //        // if trade and reveal are same tech - both bonus types would be the same - so only need to add once
-    //        if (node.revealBonus != NO_BONUS)
-    //        {
-    //            researchTech_.possibleBonuses.push_back(node.revealBonus);
-    //        }
-    //        else if (node.tradeBonus != NO_BONUS)
-    //        {
-    //            researchTech_.possibleBonuses.push_back(node.tradeBonus);
-    //        }
-    //    }
-
-    //    void operator() (const TechInfo::MiscEffectNode& node)
-    //    {
-    //        //bool enablesWaterWork, ignoreIrrigation, carriesIrrigation;
-    //        //bool enablesBridgeBuilding;
-    //    }
-
-    //    ResearchTech getResearchTech() const
-    //    {
-    //        return researchTech_.hasFlags() ? researchTech_ : ResearchTech();
-    //    }
-
-    //private:
-
-    //    ResearchTech researchTech_;
-    //    const Player& player_;
-    //};
-
+    }
+    
     class MakeCityBuildTacticsVisitor : public boost::static_visitor<>
     {
     public:
-        MakeCityBuildTacticsVisitor(const Player& player, const City& city, const std::vector<CityImprovementManager::PlotImprovementData>& plotData)
-            : player_(player), city_(city), plotData_(plotData), currentIndex_(0)
+        MakeCityBuildTacticsVisitor(const Player& player, const City& city, const std::vector<PlotImprovementData>& plotData,
+            const std::vector<ImprovementTypes>& affectedImprovements, const std::vector<FeatureTypes>& removeFeatureTypes)
+            : player_(player), city_(city), plotData_(plotData), currentIndex_(0), 
+              affectedImprovements_(affectedImprovements), removeFeatureTypes_(removeFeatureTypes)
         {
         }
 
@@ -486,46 +99,82 @@ namespace AltAI
 
         void operator() (const TechInfo::ImprovementNode& node)
         {
-            if (node.allowsImprovement && node.improvementType == boost::get<2>(plotData_[currentIndex_]))
-            {
-                pTactic_ = makeTactic_();
-                pTactic_->addTactic(IWorkerBuildTacticPtr(new EconomicImprovementTactic()));
-
-                if (boost::get<6>(plotData_[currentIndex_]) & CityImprovementManager::ImprovementMakesBonusValid)
+            // improvement type should already be the base one for upgradable imps (otherwise the yield will be wrong)
+            if (node.improvementType == plotData_[currentIndex_].improvement)
+            {                
+                if (node.allowsImprovement)
                 {
-                    pTactic_->addTactic(IWorkerBuildTacticPtr(new ProvidesResourceTactic()));
+                    improvementPlots_.insert(currentIndex_);
+                    impTacticItems_.push_back(IWorkerBuildTacticPtr(new EconomicImprovementTactic()));
+
+                    if (plotData_[currentIndex_].flags & PlotImprovementData::ImprovementMakesBonusValid)
+                    {
+                        impTacticItems_.push_back(IWorkerBuildTacticPtr(new ProvidesResourceTactic()));
+                    }
+                }
+                else if (!isEmpty(node.modifier))
+                {
+                    improvementPlots_.insert(currentIndex_);
+                    // no specific build tactic - passive upgrades to output - so still want to simulate change for this tech
+                }
+                if (std::find(affectedImprovements_.begin(), affectedImprovements_.end(), node.improvementType) != affectedImprovements_.end())
+                {
+                    affectedImprovements_.push_back(node.improvementType);
                 }
             }
 
-            if (node.removeFeatureType != NO_FEATURE && boost::get<1>(plotData_[currentIndex_]))
+            if (node.removeFeatureType != NO_FEATURE && node.removeFeatureType == plotData_[currentIndex_].removedFeature)
             {
-                pTactic_ = makeTactic_();
-                pTactic_->addTactic(IWorkerBuildTacticPtr(new RemoveFeatureTactic()));
+                removeFeaturePlots_.insert(currentIndex_);
+                impTacticItems_.push_back(IWorkerBuildTacticPtr(new RemoveFeatureTactic()));
+
+                if (std::find(removeFeatureTypes_.begin(), removeFeatureTypes_.end(), node.removeFeatureType) != removeFeatureTypes_.end())
+                {
+                    removeFeatureTypes_.push_back(node.removeFeatureType);
+                }
             }
         }
 
-        const ICityImprovementTacticsPtr& getTactic() const
+        CityImprovementTacticsPtr getTactic() const
         {
-            return pTactic_;
+            std::vector<PlotImprovementData> affectedPlots;
+            for (size_t i = 0, plotCount = plotData_.size(); i < plotCount; ++i)
+            {
+                bool isImprovement = improvementPlots_.find(i) != improvementPlots_.end();
+                bool isFeatureRemove = removeFeaturePlots_.find(i) != removeFeaturePlots_.end();
+
+                if (isImprovement || isFeatureRemove)
+                {
+                    affectedPlots.push_back(plotData_[i]);
+                    if (isFeatureRemove)
+                    {
+                        // todo - handle any output from removing the feature (chopping)
+                        affectedPlots.rbegin()->improvement = NO_IMPROVEMENT;
+                        const CvPlot* pPlot = gGlobals.getMap().plot(plotData_[i].coords.iX, plotData_[i].coords.iY);
+                        const PlotInfo::PlotInfoNode& plotInfo = player_.getAnalysis()->getMapAnalysis()->getPlotInfoNode(pPlot);
+                        affectedPlots.rbegin()->yield = getYield(plotInfo, player_.getPlayerID(), NO_IMPROVEMENT, NO_FEATURE, pPlot->getRouteType(), false);
+                    }
+                }                
+            }
+
+            CityImprovementTacticsPtr pTactic = CityImprovementTacticsPtr(new CityImprovementTactics(affectedPlots));
+            for (size_t i = 0, count = impTacticItems_.size(); i < count; ++i)
+            {
+                pTactic->addTactic(impTacticItems_[i]);
+            }
+            return pTactic;
         }
 
     private:
-        ICityImprovementTacticsPtr makeTactic_()
-        {
-            if (!pTactic_)
-            {
-                pTactic_ = ICityImprovementTacticsPtr(new CityImprovementTactics(plotData_));
-            }
-            return pTactic_;
-        }
-
-        std::vector<CityImprovementManager::PlotImprovementData> plotData_;
+        std::vector<PlotImprovementData> plotData_;
+        std::set<size_t> improvementPlots_, removeFeaturePlots_;
+        std::vector<ImprovementTypes> affectedImprovements_;
+        std::vector<FeatureTypes> removeFeatureTypes_;
         size_t currentIndex_;
         const Player& player_;
         const City& city_;
-        ICityImprovementTacticsPtr pTactic_;
+        std::vector<IWorkerBuildTacticPtr> impTacticItems_;
     };
-
 
     class MakePlayerTechTacticsVisitor : public boost::static_visitor<>
     {
@@ -547,6 +196,42 @@ namespace AltAI
             }
         }
 
+        void operator() (const TechInfo::BuildingNode& node)
+        {
+            if (!node.obsoletes)
+            {
+                if (gGlobals.getBuildingInfo(node.buildingType).getProductionCost() > 0)
+                {
+                    BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(node.buildingType).getBuildingClassType();
+                    const bool isWorldWonder = isWorldWonderClass(buildingClassType), isNationalWonder = isNationalWonderClass(buildingClassType);
+
+                    if (!isWorldWonder && !isNationalWonder)
+                    {
+                        pTactics_ = makeTactics_();
+                        pTactics_->addTactic(ITechTacticPtr(new ConstructBuildingTechTactic(node.buildingType)));
+                    }
+                }
+            }
+        }
+
+        void operator() (const TechInfo::BonusNode& node)
+        {
+            if (node.tradeBonus != NO_BONUS)
+            {
+                pTactics_ = makeTactics_();
+                pTactics_->addTactic(ITechTacticPtr(new ProvidesResourceTechTactic(node.tradeBonus)));
+            }
+        }
+
+        void operator() (const TechInfo::RouteNode& node)
+        {
+            if (node.routeType != NO_ROUTE)
+            {
+                pTactics_ = makeTactics_();
+                pTactics_->addTactic(ITechTacticPtr(new ConnectsResourcesTechTactic(node.routeType)));
+            }
+        }
+
         void operator() (const TechInfo::FirstToNode& node)
         {
             if (node.freeTechCount > 0)
@@ -558,7 +243,7 @@ namespace AltAI
             if (node.foundReligion)
             {
                 pTactics_ = makeTactics_();
-                pTactics_->addTactic(ITechTacticPtr(new FoundReligionTechTactic()));
+                pTactics_->addTactic(ITechTacticPtr(new FoundReligionTechTactic(node.defaultReligionType)));
             }
         }
 
@@ -582,103 +267,58 @@ namespace AltAI
         ITechTacticsPtr pTactics_;
     };
 
-    /*ResearchTech getReligionTechTactics(const Player& player, const boost::shared_ptr<TechInfo>& pTechInfo)
-    {
-        MakeReligionTechConditionsVisitor visitor(player, pTechInfo->getTechType());
-        boost::apply_visitor(visitor, pTechInfo->getInfo());
-
-        return visitor.getResearchTech();
-    }*/
-
-    /*ResearchTech getEconomicTechTactics(const Player& player, const boost::shared_ptr<TechInfo>& pTechInfo)
-    {
-        MakeEconomicTechConditionsVisitor visitor(player, pTechInfo->getTechType());
-        boost::apply_visitor(visitor, pTechInfo->getInfo());
-
-        return visitor.getResearchTech();
-    }*/
-
-    /*ResearchTech getMilitaryTechTactics(const Player& player, const boost::shared_ptr<TechInfo>& pTechInfo)
-    {
-        MakeMilitaryTechConditionsVisitor visitor(player, pTechInfo->getTechType());
-        boost::apply_visitor(visitor, pTechInfo->getInfo());
-
-        return visitor.getResearchTech();
-    }*/
-
-    /*ResearchTech getWorkerTechTactics(const Player& player, const boost::shared_ptr<TechInfo>& pTechInfo)
-    {
-        MakeWorkerTechConditionsVisitor visitor(player, pTechInfo->getTechType());
-        boost::apply_visitor(visitor, pTechInfo->getInfo());
-
-        return visitor.getResearchTech();
-    }*/
-
-    std::list<ICityImprovementTacticsPtr> makeCityBuildTactics(const Player& player, const City& city, const boost::shared_ptr<TechInfo>& pTechInfo)
+    std::list<CityImprovementTacticsPtr> makeCityBuildTactics(const Player& player, const City& city)
     {
 #ifdef ALTAI_DEBUG
-        //player.getAnalysis()->recalcTechDepths();
-
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-        os << "\nmakeCityBuildTactics: checking tech: " << gGlobals.getTechInfo(pTechInfo->getTechType()).getType();
 #endif
-        std::list<ICityImprovementTacticsPtr> cityBuildTactics;
+        std::list<CityImprovementTacticsPtr> cityBuildTactics;
 
-        CityImprovementManager improvementManager(city.getCvCity()->getIDInfo(), true);
-        TotalOutputWeights outputWeights = city.getPlotAssignmentSettings().outputWeights;
+        std::vector<PlotImprovementData> techImprovements = 
+            getProjectedTechImprovements(IDInfo(player.getPlayerID(), city.getID()));
 
-        improvementManager.simulateImprovements(outputWeights, __FUNCTION__);
-        std::vector<CityImprovementManager::PlotImprovementData> baseImprovements = improvementManager.getImprovements();
-
-        /*CityDataPtr pSimulationCityData(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
-        std::vector<IProjectionEventPtr> events;
-        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
-
-        ProjectionLadder base = getProjectedOutput(player, pSimulationCityData, 50, events);*/
-
-        std::list<TechTypes> prereqTechs = pushTechAndPrereqs(pTechInfo->getTechType(), player);
-#ifdef ALTAI_DEBUG
-        os << " pushing techs: ";
-        for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
+        for (int i = 0, count = gGlobals.getNumTechInfos(); i < count; ++i)
         {
-            os << gGlobals.getTechInfo(*ci).getType() << ", ";
-        }
+            const int depth = player.getTechResearchDepth((TechTypes)i);
+
+            if (depth > 0 && depth < 3)
+            {
+                const boost::shared_ptr<TechInfo>& pTechInfo = player.getAnalysis()->getTechInfo((TechTypes)i);
+                std::vector<ImprovementTypes> affectedImprovements;
+                std::vector<FeatureTypes> removeFeatureTypes;
+                if (techAffectsImprovements(pTechInfo, affectedImprovements, removeFeatureTypes))
+                {
+#ifdef ALTAI_DEBUG
+                    os << "\nchecking imp tactics for: " << gGlobals.getTechInfo((TechTypes)i).getType();
+                    os << " ";
+                    for (size_t j = 0, impCount = affectedImprovements.size(); j < impCount; ++j)
+                    {
+                        os << gGlobals.getImprovementInfo(affectedImprovements[j]).getType() << " ";
+                    }
+                    os << " ";
+                    for (size_t j = 0, featureCount = removeFeatureTypes.size(); j < featureCount; ++j)
+                    {
+                        os << gGlobals.getFeatureInfo(removeFeatureTypes[j]).getType() << " ";
+                    }
 #endif
-        TotalOutput baseCityOutput = improvementManager.simulateImprovements(outputWeights, __FUNCTION__);
+                    MakeCityBuildTacticsVisitor visitor(player, city, techImprovements, affectedImprovements, removeFeatureTypes);
+                    boost::apply_visitor(visitor, pTechInfo->getInfo());
 
-        std::vector<CityImprovementManager::PlotImprovementData> newImprovements = improvementManager.getImprovements();
-        MakeCityBuildTacticsVisitor visitor(player, city, newImprovements);
-        boost::apply_visitor(visitor, pTechInfo->getInfo());
-
-        const ICityImprovementTacticsPtr& pTactic = visitor.getTactic();
-        if (pTactic)
-        {
-            pTactic->addDependency(ResearchTechDependencyPtr(new ResearchTechDependency(pTechInfo->getTechType())));
+                    const CityImprovementTacticsPtr& pTactic = visitor.getTactic();
+                    if (pTactic)
+                    {
+                        pTactic->addDependency(ResearchTechDependencyPtr(new ResearchTechDependency(pTechInfo->getTechType())));
 
 #ifdef ALTAI_DEBUG
-            os << "\ncreated imp tactic: ";
-            pTactic->debug(os);
+                        os << " - created imp tactic: ";
+                        pTactic->debug(os);
 #endif
 
-            cityBuildTactics.push_back(pTactic);
+                        cityBuildTactics.push_back(pTactic);
+                    }
+                }
+            }
         }
-
-        /*pSimulationCityData = CityDataPtr(new CityData(city.getCvCity(), improvementManager.getImprovements(), improvementManager.getIncludeUnclaimedPlots()));
-        events.clear();
-        events.push_back(IProjectionEventPtr(new ProjectionPopulationEvent()));
-
-        ProjectionLadder ladder = getProjectedOutput(player, pSimulationCityData, 50, events);
-#ifdef ALTAI_DEBUG
-        base.debug(os);
-        ladder.debug(os);
-        os << "\nImprovement delta = " << ladder.getOutput() - base.getOutput();
-#endif*/
-
-        for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
-        {
-            player.getCivHelper()->removeTech(*ci);
-        }
-        player.getCivHelper()->removeTech(pTechInfo->getTechType());
 
         return cityBuildTactics;
     }

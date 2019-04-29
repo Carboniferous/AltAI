@@ -103,12 +103,14 @@ namespace AltAI
 
         struct FirstToNode
         {
-            explicit FirstToNode(int freeTechCount_ = 0, bool foundReligion_ = false, UnitClassTypes freeUnitClass_ = NO_UNITCLASS)
-                : freeTechCount(freeTechCount_), foundReligion(foundReligion_), freeUnitClass(freeUnitClass_)
+            explicit FirstToNode(int freeTechCount_ = 0, bool foundReligion_ = false, ReligionTypes defaultReligionType_ = NO_RELIGION,
+                                 UnitClassTypes freeUnitClass_ = NO_UNITCLASS)
+                : freeTechCount(freeTechCount_), foundReligion(foundReligion_), defaultReligionType(defaultReligionType_), freeUnitClass(freeUnitClass_)
             {
             }
             int freeTechCount;
             bool foundReligion;
+            ReligionTypes defaultReligionType;
             UnitClassTypes freeUnitClass;
         };
 

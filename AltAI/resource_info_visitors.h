@@ -13,6 +13,15 @@ namespace AltAI
     // current units requiring this resource as required and optional (and, or) - TODO exclude obsolete ones
     std::pair<int, int> getResourceMilitaryUnitCount(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
 
+    struct ResourceQuery
+    {
+        enum ResourceQueryFlags
+        {
+            // theoretically realisable value, actual value, unrealised value
+            AssumeAllCitiesHaveResource, OnlyCitiesWithResource, OnlyCitiesWithoutResource
+        };
+    };
+
     struct ResourceHappyInfo
     {
         ResourceHappyInfo() : rawHappy(0), actualHappy(0), potentialHappy(0), unusedHappy(0)
@@ -23,7 +32,7 @@ namespace AltAI
         int actualHappy, potentialHappy, unusedHappy;
     };
 
-    ResourceHappyInfo getResourceHappyInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
+    ResourceHappyInfo getResourceHappyInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo, ResourceQuery::ResourceQueryFlags mode);
 
     struct ResourceHealthInfo
     {
@@ -40,4 +49,6 @@ namespace AltAI
     void updateCityData(CityData& data, const boost::shared_ptr<ResourceInfo>& pResourceInfo, bool isAdding);
 
     std::vector<BuildTypes> getBuildTypes(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
+
+    TechTypes getTechForResourceReveal(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
 }

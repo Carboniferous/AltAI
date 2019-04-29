@@ -13,6 +13,7 @@ namespace AltAI
 
     struct HurryData
     {
+        HurryData() : hurryType(NO_HURRY), hurryPopulation(0), hurryGold(0), extraProduction(0) {}
         explicit HurryData(HurryTypes hurryType_) : hurryType(hurryType_), hurryPopulation(0), hurryGold(0), extraProduction(0) {}
         HurryTypes hurryType;
         int hurryPopulation, hurryGold;
@@ -48,10 +49,12 @@ namespace AltAI
 
         int getHurryUnhappiness() const;
         int getHurryPercentAnger() const;
+        int getFlatHurryAngryLength() const;
+        int getAngryTimer() const;
 
         std::pair<bool, HurryData> canHurry(const CityData& data, HurryTypes hurryType) const;
 
-        void advanceTurn();
+        void advanceTurns(int nTurns);
 
     private:
         void updateFlatHurryAngerLength_();

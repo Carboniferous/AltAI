@@ -9,7 +9,7 @@
 
 namespace AltAI
 {
-    class CitySimulator;
+    //class CitySimulator;
 
     class PopChange : public IEvent<CitySimulation>
     {
@@ -137,34 +137,6 @@ namespace AltAI
     typedef std::vector<boost::tuple<FeatureTypes, ImprovementTypes, SimulationOutput> > PlotImprovementSimulationResult;
     typedef std::vector<std::pair<XYCoords, PlotImprovementSimulationResult> > PlotImprovementSimulationResults;
 
-    struct ProjectionLadder;
-    typedef std::vector<boost::tuple<FeatureTypes, ImprovementTypes, ProjectionLadder> > PlotImprovementProjections;
-    typedef std::vector<std::pair<XYCoords, PlotImprovementProjections> > PlotImprovementsProjections;
-
-    class CitySimulator
-    {
-    public:
-        explicit CitySimulator(const CvCity* pCity);
-
-        BuildingSimulationResults evaluateBasicBuildings(int nTurns);
-        BuildingSimulationResults evaluateHurryBuilding(BuildingTypes buildingType, int turns);
-        //void evaluateBuilding(BuildingTypes buildingType, int turns, BuildingSimulationResults& results, bool doBaseLine);
-
-        PlotImprovementSimulationResults evaluateAllImprovements(int nTurns, bool ignoreExisting);
-        PlotImprovementSimulationResults evaluateImprovements(const PlotsAndImprovements& improvements, const ConstCityDataPtr& pCityData, int nTurns, bool ignoreExisting);
-
-        PlotImprovementsProjections getImprovementProjections(const PlotsAndImprovements& improvements, const ConstCityDataPtr& pCityData, int nTurns, bool ignoreExisting);
-
-        std::pair<BuildingTypes, TotalOutput> getBestBuilding(TotalOutputWeights outputWeights, const BuildingSimulationResults& simulationResults) const;
-        std::map<BuildingTypes, int> getBuildingValues(TotalOutputWeights outputWeights, const BuildingSimulationResults& simulationResults) const;
-
-        std::vector<boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, TotalOutput> > 
-            getBestImprovements(TotalOutputWeights outputWeights, const PlotImprovementSimulationResults& simulationResults) const;
-
-    private:
-        const CvCity* pCity_;
-    };
-
     class CitySimulation
     {
     public:
@@ -177,8 +149,7 @@ namespace AltAI
 
         void simulate(BuildingSimulationResults& results, int nTurns);
         void simulate(BuildingSimulationResults& results, int nTurns, HurryTypes hurryType);
-       
-        void handleEvent(const IEvent<CitySimulator>& event);
+
         void optimisePlots();
         void setNeedsOpt() { needsOpt_ = true; }
         void logPlots(bool printAllPlots = false) const;

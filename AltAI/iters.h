@@ -1,7 +1,7 @@
 #pragma once
 
-#include "CvGameCoreDLL.h"
-#include "CvStructs.h"
+#include "../CvGameCoreDLL/CvGameCoreDLL.h"
+#include "../CvGameCoreDLL/CvStructs.h"
 
 namespace AltAI
 {
@@ -229,6 +229,78 @@ namespace AltAI
         int x, y;
     };
 
+    struct AreaPlotIter
+    {
+        explicit AreaPlotIter(const CvArea* pArea_) : theMap(gGlobals.getMap()) , pArea(pArea_), plotCount(theMap.numPlots())
+        {
+            plotIndex = 0;            
+        }
+
+        IterPlot operator() ()
+        {
+            bool found = false;
+            CvPlot* pPlot = NULL;
+            for (; plotIndex < plotCount;)
+            {
+                pPlot = theMap.plotByIndex(plotIndex++);
+                if (pPlot->area() == pArea)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            return IterPlot(pPlot, !found);
+        }
+
+        const CvMap& theMap;
+        const CvArea* pArea;        
+        const int plotCount;
+        int plotIndex;
+    };
+
+    struct SubAreaPlotIter
+    {
+        explicit SubAreaPlotIter(int subAreaID_) : theMap(gGlobals.getMap()), subAreaID(subAreaID_), plotCount(theMap.numPlots())
+        {
+            plotIndex = 0;
+        }
+
+        IterPlot operator() ()
+        {
+            bool found = false;
+            CvPlot* pPlot = NULL;
+            for (; plotIndex < plotCount;)
+            {
+                pPlot = theMap.plotByIndex(plotIndex++);
+                if (pPlot->getSubArea() == subAreaID)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            return IterPlot(pPlot, !found);
+        }
+
+        const CvMap& theMap;
+        const int subAreaID;
+        const int plotCount;
+        int plotIndex;
+    };
+
+    struct IsSubAreaP
+    {
+        explicit IsSubAreaP(int subAreaID_) : subAreaID(subAreaID_)
+        {
+        }
+
+        bool operator () (const CvCity* pCity) const
+        {
+            return pCity->plot()->getSubArea() == subAreaID;
+        }
+
+        const int subAreaID;
+    };
+
     struct CityIter
     {
         explicit CityIter(const CvPlayer& player_) : player(player_), iLoop(0)
@@ -241,6 +313,34 @@ namespace AltAI
         }
 
         const CvPlayer& player;
+        int iLoop;
+    };
+
+    template <typename P>
+        struct CityIterP
+    {
+        typedef typename P Pred;
+
+        CityIterP(const CvPlayer& player_, Pred pred_) : player(player_), pred(pred_), iLoop(0)
+        {
+        }
+
+        CvCity* operator() ()
+        {
+            CvCity* pCity = NULL;
+            for (;;)
+            {
+                pCity = player.nextCity(&iLoop);
+                if (!pCity || pred(pCity))
+                {
+                    break;
+                }
+            }
+            return pCity;
+        }
+
+        const CvPlayer& player;
+        P pred;
         int iLoop;
     };
 
@@ -366,6 +466,47 @@ namespace AltAI
         int index;
     };
 
+    struct TeamCityIter
+    {
+        explicit TeamCityIter(TeamTypes teamType_) : teamType(teamType_), playerIter(teamType_)
+        {
+            setCurrentPlayer_();
+        }
+
+        CvCity* operator() ()
+        {            
+            while (pCurrentPlayer)
+            {
+                CvCity* pCity = (*pCityIter)();
+                if (pCity)
+                {
+                    return pCity;
+                }
+                else
+                {
+                    setCurrentPlayer_();
+                }
+            }
+            
+            return (CvCity*)0;
+        }
+
+        const CvPlayerAI* setCurrentPlayer_()
+        {
+            pCurrentPlayer = playerIter();
+            if (pCurrentPlayer)
+            {
+                pCityIter = boost::shared_ptr<CityIter>(new CityIter(*pCurrentPlayer));
+            }
+            return pCurrentPlayer;
+        }
+
+        TeamTypes teamType;
+        PlayerIter playerIter;
+        const CvPlayerAI* pCurrentPlayer;
+        boost::shared_ptr<CityIter> pCityIter;
+    };
+
     struct SelectionGroupIter
     {
         explicit SelectionGroupIter(const CvPlayer& player_) : player(player_), iLoop(0) {}
@@ -392,4 +533,58 @@ namespace AltAI
         const CvSelectionGroup* pGroup;
         CLLNode<IDInfo>* pNode;
     };
+
+    struct UnitPlotIter
+    {
+        explicit UnitPlotIter(const CvPlot* pPlot_) : pPlot(pPlot_), pNode(NULL) {}
+
+        CvUnit* operator() ()
+        {
+            pNode ? pNode = pPlot->nextUnitNode(pNode) : pNode = pPlot->headUnitNode();
+            return pNode ? getUnit(pNode->m_data) : NULL;
+        }
+
+        const CvPlot* pPlot;
+        CLLNode<IDInfo>* pNode;
+    };
+
+    struct OurUnitsPred
+    {
+        explicit OurUnitsPred(PlayerTypes playerType_) : playerType(playerType_)
+        {
+        }
+
+        bool operator () (const CLLNode<IDInfo>* pNode) const
+        {
+            return pNode->m_data.eOwner == playerType;
+        }
+
+        PlayerTypes playerType;
+    };
+
+    template <typename P>
+        struct UnitPlotIterP
+    {
+        typedef typename P Pred;
+
+        explicit UnitPlotIterP(const CvPlot* pPlot_, Pred pred_) : pPlot(pPlot_), pNode(NULL), pred(pred_) {}
+
+        CvUnit* operator() ()
+        {
+            for (pNode ? pNode = pPlot->nextUnitNode(pNode) : pNode = pPlot->headUnitNode(); pNode; pNode = pPlot->nextUnitNode(pNode))
+            {
+                if (pNode && pred(pNode))
+                {
+                    break;
+                }
+            }
+            return pNode ? getUnit(pNode->m_data) : NULL;
+        }
+        
+        const CvPlot* pPlot;
+        CLLNode<IDInfo>* pNode;
+        Pred pred;
+    };
+
+    void debugSelectionGroup(const CvSelectionGroup* pGroup, std::ostream& os);
 }

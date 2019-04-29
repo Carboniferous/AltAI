@@ -16,7 +16,7 @@ namespace AltAI
         virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-        virtual std::pair<int, int> getDependencyItem() const;
+        virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -43,7 +43,7 @@ namespace AltAI
         virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-        virtual std::pair<int, int> getDependencyItem() const;
+        virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -67,7 +67,7 @@ namespace AltAI
         virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-        virtual std::pair<int, int> getDependencyItem() const;
+        virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -92,7 +92,7 @@ namespace AltAI
         virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-        virtual std::pair<int, int> getDependencyItem() const;
+        virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -106,19 +106,17 @@ namespace AltAI
         UnitTypes unitType_;
     };
 
-    class CityBonusDependency : public IDependentTactic
+    class StateReligionDependency : public IDependentTactic
     {
     public:
-        CityBonusDependency() : unitType_(NO_UNIT), isOr_(false) {}
-        CityBonusDependency(BonusTypes bonusType, UnitTypes unitType, bool isOr);
-        CityBonusDependency(const std::vector<BonusTypes>& bonusTypes, UnitTypes unitType, bool isOr);
+        StateReligionDependency() {}
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity, int ignoreFlags) const;
         virtual bool required(const Player& player, int ignoreFlags) const;
         virtual bool removeable() const;
         virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
-        virtual std::pair<int, int> getDependencyItem() const;
+        virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -128,8 +126,57 @@ namespace AltAI
         static const int ID = 4;
 
     private:        
-        std::vector<BonusTypes> bonusTypes_;
-        bool isOr_;
+    };
+
+    class CityBonusDependency : public IDependentTactic
+    {
+    public:
+        CityBonusDependency() : unitType_(NO_UNIT) {}
+        CityBonusDependency(BonusTypes bonusType, UnitTypes unitType, TechTypes bonusRevealTech);
+        CityBonusDependency(const std::vector<BonusTypes>& andBonusTypes, const std::vector<BonusTypes>& orBonusTypes, 
+            const std::map<BonusTypes, TechTypes>& bonusTypesRevealTechsMap, UnitTypes unitType);
+        virtual void apply(const CityDataPtr& pCityData);
+        virtual void remove(const CityDataPtr& pCityData);
+        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
+        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool removeable() const;
+        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual std::vector<DependencyItem> getDependencyItems() const;
+
+        virtual void debug(std::ostream& os) const;
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 5;
+
+    private:        
+        std::vector<BonusTypes> andBonusTypes_, orBonusTypes_;
+        std::map<BonusTypes, TechTypes> bonusTypesRevealTechsMap_;
+        UnitTypes unitType_;
+    };
+
+    class CivUnitDependency : public IDependentTactic
+    {
+    public:
+        CivUnitDependency() : unitType_(NO_UNIT) {}
+        CivUnitDependency(UnitTypes unitType);
+        virtual void apply(const CityDataPtr& pCityData);
+        virtual void remove(const CityDataPtr& pCityData);
+        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
+        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool removeable() const;
+        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual std::vector<DependencyItem> getDependencyItems() const;
+
+        virtual void debug(std::ostream& os) const;
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 6;
+
+    private:        
         UnitTypes unitType_;
     };
 }

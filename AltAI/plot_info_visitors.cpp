@@ -48,10 +48,10 @@ namespace AltAI
             for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
             {
                 if (plotYield[yieldType] >= gGlobals.getYieldInfo((YieldTypes)yieldType).getGoldenAgeYieldThreshold())
-			    {
-				    newPlotYield[yieldType] += gGlobals.getYieldInfo((YieldTypes)yieldType).getGoldenAgeYield();
+                {
+                    newPlotYield[yieldType] += gGlobals.getYieldInfo((YieldTypes)yieldType).getGoldenAgeYield();
                 }
-			}
+            }
             return newPlotYield;
         }
     }
@@ -74,6 +74,11 @@ namespace AltAI
         {
             return civHelper_->hasTech(node.techType) || 
                 (lookaheadDepth_ == 0 ? false : pAnalysis_->getTechResearchDepth(node.techType) <= lookaheadDepth_);
+        }
+
+        bool operator() (const PlotInfo::HasAvailableRiverSide& node) const
+        {
+            return true;
         }
 
         bool operator() (const PlotInfo::BuildOrCondition& node) const
@@ -825,11 +830,11 @@ namespace AltAI
 
     namespace 
     {
-        class CityOutputUpdater : public boost::static_visitor<>
+        class CityPlotsUpdater : public boost::static_visitor<>
         {
         public:
-            CityOutputUpdater(CityData& data, PlotData& plotData, FeatureTypes featureType, RouteTypes routeType, ImprovementTypes improvementType, const PlotInfo::PlotInfoNode& plotInfoNode)
-                : data_(data), plotData_(plotData), featureType_(featureType), routeType_(routeType), improvementType_(improvementType), plotInfoNode_(plotInfoNode)
+            CityPlotsUpdater(CityData& data, PlotData& plotData, FeatureTypes removedFeatureType, RouteTypes routeType, ImprovementTypes improvementType, const PlotInfo::PlotInfoNode& plotInfoNode)
+                : data_(data), plotData_(plotData), removedFeatureType_(removedFeatureType), routeType_(routeType), improvementType_(improvementType), plotInfoNode_(plotInfoNode)
             {
                 playerType_ = data_.getCity()->getOwner();
                 isGoldenAge_ = data_.getGoldenAgeTurns() > 0;
@@ -844,17 +849,18 @@ namespace AltAI
                 const int upgradeRate = CvPlayerAI::getPlayer(playerType_).getImprovementUpgradeRate();
                 const int timeHorizon = gGlobals.getGame().getAltAI()->getPlayer(playerType_)->getAnalysis()->getTimeHorizon();
 
-                plotData_.upgradeData = PlotData::UpgradeData(timeHorizon, getUpgradedImprovementsData(plotInfoNode_, playerType_, improvementType_, 
-                    getActualUpgradeTurns(gGlobals.getGame().getImprovementUpgradeTime(improvementType_), upgradeRate), timeHorizon, upgradeRate));
+                plotData_.upgradeData = PlotData::UpgradeData(timeHorizon, 
+                    getUpgradedImprovementsData(plotInfoNode_, playerType_, improvementType_, 
+                        getActualUpgradeTurns(gGlobals.getGame().getImprovementUpgradeTime(improvementType_), upgradeRate), timeHorizon, upgradeRate));
 
                 plotData_.output += plotData_.upgradeData.getExtraOutput(makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent());
             }
 
             void operator() (const PlotInfo::BaseNode& node) const
             {
-                if (featureType_ != NO_FEATURE)
+                if (removedFeatureType_ != NO_FEATURE)
                 {
-                    FAssertMsg(node.featureType == featureType_, "Inconsistent feature types in CityOutputUpdater?");
+                    FAssertMsg(node.featureType == removedFeatureType_, "Inconsistent feature types in CityPlotsUpdater?");
                     boost::apply_visitor(*this, node.featureRemovedNode);
                 }
                 else
@@ -890,7 +896,7 @@ namespace AltAI
                 std::vector<PlotInfo::ImprovementNode>::const_iterator ci = std::find_if(node.improvementNodes.begin(), node.improvementNodes.end(), ImprovementFinder(improvementType_));
                 if (ci != node.improvementNodes.end())
                 {
-                    return (*this)(*ci);
+                    (*this)(*ci);
                 }
             }
 
@@ -898,7 +904,7 @@ namespace AltAI
             CityData& data_;
             PlotData& plotData_;
             PlayerTypes playerType_;
-            FeatureTypes featureType_;
+            FeatureTypes removedFeatureType_;
             ImprovementTypes improvementType_;
             RouteTypes routeType_;
             bool isGoldenAge_;
@@ -906,28 +912,48 @@ namespace AltAI
         };
     }
 
-    void updateCityOutputData(CityData& data, PlotData& plotData, FeatureTypes featureType, RouteTypes routeType, ImprovementTypes improvementType)
+    void updateCityOutputData(CityData& data, PlotData& plotData, FeatureTypes removedFeatureType, RouteTypes newRouteType, ImprovementTypes newImprovementType)
     {
+        // todo - use cached PlotInfo from MapAnalysis
         //const boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(data.owner)->getAnalysis()->getMapAnalysis();
-
         //const PlotInfo::PlotInfoNode& node = pMapAnalysis->getPlotInfoNode(gGlobals.getMap().plot(plotData.coords.iX, plotData.coords.iY));
-        PlotInfo plotInfo(gGlobals.getMap().plot(plotData.coords.iX, plotData.coords.iY), data.getCity()->getOwner());
+
+        const CvPlot* pPlot = gGlobals.getMap().plot(plotData.coords.iX, plotData.coords.iY);
+        PlotInfo plotInfo(pPlot, data.getCity()->getOwner());
 
 #ifdef ALTAI_DEBUG
         // debug
         std::ostream& os = CityLog::getLog(data.getCity())->getStream();
-        os << "\nPlot: " << plotData.coords << " applying improvement: " << gGlobals.getImprovementInfo(improvementType).getType();
-        if (featureType != NO_FEATURE)
+        os << "\nPlot: updating city output " << plotData.coords << " applying improvement: ";
+        if (newImprovementType != NO_IMPROVEMENT)
         {
-            os << " feature = " << gGlobals.getFeatureInfo(featureType).getType();
+            os << "improvement = " << gGlobals.getImprovementInfo(newImprovementType).getType();
         }
+        if (plotData.improvementType != NO_IMPROVEMENT)
+        {
+            os << " orig imp = " << gGlobals.getImprovementInfo(plotData.improvementType).getType();
+        }
+        if (removedFeatureType != NO_FEATURE)
+        {
+            os << " removed feature = " << gGlobals.getFeatureInfo(removedFeatureType).getType();
+        }
+        if (newRouteType != NO_ROUTE)
+        {
+            os << " new route = " << gGlobals.getRouteInfo(newRouteType).getType();
+        }
+        PlotYield original = plotData.plotYield;
         os << " plot output before = " << plotData.actualOutput;
 #endif
 
-        boost::apply_visitor(CityOutputUpdater(data, plotData, featureType, routeType, improvementType, plotInfo.getInfo()), plotInfo.getInfo());
+        boost::apply_visitor(CityPlotsUpdater(data, plotData, removedFeatureType, newRouteType, newImprovementType, plotInfo.getInfo()), plotInfo.getInfo());
 
 #ifdef ALTAI_DEBUG
         os << " after = " << plotData.actualOutput;
+        if (plotData.plotYield == original)
+        {
+            os << "\n unchanged plot yield: " << original << " plot feature = "
+               << (pPlot->getFeatureType() == NO_FEATURE ? " none " : gGlobals.getFeatureInfo(pPlot->getFeatureType()).getType());
+        }
 #endif
     }
 
@@ -1013,9 +1039,12 @@ namespace AltAI
 
         while ((upgradeType = (ImprovementTypes)gGlobals.getImprovementInfo(improvementType).getImprovementUpgrade()) != NO_IMPROVEMENT)
         {
+            // todo - sort this fn out and incorporate into CityPlotsUpdater visitor - as this is confusing 
+            // note: improvementType is the current improvement - i.e. we start with improvementType = COTTAGE, upgradeType = HAMLET
+            // we want UpgradeYieldChangeFinder to give the change upon upgrading to a HAMLET (say), so it expects the imp which will upgrade - hence we need (say) COTTAGE.
             upgrades.push_back(PlotData::UpgradeData::Upgrade(upgradeType, remainingTurns, boost::apply_visitor(UpgradeYieldChangeFinder(playerType, improvementType), node).second));
 
-            turnsUntilUpgrade = getActualUpgradeTurns(gGlobals.getGame().getImprovementUpgradeTime(improvementType), upgradeRate);
+            turnsUntilUpgrade = getActualUpgradeTurns(gGlobals.getGame().getImprovementUpgradeTime(upgradeType), upgradeRate);
             remainingTurns -= turnsUntilUpgrade;
             improvementType = upgradeType;
         }

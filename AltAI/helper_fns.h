@@ -17,13 +17,23 @@ namespace AltAI
 
     ImprovementTypes getBonusImprovementType(BonusTypes bonusType);
 
+    int getImprovementBuildTime(BuildTypes buildType, FeatureTypes featureType, TerrainTypes terrainType);
+
     ProcessTypes getProcessType(CommerceTypes commerceType);
 
     int getNumVassalCities(const CvPlayer& player);
+    bool isFriendlyCity(TeamTypes teamId, const CvCity* pCity);
+    std::vector<int> getBorderingSubAreas(TeamTypes teamId, const CvPlot* pPlot);
 
     BuildingClassTypes getBuildingClass(BuildingTypes buildingType);
     BuildingTypes getPlayerVersion(PlayerTypes playerType, BuildingClassTypes buildingClassType);
     UnitTypes getPlayerVersion(PlayerTypes playerType, UnitClassTypes unitClassType);
 
     TeamTypes PlayerIDToTeamID(PlayerTypes player);
+
+    std::string safeGetCityName(IDInfo city);
+    std::string safeGetCityName(const CvCity* pCity);
+
+    std::string getUnitAIString(UnitAITypes eUnitAI);
+    std::string getMissionAIString(MissionAITypes eMissionAI);
 }

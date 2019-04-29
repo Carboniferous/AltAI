@@ -67,7 +67,7 @@ namespace AltAI
         iTotalHealth += std::max<int>(0, extraPlayerHealth_ + extraHealth_);
         iTotalHealth += std::max<int>(0, levelHealth_);
 
-	    return iTotalHealth;
+        return iTotalHealth;
     }
 
     int HealthHelper::badHealth() const
@@ -87,7 +87,7 @@ namespace AltAI
         iTotalHealth += std::min<int>(0, levelHealth_);
         iTotalHealth += std::min<int>(0, extraBuildingBadHealth_);  // ?? seems odd to count this twice - but that's what the code in CvCity does
 
-    	return unhealthyPopulation_() - iTotalHealth;
+        return unhealthyPopulation_() - iTotalHealth;
     }
 
     void HealthHelper::advanceTurn()

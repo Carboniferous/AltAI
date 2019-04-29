@@ -156,13 +156,17 @@ namespace AltAI
 
         struct MiscEffectNode
         {
-            MiscEffectNode() : cityMaintenanceModifierChange(0), foodKeptPercent(0), hurryAngerModifier(0), globalPopChange(0),
-                noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false), startsGoldenAge(false),
-                makesCityCapital(false), isGovernmentCenter(false), freeBuildingType(NO_BUILDING) {}
+            MiscEffectNode() : cityMaintenanceModifierChange(0), foodKeptPercent(0), hurryAngerModifier(0), workerSpeedModifier(0),
+                globalPopChange(0), nFreeTechs(0), noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false), 
+                startsGoldenAge(false), makesCityCapital(false), isGovernmentCenter(false), freeBuildingType(NO_BUILDING)
+            {}
+
             int cityMaintenanceModifierChange;
             int foodKeptPercent;
             int hurryAngerModifier;
+            int workerSpeedModifier;
             int globalPopChange;
+            int nFreeTechs;
             bool noUnhealthinessFromBuildings, noUnhealthinessFromPopulation, startsGoldenAge;
             bool makesCityCapital, isGovernmentCenter;
             BuildingTypes freeBuildingType;

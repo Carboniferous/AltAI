@@ -31,6 +31,11 @@ namespace AltAI
         return religionType_;
     }
 
+    bool ReligionHelper::hasStateReligion() const
+    {
+        return religionType_ != NO_RELIGION && religionCounts_[religionType_] > 0;
+    }
+
     int ReligionHelper::getReligionCount(ReligionTypes religionType) const
     {
         return religionCounts_[religionType];

@@ -253,13 +253,13 @@ namespace AltAI
         for (size_t i = 0, count = node.andBonusTypes.size(); i < count; ++i)
         {
             if (i > 0) os << " and ";
-            os << " requires: " << gGlobals.getBonusInfo(node.andBonusTypes[i]).getType();
+            os << " requires& " << gGlobals.getBonusInfo(node.andBonusTypes[i]).getType();
         }
 
         for (size_t i = 0, count = node.orBonusTypes.size(); i < count; ++i)
         {
             if (i > 0) os << " or ";
-            os << " requires: " << gGlobals.getBonusInfo(node.orBonusTypes[i]).getType();
+            os << " requires| " << gGlobals.getBonusInfo(node.orBonusTypes[i]).getType();
         }
 
         for (size_t i = 0, count = node.techTypes.size(); i < count; ++i)

@@ -65,6 +65,9 @@ CvCity::CvCity()
 	m_abEverOwned = new bool[MAX_PLAYERS];
 	m_abTradeRoute = new bool[MAX_PLAYERS];
 	m_abRevealed = new bool[MAX_TEAMS];
+    // AltAI
+    m_abWasRevealed = new bool[MAX_TEAMS];
+
 	m_abEspionageVisibility = new bool[MAX_TEAMS];
 
 	m_paiNoBonus = NULL;
@@ -148,6 +151,7 @@ CvCity::~CvCity()
 	SAFE_DELETE_ARRAY(m_abEverOwned);
 	SAFE_DELETE_ARRAY(m_abTradeRoute);
 	SAFE_DELETE_ARRAY(m_abRevealed);
+    SAFE_DELETE_ARRAY(m_abWasRevealed);
 	SAFE_DELETE_ARRAY(m_abEspionageVisibility);
 }
 
@@ -183,10 +187,7 @@ void CvCity::init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits, 
 
 	//--------------------------------
 	// Init other game data
-	setName(GET_PLAYER(getOwnerINLINE()).getNewCityName());
-
-    // AltAI
-    GC.getGame().getAltAI()->getPlayer(m_eOwner)->addCity(this);
+	setName(GET_PLAYER(getOwnerINLINE()).getNewCityName());    
 
 	setEverOwned(getOwnerINLINE(), true);
 
@@ -198,6 +199,9 @@ void CvCity::init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits, 
 	}
 	pPlot->setOwner(getOwnerINLINE(), bBumpUnits, false);
 	pPlot->setPlotCity(this);
+
+    // AltAI - call after plot has had city set on it
+    GC.getGame().getAltAI()->getPlayer(m_eOwner)->addCity(this);
 
 	for (iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
 	{
@@ -248,6 +252,12 @@ void CvCity::init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits, 
 			}
 		}
 	}
+
+    // AltAI - update plot key for city
+    if (GET_PLAYER(eOwner).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->updatePlotInfo(pPlot, false, __FUNCTION__);
+    }
 
 	changeMilitaryHappinessUnits(pPlot->plotCount(PUF_isMilitaryHappiness));
 
@@ -320,6 +330,12 @@ void CvCity::init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits, 
 	{
 		GC.getGameINLINE().updatePlotGroups();
 	}
+
+    // AltAI
+    if (GET_PLAYER((PlayerTypes)m_eOwner).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).init();
+    }
 
 	AI_init();
 }
@@ -522,6 +538,7 @@ void CvCity::reset(int iID, PlayerTypes eOwner, int iX, int iY, bool bConstructo
 	for (iI = 0; iI < MAX_TEAMS; iI++)
 	{
 		m_abRevealed[iI] = false;
+        m_abWasRevealed[iI] = false;
 	}
 
 	for (iI = 0; iI < MAX_TEAMS; iI++)
@@ -802,6 +819,12 @@ void CvCity::kill(bool bUpdatePlotGroups)
 	bCapital = isCapital();
 
 	pPlot->setImprovementType((ImprovementTypes)(GC.getDefineINT("RUINS_IMPROVEMENT")));
+
+    //AltAI
+    if (GET_PLAYER(m_eOwner).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->updatePlotInfo(pPlot, false, __FUNCTION__);
+    }
 
 	CvEventReporter::getInstance().cityLost(this);
 
@@ -1134,6 +1157,12 @@ void CvCity::updateVisibility()
 void CvCity::createGreatPeople(UnitTypes eGreatPersonUnit, bool bIncrementThreshold, bool bIncrementExperience)
 {
 	GET_PLAYER(getOwnerINLINE()).createGreatPeople(eGreatPersonUnit, bIncrementThreshold, bIncrementExperience, getX_INLINE(), getY_INLINE());
+
+    // bIncrementThreshold = true implies this city reached the current GPP threshold
+    if (bIncrementThreshold && GET_PLAYER((PlayerTypes)m_eOwner).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->updateCityGreatPeople(getIDInfo());
+    }
 }
 
 
@@ -3271,9 +3300,10 @@ void CvCity::hurry(HurryTypes eHurry)
 	iHurryPopulation = hurryPopulation(eHurry);
 	iHurryAngerLength = hurryAngerLength(eHurry);
 
-    // AltAI - store this so we can log it
-    int iProductionLeft = hurryProduction(eHurry);
-	changeProduction(iProductionLeft);
+    // AltAI - store these values so we can log them
+    int iActualProductionLeft = productionLeft();
+    int iProductionHurried = hurryProduction(eHurry);
+	changeProduction(iProductionHurried);
 
 	GET_PLAYER(getOwnerINLINE()).changeGold(-(iHurryGold));
 	changePopulation(-(iHurryPopulation));
@@ -3291,7 +3321,7 @@ void CvCity::hurry(HurryTypes eHurry)
         AltAI::HurryData hurryData(eHurry);
         hurryData.hurryPopulation = iHurryPopulation;
         hurryData.hurryGold = iHurryGold;
-        hurryData.extraProduction = iProductionLeft;
+        hurryData.extraProduction = iProductionHurried - iActualProductionLeft;
 
         GC.getGame().getAltAI()->getPlayer(m_eOwner)->logHurry(this, hurryData);
     }
@@ -8834,6 +8864,21 @@ bool CvCity::isRevealed(TeamTypes eIndex, bool bDebug) const
 	}
 }
 
+bool CvCity::wasRevealed(TeamTypes eIndex, bool bDebug) const
+{
+	if (bDebug && GC.getGameINLINE().isDebugMode())
+	{
+		return true;
+	}
+	else
+	{
+		FAssertMsg(eIndex >= 0, "eIndex expected to be >= 0");
+		FAssertMsg(eIndex < MAX_TEAMS, "eIndex expected to be < MAX_TEAMS");
+
+		return m_abWasRevealed[eIndex];
+	}
+}
+
 
 void CvCity::setRevealed(TeamTypes eIndex, bool bNewValue)
 {
@@ -8846,6 +8891,12 @@ void CvCity::setRevealed(TeamTypes eIndex, bool bNewValue)
 	if (isRevealed(eIndex, false) != bNewValue)
 	{
 		m_abRevealed[eIndex] = bNewValue;
+
+        if (bNewValue)
+        {
+            // AltAI - track that we saw this city
+            m_abWasRevealed[eIndex] = true;
+        }
 
 		updateVisibility();
 
@@ -9107,6 +9158,12 @@ void CvCity::changeNumBonuses(BonusTypes eIndex, int iChange)
 		{
 			updateCorporation();
 		}
+
+        if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+        {
+            // AltAI
+            GC.getGame().getAltAI()->getPlayer(m_eOwner)->updateCityBonusCount(this, eIndex, iChange);
+        }
 	}
 }
 
@@ -10190,13 +10247,22 @@ void CvCity::setNumFreeBuilding(BuildingTypes eIndex, int iNewValue)
 
 	if (getNumFreeBuilding(eIndex) != iNewValue)
 	{
+        // number of buildings (free + real) (maxed at max buildings of same type per city - 1 in standard game)
 		iOldNumBuilding = getNumBuilding(eIndex);
 
 		m_paiNumFreeBuilding[eIndex] = iNewValue;
 
+        // has total buildings count changed?
 		if (iOldNumBuilding != getNumBuilding(eIndex))
 		{
+            // iNewValue - iOldNumBuilding = effective change in count for this building
 			processBuilding(eIndex, iNewValue - iOldNumBuilding);
+
+            if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+            {
+                // AltAI
+                GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).updateBuildings(eIndex, iNewValue - iOldNumBuilding);
+            }
 		}
 	}
 }
@@ -10838,6 +10904,12 @@ void CvCity::popOrder(int iNum, bool bFinish, bool bChoose)
 			pUnit->finishMoves();
 
 			addProductionExperience(pUnit);
+
+            if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+            {
+                // AltAI
+                GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).updateUnits(eTrainUnit);
+            }
 
 			pRallyPlot = getRallyPlot();
 
@@ -11897,6 +11969,7 @@ void CvCity::read(FDataStreamBase* pStream)
 	pStream->Read(MAX_PLAYERS, m_abEverOwned);
 	pStream->Read(MAX_PLAYERS, m_abTradeRoute);
 	pStream->Read(MAX_TEAMS, m_abRevealed);
+    pStream->Read(MAX_TEAMS, m_abWasRevealed);
 	pStream->Read(MAX_TEAMS, m_abEspionageVisibility);
 
 	pStream->ReadString(m_szName);
@@ -12143,6 +12216,7 @@ void CvCity::write(FDataStreamBase* pStream)
 	pStream->Write(MAX_PLAYERS, m_abEverOwned);
 	pStream->Write(MAX_PLAYERS, m_abTradeRoute);
 	pStream->Write(MAX_TEAMS, m_abRevealed);
+    pStream->Write(MAX_TEAMS, m_abWasRevealed);
 	pStream->Write(MAX_TEAMS, m_abEspionageVisibility);
 
 	pStream->WriteString(m_szName);

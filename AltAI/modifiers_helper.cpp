@@ -47,7 +47,7 @@ namespace AltAI
         playerSpaceProductionModifier_ = player.getSpaceProductionModifier();
 
         stateReligionBuildingProductionModifier_ = 0;
-   		stateReligionBuildingProductionModifier_ = player.getStateReligionBuildingProductionModifier();
+           stateReligionBuildingProductionModifier_ = player.getStateReligionBuildingProductionModifier();
 
         // these don't change in the course of a normal game
         worldWonderProductionModifier_ = player.getMaxGlobalBuildingProductionModifier();
@@ -100,11 +100,11 @@ namespace AltAI
         }
         
         if (::isTeamWonderClass(buildingClassType))
-	    {
-		    modifier += teamWonderProductionModifier_;
-	    }
+        {
+            modifier += teamWonderProductionModifier_;
+        }
 
-	    if (::isNationalWonderClass(buildingClassType))
+        if (::isNationalWonderClass(buildingClassType))
         {
             modifier += nationalWonderProductionModifier_;
         }
@@ -117,8 +117,7 @@ namespace AltAI
             }
         }
 
-        ReligionTypes religionType = data.getReligionHelper()->getStateReligion();
-        if (religionType != NO_RELIGION && data.getReligionHelper()->isHasReligion(religionType))
+        if (data.getReligionHelper()->hasStateReligion())
         {
             modifier += stateReligionBuildingProductionModifier_;
         }

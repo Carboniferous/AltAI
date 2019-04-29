@@ -33,6 +33,8 @@ namespace AltAI
         template <typename F>
             OptState optimise(TotalOutputPriority outputPriorities, TotalOutputWeights outputWeights, GrowthType growthType, bool debug = false);
 
+        void optimise(const std::vector<TotalOutputPriority>& outputPriorities, const std::vector<SpecialistTypes>& mixedSpecialistTypes = std::vector<SpecialistTypes>(), bool debug = false);
+
         OptState optimiseFoodProduction(UnitTypes unitType, bool debug = false);
 
         const CityDataPtr& getOutput() const { return data_; }
@@ -84,10 +86,13 @@ namespace AltAI
         CityOptimiser::GrowthType growthType;
         Range<> targetFoodYield;
         SpecialistTypes specialistType;
+
+        void debug(std::ostream& os) const;
     };
 
     struct ConstructItem;
     PlotAssignmentSettings makePlotAssignmentSettings(const CityDataPtr& pCityData, const CvCity* pCity, const ConstructItem& constructItem);
+    std::vector<TotalOutputPriority> makeSimpleOutputPriorities(const CityDataPtr& pCityData);
 
     struct DotMapItem;
 

@@ -1452,7 +1452,11 @@ enum MissionAITypes		// Exposed to Python
 	MISSIONAI_BUILD,
 	MISSIONAI_ASSAULT,
 	MISSIONAI_CARRIER,
-	MISSIONAI_PICKUP
+	MISSIONAI_PICKUP,
+    // AltAI extra mission types...
+    MISSIONAI_ESCORT,
+    MISSIONAI_COUNTER
+    // ...
 };
 
 // any additions need to be reflected in GlobalTypes.xml

@@ -3,6 +3,7 @@
 #include "./utils.h"
 #include "./tactic_actions.h"
 #include "./tactics_interfaces.h"
+#include "./unit.h"
 
 namespace AltAI
 {
@@ -23,34 +24,29 @@ namespace AltAI
         //void updateProjectTactics();
 
         void makeSpecialistUnitTactics();
+        void makeCivicTactics();
+        void makeResourceTactics();
 
-        //void updateFirstToTechTactics(TechTypes techType);
-
-        //void selectTechTactics();
-        //void selectUnitTactics();
-        //void selectCityTactics();
-        //void selectBuildingTactics();
-        //void selectBuildingTactics(const City& city);
-        //void selectProjectTactics();
-        //void selectProjectTactics(const City& city);
-        
+        void updateFirstToTechTactics(TechTypes techType);
 
         void deleteCity(const CvCity* pCity);
 
         void updateCityBuildingTactics(TechTypes techType);
-        void updateCityBuildingTactics(IDInfo city, BuildingTypes buildingType, int newCount);
+        void updateCityBuildingTactics(IDInfo city, BuildingTypes buildingType, int buildingChangeCount);
         void updateCityBuildingTactics(IDInfo city);
         void updateCityReligionBuildingTactics(ReligionTypes religionType);
 
+        void updateCivicTactics(TechTypes techType);
+
         void addNewCityBuildingTactics(IDInfo city);
         void addNewCityUnitTactics(IDInfo city);
-        void addNewCityImprovementTactics(IDInfo city);
+        void addCityImprovementTactics(IDInfo city);
 
         void updateCityBuildingTacticsDependencies();
 
         void updateLimitedBuildingTacticsDependencies();
 
-        void updateCityGlobalBuildingTactics(IDInfo city, BuildingTypes buildingType, int newCount);
+        //void updateCityGlobalBuildingTactics(IDInfo city, BuildingTypes buildingType, int buildingChangeCount);
         void updateGlobalBuildingTacticsDependencies();
         void eraseLimitedBuildingTactics(BuildingTypes buildingType);
 
@@ -60,23 +56,24 @@ namespace AltAI
 
         void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
 
-        ConstructItem getBuildItem(const City& city);
-        ConstructItem getSpecialistBuild(UnitTypes unitType);
+        std::map<int, ICityBuildingTacticsPtr> getCityBuildingTactics(BuildingTypes buildingType) const;
+        std::map<int, ICityBuildingTacticsPtr> getCitySpecialBuildingTactics(BuildingTypes buildingType) const;
 
-        std::map<IDInfo, std::vector<BuildingTypes> > getBuildingsCityCanAssistWith(IDInfo city) const;
+        ConstructItem getBuildItem(const City& city);
+        bool getSpecialistBuild(CvUnitAI* pUnit);
+
+        std::map<BuildingTypes, std::vector<BuildingTypes> > getBuildingsCityCanAssistWith(IDInfo city) const;
         std::map<BuildingTypes, std::vector<BuildingTypes> > getPossibleDependentBuildings(IDInfo city) const;
 
-        void debugTactics();
+        UnitAction getConstructedUnitAction(const CvUnit* pUnit) const;
 
-        //std::list<ResearchTech> possibleTechTactics_, selectedTechTactics_;
-        //ConstructList possibleUnitTactics_, selectedUnitTactics_;
-        //ConstructList possibleBuildingTactics_, possibleProjectTactics_;
-        //std::map<IDInfo, ConstructList> selectedCityBuildingTactics_, selectedCityProjectTactics_;
+        void debugTactics();
 
         // ordinary buildings tactics, keyed by city IDInfo
         typedef std::map<BuildingTypes, ICityBuildingTacticsPtr> CityBuildingTacticsList;
         typedef std::map<IDInfo, CityBuildingTacticsList> CityBuildingTacticsMap;
-        CityBuildingTacticsMap cityBuildingTacticsMap_;
+        CityBuildingTacticsMap cityBuildingTacticsMap_, specialCityBuildingsTacticsMap_;
+        std::set<BuildingTypes> availableGeneralBuildingsList_;
 
         // process tactics
         typedef std::map<ProcessTypes, IProcessTacticsPtr> ProcessTacticsMap;
@@ -87,17 +84,25 @@ namespace AltAI
         LimitedBuildingsTacticsMap nationalBuildingsTacticsMap_, globalBuildingsTacticsMap_;
 
         // improvement build tactics, keyed by city IDInfo
-        typedef std::list<ICityImprovementTacticsPtr> CityImprovementTacticsList;
+        typedef std::list<CityImprovementTacticsPtr> CityImprovementTacticsList;
         typedef std::map<IDInfo, CityImprovementTacticsList> CityImprovementTacticsMap;
         CityImprovementTacticsMap cityImprovementTacticsMap_;
 
         // unit tactics
-        typedef std::map<UnitTypes, IUnitTacticsPtr> UnitTacticsMap;
-        UnitTacticsMap unitTacticsMap_;
+        typedef std::map<UnitTypes, UnitTacticsPtr> UnitTacticsMap;
+        UnitTacticsMap unitTacticsMap_, specialUnitTacticsMap_;
 
         // tech tactics
         typedef std::map<TechTypes, ITechTacticsPtr> TechTacticsMap;
         TechTacticsMap techTacticsMap_;
+
+        // civic tactics
+        typedef std::map<CivicTypes, CivicTacticsPtr> CivicTacticsMap;
+        CivicTacticsMap civicTacticsMap_;
+
+        // resource tactics
+        typedef std::map<BonusTypes, ResourceTacticsPtr> ResourceTacticsMap;
+        ResourceTacticsMap resourceTacticsMap_;
 
         Player& player;
 
@@ -107,6 +112,7 @@ namespace AltAI
 
     private:
         void addBuildingTactics_(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, CvCity* pCity);
+        void addSpecialBuildingTactics_(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, CvCity* pCity);
         void addUnitTactics_(const boost::shared_ptr<UnitInfo>& pUnitInfo, CvCity* pCity);
     };
 }

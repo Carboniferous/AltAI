@@ -8,8 +8,6 @@ class CvCity;
 class CvUnit;
 class CvPlot;
 
-#include <set>
-
 namespace AltAI
 {
     class PlayerAnalysis;
@@ -19,6 +17,9 @@ namespace AltAI
     class City;
     class SettlerManager;
     struct HurryData;
+
+    class Player;
+    typedef boost::shared_ptr<Player> PlayerPtr;
 
     class Player
     {
@@ -32,6 +33,8 @@ namespace AltAI
 
         void addCity(CvCity* pCity);
         void deleteCity(CvCity* pCity);
+        void initCities();
+        void recalcPlotInfo();
 
         City& getCity(const CvCity* pCity);
         const City& getCity(const CvCity* pCity) const;
@@ -39,11 +42,16 @@ namespace AltAI
         City& getCity(const int ID);
         const City& getCity(const int ID) const;
 
-        void addUnit(CvUnitAI* pUnit);
-        void deleteUnit(CvUnitAI* pUnit);
-        void moveUnit(CvUnitAI* pUnit, CvPlot* pFromPlot, CvPlot* pToPlot);
-        void movePlayerUnit(CvUnitAI* pUnit, CvPlot* pPlot);
-        void hidePlayerUnit(CvUnitAI* pUnit, CvPlot* pOldPlot);
+        void addUnit(CvUnitAI* pUnit, bool loading = false);
+        void deleteUnit(CvUnit* pUnit);        
+        void moveUnit(CvUnitAI* pUnit, const CvPlot* pFromPlot, const CvPlot* pToPlot);
+        void addPlayerUnit(CvUnitAI* pUnit, const CvPlot* pPlot);
+        void deletePlayerUnit(CvUnitAI* pUnit, const CvPlot* pPlot);
+        void movePlayerUnit(CvUnitAI* pUnit, const CvPlot* pFromPlot, const CvPlot* pToPlot);
+        void hidePlayerUnit(CvUnitAI* pUnit, const CvPlot* pOldPlot);
+        Unit getUnit(CvUnitAI* pUnit) const;
+
+        std::vector<IUnitEventGeneratorPtr> getCityUnitEvents(IDInfo city) const;
         
         const CvPlayer* getCvPlayer() const;
         CvPlayer* getCvPlayer();
@@ -54,23 +62,80 @@ namespace AltAI
         const boost::shared_ptr<CivHelper>& getCivHelper() const;
         const boost::shared_ptr<AreaHelper>& getAreaHelper(int areaID);
 
+        CvCity* getNextCityForWorkerToImprove(const CvCity* pCurrentCity) const;
+
         std::vector<BuildTypes> addAdditionalPlotBuilds(const CvPlot* pPlot, BuildTypes buildType) const;
-        bool checkResourcesOutsideCities(CvUnitAI* pUnit) const;
-        int getNumWorkersAtPlot(const CvPlot* pTargetPlot) const;
+        bool checkResourcesOutsideCities(CvUnitAI* pUnit, const std::multimap<int, const CvPlot*>& resourceHints);
+        bool checkResourcesPlot(CvUnitAI* pUnit, const CvPlot* pPlot);
+        int getNumWorkersTargetingPlot(const CvPlot* pTargetPlot) const;
+        int getNumWorkersTargetingCity(const CvCity* pCity) const;
         int getNumSettlersTargetingPlot(CvUnit* pIgnoreUnit, const CvPlot* pTargetPlot) const;
+        int getNumActiveWorkers(UnitTypes unitType) const;
+        std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > getWorkerMissionsForCity(const CvCity* pCity) const;
+        std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::Mission> > > getWorkerMissions() const;
+        void debugWorkerMissions(std::ostream& os) const;
 
         std::vector<IDInfo> getCitiesTargetingPlot(UnitTypes unitType, XYCoords buildTarget) const;
 
-        void doSpecialistMove(CvUnitAI* pUnit);
+        bool doSpecialistMove(CvUnitAI* pUnit);
 
         void logMission(CvSelectionGroup* pGroup, MissionData missionData, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit) const;
-        void logClearMissions(const CvSelectionGroup* pGroup) const;
+        void logClearMissions(const CvSelectionGroup* pGroup, const std::string& caller) const;
         void logScrapUnit(const CvUnit* pUnit) const;
+        void logFailedPath(const CvSelectionGroup* pGroup, const CvPlot* pFromPlot, const CvPlot* pToPlot, int iFlags) const;
+        void logEmphasis(IDInfo city, EmphasizeTypes eIndex, bool bNewValue) const;
+        
+        void updateMilitaryAnalysis();
+        void updateWorkerAnalysis();
 
-        void addTech(TechTypes techType);
-        void pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pPlotEvent);
+        void pushWorkerMission(CvUnitAI* pUnit, const CvCity* pCity, const CvPlot* pTargetPlot,
+            MissionTypes missionType, BuildTypes buildType, int iFlags = 0, bool bAppend = false, const std::string& caller = "");
+        void updateWorkerMission(CvUnitAI* pUnit, BuildTypes buildType);
+        void updateMission(CvUnitAI* pUnit, CvPlot* pOldPlot, CvPlot* pNewPlot);
+        void clearWorkerMission(CvUnitAI* pUnit);
+        bool hasMission(CvUnitAI* pUnit);
+        void pushMission(CvUnitAI* pUnit, const UnitMissionPtr& pMission);
+        bool executeMission(CvUnitAI* pUnit);
+
+        template <typename P>
+            std::vector<UnitMissionPtr> getMissions(P pred, const CvUnitAI* pIgnoreUnit = NULL) const
+        {
+            std::vector<UnitMissionPtr> missions;
+
+            for (UnitsCIter iter(units_.begin()), endIter(units_.end()); iter != endIter; ++iter)
+            {
+                if (pIgnoreUnit && iter->second.getUnit() == pIgnoreUnit)
+                {
+                    continue;
+                }
+
+                for (size_t i = 0, count = iter->second.getMissions().size(); i < count; ++i)
+                {
+                    if (pred(iter->second.getMissions()[i]))
+                    {
+                        missions.push_back(iter->second.getMissions()[i]);
+                    }
+                }
+            }
+
+            return missions;
+        }
+
+        void pushExploreMission(CvUnitAI* pUnit, const CvCity* pCity);
+
+        void addTech(TechTypes techType, TechSources source);
+        void gaveTech(TechTypes techType, PlayerTypes toPlayer);
+
+        void updatePlotInfo(const CvPlot* pPlot, bool isNew, const std::string& caller);
+        //void pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pPlotEvent);
+        void updatePlotRevealed(const CvPlot* pPlot, bool isNew);
+        void updatePlotBonus(const CvPlot* pPlot, BonusTypes revealedBonusType);
         void updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType);
-        void updatePlotCulture(const CvPlot* pPlot, bool remove);
+        void updatePlotCulture(const CvPlot* pPlot, PlayerTypes previousRevealedOwner, PlayerTypes newRevealedOwner);
+        void updatePlotImprovement(const CvPlot* pPlot, ImprovementTypes oldImprovementType);
+        void updateCityBonusCount(const CvCity* pCity, BonusTypes bonusType, int delta);
+
+        void updateCityGreatPeople(IDInfo city);
 
         void eraseLimitedBuildingTactics(BuildingTypes buildingType);
 
@@ -106,6 +171,8 @@ namespace AltAI
         void logStuckSelectionGroup(CvUnit* pHeadUnit) const;
         void logInvalidUnitBuild(const CvUnit* pUnit, BuildTypes buildType) const;
 
+        CommerceModifier getCommercePercentages() const;
+
         int getMaxResearchRate() const;
         int getMaxResearchRateWithProcesses() const;
         int getMaxResearchRate(std::pair<int, int> fixedIncomeAndExpenses) const;
@@ -113,8 +180,8 @@ namespace AltAI
         int getMaxGold() const;
         int getMaxGoldWithProcesses() const;
 
-        int getUnitCount(UnitTypes unitType) const;
-        int getUnitCount(const std::vector<UnitAITypes>& AITypes, int militaryFlags) const;
+        int getUnitCount(UnitTypes unitType, bool includeUnderConstruction = false) const;
+        int getUnitCount(UnitAITypes unitAIType) const;
         int getCollateralUnitCount(int militaryFlags) const;
         int getCombatUnitCount(DomainTypes domainType, bool inProduction) const;
         int getScoutUnitCount(DomainTypes domainType, bool inProduction) const;
@@ -122,19 +189,23 @@ namespace AltAI
         void notifyHaveReligion(ReligionTypes religionType);
         void notifyLostReligion(ReligionTypes religionType);
 
+        int getNumKnownPlayers() const;
+
         // save/load functions
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
 
     private:
         void calcMaxResearchRate_();
-        void calcCivics_();
+        //void calcCivics_();        
 
         typedef std::map<int, City> CityMap;
         CityMap cities_;
         std::set<int> citiesToInit_;
-        std::set<Unit> units_;
-        typedef std::set<Unit>::const_iterator UnitsCIter;
+        typedef std::map<IDInfo, Unit> UnitMap;
+        UnitMap units_;
+        typedef UnitMap::iterator UnitsIter;
+        typedef UnitMap::const_iterator UnitsCIter;
         CvPlayer* pPlayer_;
         boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis_;
         boost::shared_ptr<CivHelper> pCivHelper_;

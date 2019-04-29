@@ -3,18 +3,21 @@
 #include "./plot_data.h"
 #include "./iters.h"
 #include "./helper_fns.h"
+#include "./plot_info.h"
+#include "./save_utils.h"
 #include "./civ_log.h"
 
 namespace AltAI
 {
-    PlotData::PlotData() : improvementType(NO_IMPROVEMENT), featureType(NO_FEATURE), ableToWork(true), controlled(true), isWorked(false)
+    PlotData::PlotData() : improvementType(NO_IMPROVEMENT), bonusType(NO_BONUS), featureType(NO_FEATURE), ableToWork(true), controlled(true), isWorked(false)
     {
     }
 
-    PlotData::PlotData(PlotYield plotYield_, Commerce commerce_, TotalOutput output_, const GreatPersonOutput& greatPersonOutput_,
-                       XYCoords coords_, ImprovementTypes improvementType_, FeatureTypes featureType_, RouteTypes routeType_, CultureData cultureData_)
-        : plotYield(plotYield_), commerce(commerce_), output(output_), actualOutput(output_), greatPersonOutput(greatPersonOutput_),
-          coords(coords_), improvementType(improvementType_), featureType(featureType_), routeType(routeType_),
+    PlotData::PlotData(const PlotInfoPtr& pPlotInfo_, PlotYield plotYield_, Commerce commerce_, TotalOutput output_, const GreatPersonOutput& greatPersonOutput_,
+                       XYCoords coords_, ImprovementTypes improvementType_, BonusTypes bonusType_, FeatureTypes featureType_, 
+                       RouteTypes routeType_, CultureData cultureData_)
+        : pPlotInfo(pPlotInfo_), plotYield(plotYield_), commerce(commerce_), output(output_), actualOutput(output_), greatPersonOutput(greatPersonOutput_),
+          coords(coords_), improvementType(improvementType_), bonusType(bonusType_), featureType(featureType_), routeType(routeType_),
           cultureData(cultureData_), ableToWork(true), controlled(true), isWorked(false)
     {
     }
@@ -137,6 +140,42 @@ namespace AltAI
 #endif
     }
 
+    void PlotData::debugSummary(std::ostream& os) const
+    {
+        if (isActualPlot())
+        {
+            const CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
+            std::string featureString = shortFeatureType(featureType);
+            std::string improvementString = shortImprovementType(improvementType);
+            std::string bonusString = shortBonusType(bonusType);
+
+            os << shortTerrainType(pPlot->getTerrainType()) << (featureString.empty() ? "" : " ") << featureString
+                << (bonusString.empty() ? "" : " ") << bonusString
+                << (pPlot->isHills() ? " hills" : "");
+            if (!improvementString.empty())
+            {
+                os << " [" << improvementString;
+                if (!upgradeData.upgrades.empty())
+                {
+                    os << " -> " << shortImprovementType(upgradeData.upgrades.begin()->improvementType) << " "
+                        << upgradeData.timeHorizon - upgradeData.upgrades.begin()->remainingTurns << "t]";
+                }
+                else
+                {
+                    os << "]";
+                }
+            }
+
+            os << " " << plotYield;
+            //<< " {" << actualOutput << "},";
+        }
+        else
+        {
+            const CvSpecialistInfo& specInfo = gGlobals.getSpecialistInfo((SpecialistTypes)coords.iY);
+            os << " " << specInfo.getType() << " " << actualOutput << ",";
+        }
+    }
+
     TotalOutput PlotData::UpgradeData::getExtraOutput(YieldModifier yieldModifier, CommerceModifier commerceModifier, CommerceModifier commercePercent)
     {
         TotalOutput extraOutput;
@@ -153,16 +192,17 @@ namespace AltAI
         return extraOutput;
     }
 
-    PlotData::UpgradeData::Upgrade PlotData::UpgradeData::advanceTurn()
+    PlotData::UpgradeData::Upgrade PlotData::UpgradeData::advanceTurn(int nTurns)
     {
-        // can only get one upgrade
+        // can only get one upgrade - should give latest version if we somehow call with a greater interval than the upgrade time for an improvement
+        // this shouldn't happne in practice because this fn is supposed to be called
         Upgrade upgrade;
-
         PlotData::UpgradeData::UpgradeListIter iter(upgrades.begin()), endIter(upgrades.end());
         
         while (iter != endIter)
         {
-            if (++iter->remainingTurns == timeHorizon)
+            iter->remainingTurns = std::min<int>(timeHorizon, iter->remainingTurns + nTurns);
+            if (iter->remainingTurns == timeHorizon)
             {
                 upgrade = *iter;
                 upgrades.erase(iter++);
@@ -173,6 +213,145 @@ namespace AltAI
             }
         }
         return upgrade;
+    }
+
+    void PlotData::write(FDataStreamBase* pStream) const
+    {
+        plotYield.write(pStream);
+        commerce.write(pStream);
+        output.write(pStream);
+        actualOutput.write(pStream);
+        greatPersonOutput.write(pStream);
+        pStream->Write(coords.iX);
+        pStream->Write(coords.iY);
+        pStream->Write(improvementType);
+        pStream->Write(featureType);
+        pStream->Write(routeType);
+        upgradeData.write(pStream);
+        cultureData.write(pStream);
+        pStream->Write(ableToWork);
+        pStream->Write(controlled);
+        pStream->Write(isWorked);
+    }
+
+    void PlotData::read(FDataStreamBase* pStream)
+    {
+        plotYield.read(pStream);
+        commerce.read(pStream);
+        output.read(pStream);
+        actualOutput.read(pStream);
+        greatPersonOutput.read(pStream);
+        pStream->Read(&coords.iX);
+        pStream->Read(&coords.iY);
+        pStream->Read((int*)&improvementType);
+        pStream->Read((int*)&featureType);
+        pStream->Read((int*)&routeType);
+        upgradeData.read(pStream);
+        cultureData.read(pStream);
+        pStream->Read(&ableToWork);
+        pStream->Read(&controlled);
+        pStream->Read(&isWorked);
+    }
+
+    void PlotData::UpgradeData::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(timeHorizon);
+        writeComplexList(pStream, upgrades);
+    }
+
+    void PlotData::UpgradeData::read(FDataStreamBase* pStream)
+    {
+        pStream->Read(&timeHorizon);
+        readComplexList<Upgrade>(pStream, upgrades);
+    }
+
+    void PlotData::UpgradeData::Upgrade::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(improvementType);
+        pStream->Write(remainingTurns);
+        extraYield.write(pStream);
+    }
+
+    void PlotData::UpgradeData::Upgrade::read(FDataStreamBase* pStream)
+    {
+        pStream->Read((int*)&improvementType);
+        pStream->Read(&remainingTurns);
+        extraYield.read(pStream);
+    }
+
+    void PlotData::CultureData::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ownerAndCultureTrumpFlag.first);
+        pStream->Write(ownerAndCultureTrumpFlag.second);
+
+        pStream->Write(cultureSourcesMap.size());
+        for (CultureSourcesMap::const_iterator ci(cultureSourcesMap.begin()), ciEnd(cultureSourcesMap.end());
+            ci != ciEnd; ++ci)
+        {
+            pStream->Write(ci->first);
+            pStream->Write(ci->second.first);
+            pStream->Write(ci->second.second.size());
+            for (size_t i = 0, count = ci->second.second.size(); i < count; ++i)
+            {
+                ci->second.second[i].write(pStream);
+            }
+        }
+    }
+
+    void PlotData::CultureData::read(FDataStreamBase* pStream)
+    {
+        pStream->Read((int*)&ownerAndCultureTrumpFlag.first);
+        pStream->Read(&ownerAndCultureTrumpFlag.second);
+
+        size_t cultureSourcesMapSize;
+        pStream->Read(&cultureSourcesMapSize);
+        for (size_t i = 0; i < cultureSourcesMapSize; ++i)
+        {
+            PlayerTypes playerType;
+            int playerPlotCulture;            
+            size_t cultureSourceCount;
+
+            pStream->Read((int*)&playerType);
+            pStream->Read(&playerPlotCulture);
+            pStream->Read(&cultureSourceCount);
+
+            std::vector<CultureSource> cultureSources;
+            
+            for (size_t j = 0; j < cultureSourceCount; ++j)
+            {
+                CultureData::CultureSource cultureSource;
+                cultureSource.read(pStream);
+                cultureSources.push_back(cultureSource);
+            }
+
+            cultureSourcesMap.insert(std::make_pair(playerType, std::make_pair(playerPlotCulture, cultureSources)));
+        }
+    }
+
+    void PlotData::CultureData::CultureSource::read(FDataStreamBase* pStream)
+    {
+        pStream->Read(&output);
+        pStream->Read(&range);
+        city.read(pStream);
+    }
+
+    void PlotData::CultureData::CultureSource::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(output);
+        pStream->Write(range);
+        city.write(pStream);
+    }
+
+    void GreatPersonOutput::read(FDataStreamBase* pStream)
+    {
+        pStream->Read((int*)&unitType);
+        pStream->Read(&output);
+    }
+
+    void GreatPersonOutput::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(unitType);
+        pStream->Write(output);
     }
 
     void PlotData::UpgradeData::debug(std::ostream& os) const

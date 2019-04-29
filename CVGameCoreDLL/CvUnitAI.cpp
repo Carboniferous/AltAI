@@ -27,6 +27,9 @@
 #include "player.h"
 #include "city.h"
 #include "iters.h"
+#include "worker_tactics.h"
+#include "military_tactics.h"
+#include "unit_explore.h"
 
 #define FOUND_RANGE				(7)
 
@@ -68,6 +71,11 @@ void CvUnitAI::AI_reset(UnitAITypes eUnitAI)
 	AI_uninit();
 
 	m_iBirthmark = 0;
+
+	if (m_eOwner != NO_PLAYER && GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->logUnitAIChange(this, NO_UNITAI, eUnitAI);
+    }
 
 	m_eUnitAIType = eUnitAI;
 	
@@ -801,7 +809,7 @@ bool CvUnitAI::AI_bestCityBuild(CvCity* pCity, CvPlot** ppBestPlot, BuildTypes* 
     {
         if (ppBestPlot && peBestBuild)  // can be called for great people for which we need to call something else
         {
-            std::pair<XYCoords, BuildTypes> plotAndBuildType = GC.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity->getID()).getBestImprovement("AI_bestCityBuild", false);
+            std::pair<XYCoords, BuildTypes> plotAndBuildType = GC.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity).getBestImprovement("AI_bestCityBuild", this, false);
             if (plotAndBuildType.second != NO_BUILD)
             {
                 *peBestBuild = plotAndBuildType.second;
@@ -1117,7 +1125,12 @@ void CvUnitAI::AI_settleMove()
 
     const bool usingAltAI = GET_PLAYER(getOwnerINLINE()).isUsingAltAI();
 
-	if (GET_PLAYER(getOwnerINLINE()).getNumCities() == 0)  // AltAI - todo: consider initial move?
+    if (usingAltAI)
+    {
+        GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->updatePlotValues();
+    }
+
+	if (!usingAltAI && GET_PLAYER(getOwnerINLINE()).getNumCities() == 0)  // AltAI - todo: consider initial move?
 	{
 		if (canFound(plot()))
 		{
@@ -1326,6 +1339,13 @@ void CvUnitAI::AI_workerMove()
 	bNextCity = false;
     const bool usingAltAI = GET_PLAYER(getOwnerINLINE()).isUsingAltAI();
 
+    if (usingAltAI)
+    {
+        //GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->clearWorkerMission(this);
+        return (void)(AltAI::doWorkerAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this));
+		//return (void)AltAI::doLandUnitWorker(this);
+    }
+
 	// XXX could be trouble...
 	if (plot()->getOwnerINLINE() != getOwnerINLINE())
 	{
@@ -1365,7 +1385,8 @@ void CvUnitAI::AI_workerMove()
     //    }
     //}
 
-	if (bCanRoute)
+	// AltAI
+	if (bCanRoute && !usingAltAI)
 	{
 		if (plot()->getOwnerINLINE() == getOwnerINLINE()) // XXX team???
 		{
@@ -1423,7 +1444,7 @@ void CvUnitAI::AI_workerMove()
     {
         // remove any left over bad features (mainly jungle camps) which didn't get the feature removed 
         // note: not really for fallout - that should be handled with a higher priority although this will catch that too.
-        if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).checkBadImprovementFeatures(this))
+        if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).checkBadImprovementFeatures(this))
         {
             return;
         }
@@ -1433,7 +1454,7 @@ void CvUnitAI::AI_workerMove()
     {
         if (CvTeamAI::getTeam(pCity->getTeam()).isIrrigation())
         {
-            if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).checkIrrigation(this, false))
+            if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).checkIrrigation(this, false))
             {
                 return;
             }
@@ -1443,7 +1464,7 @@ void CvUnitAI::AI_workerMove()
     if (usingAltAI && pCity && bCanRoute)
     {   
         // check for bonuses which need connecting
-        if (GC.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity->getID()).checkResourceConnections(this))
+        if (GC.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity).checkResourceConnections(this))
         {
             return;
         }
@@ -1491,7 +1512,7 @@ void CvUnitAI::AI_workerMove()
 	{
         if (usingAltAI)
         {
-            if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).selectImprovement(this, true))
+            if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).selectImprovement(this, true))
 			{
 				return;
 			}
@@ -1513,7 +1534,7 @@ void CvUnitAI::AI_workerMove()
     {
 	    if (bCanRoute && !isBarbarian())
 	    {
-            if (pCity && GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).connectCities(this))
+            if (pCity && GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).connectCities(this))
             {
                 return;
             }
@@ -1531,7 +1552,7 @@ void CvUnitAI::AI_workerMove()
     if (usingAltAI && bCanRoute)
     {   
         // check for bonuses which need connecting outside of cities
-        if (GC.getGame().getAltAI()->getPlayer(getOwner())->checkResourcesOutsideCities(this))
+        if (GC.getGame().getAltAI()->getPlayer(getOwner())->checkResourcesOutsideCities(this, std::multimap<int, const CvPlot*>()))
         {
             return;
         }
@@ -1614,7 +1635,7 @@ void CvUnitAI::AI_workerMove()
     {
         if (CvTeamAI::getTeam(pCity->getTeam()).isIrrigation())
         {
-            if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).checkIrrigation(this, false))
+            if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).checkIrrigation(this, false))
             {
                 return;
             }
@@ -1625,7 +1646,7 @@ void CvUnitAI::AI_workerMove()
 	{
         if (usingAltAI)
         {
-            if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).selectImprovement(this, false))
+            if (GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).selectImprovement(this, false))
             {
                 return;
             }
@@ -1894,6 +1915,15 @@ void CvUnitAI::AI_barbAttackMove()
 void CvUnitAI::AI_attackMove()
 {
 	PROFILE_FUNC();
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }
+    }
+
 	bool bDanger = (GET_PLAYER(getOwnerINLINE()).AI_getPlotDanger(plot(), 3) > 0);
 	{
 		PROFILE("CvUnitAI::AI_attackMove() 1");
@@ -2309,6 +2339,14 @@ void CvUnitAI::AI_attackCityMove()
 {
 	PROFILE_FUNC();
 
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }
+    }
+
 	bool bIgnoreFaster = false;
 	if (GET_PLAYER(getOwnerINLINE()).AI_isDoStrategy(AI_STRATEGY_FASTMOVERS))
 	{
@@ -2606,6 +2644,14 @@ void CvUnitAI::AI_attackCityLemmingMove()
 void CvUnitAI::AI_collateralMove()
 {
 	PROFILE_FUNC();
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }
+    }
 	
 	if (AI_leaveAttack(1, 20, 100))
 	{
@@ -2838,6 +2884,14 @@ void CvUnitAI::AI_pillageMove()
 void CvUnitAI::AI_reserveMove()
 {
 	PROFILE_FUNC();
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }
+    }
 	
 	bool bDanger = (GET_PLAYER(getOwnerINLINE()).AI_getPlotDanger(plot(), 3) > 0);
 
@@ -2981,6 +3035,14 @@ void CvUnitAI::AI_counterMove()
 {
 	PROFILE_FUNC();
 
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }
+    }
+
 	if (AI_guardCity(false, true, 1))
 	{
 		return;
@@ -3098,6 +3160,14 @@ void CvUnitAI::AI_counterMove()
 void CvUnitAI::AI_cityDefenseMove()
 {
 	PROFILE_FUNC();
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }
+    }
 	
 	bool bDanger = (GET_PLAYER(getOwnerINLINE()).AI_getPlotDanger(plot(), 3) > 0);
 	
@@ -3345,6 +3415,19 @@ void CvUnitAI::AI_exploreMove()
 {
 	PROFILE_FUNC();
 
+	if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+	{
+        if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }
+
+		if (AltAI::doLandUnitExplore(this))
+		{
+			return;
+		}
+	}
+
 	if (!isHuman() && canAttack())
 	{
 		if (AI_cityAttack(1, 60))
@@ -3383,7 +3466,7 @@ void CvUnitAI::AI_exploreMove()
 	if (AI_goody(4))
 	{
 		return;
-	}
+	}	
 
 	if (AI_exploreRange(3))
 	{
@@ -3512,6 +3595,14 @@ void CvUnitAI::AI_prophetMove()
 {
 	PROFILE_FUNC();
 
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (GC.getGame().getAltAI()->getPlayer(getOwner())->doSpecialistMove(this))
+        {
+            return;
+        }
+    }
+
 	if (AI_construct(1))
 	{
 		return;
@@ -3593,6 +3684,14 @@ void CvUnitAI::AI_artistMove()
 {
 	PROFILE_FUNC();
 	
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (GC.getGame().getAltAI()->getPlayer(getOwner())->doSpecialistMove(this))
+        {
+            return;
+        }
+    }
+
 	if (AI_artistCultureVictoryMove())
 	{
 	    return;
@@ -3678,6 +3777,14 @@ void CvUnitAI::AI_artistMove()
 void CvUnitAI::AI_scientistMove()
 {
 	PROFILE_FUNC();
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (GC.getGame().getAltAI()->getPlayer(getOwner())->doSpecialistMove(this))
+        {
+            return;
+        }
+    }
 
 	if (AI_discover(true, true))
 	{
@@ -3770,6 +3877,14 @@ void CvUnitAI::AI_generalMove()
 {
 	PROFILE_FUNC();
 
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (GC.getGame().getAltAI()->getPlayer(getOwner())->doSpecialistMove(this))
+        {
+            return;
+        }
+    }
+
 	std::vector<UnitAITypes> aeUnitAITypes;
 	int iDanger = GET_PLAYER(getOwnerINLINE()).AI_getPlotDanger(plot(), 2);
 	
@@ -3852,6 +3967,14 @@ void CvUnitAI::AI_generalMove()
 void CvUnitAI::AI_merchantMove()
 {
 	PROFILE_FUNC();
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (GC.getGame().getAltAI()->getPlayer(getOwner())->doSpecialistMove(this))
+        {
+            return;
+        }
+    }
 
 	if (AI_construct())
 	{
@@ -3938,6 +4061,14 @@ void CvUnitAI::AI_merchantMove()
 void CvUnitAI::AI_engineerMove()
 {
 	PROFILE_FUNC();
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        if (GC.getGame().getAltAI()->getPlayer(getOwner())->doSpecialistMove(this))
+        {
+            return;
+        }
+    }
 
 	if (AI_construct())
 	{
@@ -4262,20 +4393,29 @@ void CvUnitAI::AI_workerSeaMove()
 		}
 	}
 
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        return (void)(AltAI::doWorkerAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this));
+    }
+
 	if (AI_improveBonus(20))
 	{
 		return;
 	}
 
-	if (AI_improveBonus(10))
-	{
-		return;
-	}
+    // just do the one check above if using AltAI
+    if (!GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+	    if (AI_improveBonus(10))
+	    {
+		    return;
+	    }
 
-	if (AI_improveBonus())
-	{
-		return;
-	}
+	    if (AI_improveBonus())
+	    {
+		    return;
+	    }
+    }
 	
 	if (isHuman())
 	{
@@ -4822,6 +4962,23 @@ void CvUnitAI::AI_exploreSeaMove()
 
     const bool usingAltAI = GET_PLAYER(getOwnerINLINE()).isUsingAltAI();
 
+    if (usingAltAI)
+    {
+        if (m_pUnitInfo->getDefaultUnitAIType() == UNITAI_WORKER_SEA)
+        {
+            if (AltAI::doWorkerAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+            {
+                return;
+            }
+        }
+
+        // now call this from worker logic if no required worker actions
+        /*if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }*/
+    }
+
 	if (AI_seaRetreatFromCityDanger())
 	{
 		return;
@@ -4839,10 +4996,10 @@ void CvUnitAI::AI_exploreSeaMove()
 	
 	if (!isHuman() && !isBarbarian()) //XXX move some of this into a function? maybe useful elsewhere
 	{
-        if (usingAltAI && m_pUnitInfo->getDefaultUnitAIType() == UNITAI_WORKER_SEA)
+        /*if (usingAltAI && m_pUnitInfo->getDefaultUnitAIType() == UNITAI_WORKER_SEA)
         {
             AI_workerSeaMove();
-        }
+        }*/
 
 		//Obsolete?
 		int iValue = GET_PLAYER(getOwnerINLINE()).AI_unitValue(getUnitType(), AI_getUnitAIType(), area());
@@ -12102,7 +12259,7 @@ bool CvUnitAI::AI_found()
 //		}
 //	}
 
-	int iPathTurns;
+	int iPathTurns = 0;
 	int iValue;
 	int iBestFoundValue = 0;
 	CvPlot* pBestPlot = NULL;
@@ -13385,7 +13542,7 @@ bool CvUnitAI::AI_improveCity(CvCity* pCity)
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
         XYCoords coords;
-        boost::tie(coords, eBestBuild) = GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).getBestImprovement("AI_improveCity", false);
+        boost::tie(coords, eBestBuild) = GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).getBestImprovement("AI_improveCity", this, false);
 
         pBestPlot = GC.getMap().plot(coords.iX, coords.iY);
         if (getDomainType() != DOMAIN_SEA && pBestPlot->getSubArea() != plot()->getSubArea())
@@ -13661,16 +13818,30 @@ bool CvUnitAI::AI_nextCityToImprove(CvCity* pCity)
 	int iValue;
 	int iBestValue;
 	int iLoop;
+    // AltAI
+	const bool bUsingAltAI = GET_PLAYER(getOwnerINLINE()).isUsingAltAI();
+    CvCity* pBestCity;
 
 	iBestValue = 0;
 	eBestBuild = NO_BUILD;
 	pBestPlot = NULL;
+
+	if (bUsingAltAI)
+	{
+		pBestCity = GC.getGame().getAltAI()->getPlayer(getOwner())->getNextCityForWorkerToImprove(pCity);
+		if (pBestCity)
+		{
+			// should have a build as ths city needed workers
+			AI_bestCityBuild(pBestCity, &pBestPlot, &eBestBuild, NULL, this);
+		}
+	}
 
 	for (pLoopCity = GET_PLAYER(getOwnerINLINE()).firstCity(&iLoop); pLoopCity != NULL; pLoopCity = GET_PLAYER(getOwnerINLINE()).nextCity(&iLoop))
 	{
 		if (pLoopCity != pCity)
 		{
 			//iValue = pLoopCity->AI_totalBestBuildValue(area());
+			// player->getNumWorkersTargetingCity(pCity_)
 			int iWorkersNeeded = pLoopCity->AI_getWorkersNeeded();
 			int iWorkersHave = pLoopCity->AI_getWorkersHave();
 			
@@ -13701,6 +13872,7 @@ bool CvUnitAI::AI_nextCityToImprove(CvCity* pCity)
 						iBestValue = iValue;
 						eBestBuild = eBuild;
 						pBestPlot = pPlot;
+                        pBestCity = pLoopCity;
 						FAssert(!atPlot(pBestPlot) || NULL == pCity || pCity->AI_getWorkersNeeded() == 0 || pCity->AI_getWorkersHave() > pCity->AI_getWorkersNeeded() + 1);
 					}
 				}
@@ -13732,12 +13904,14 @@ bool CvUnitAI::AI_nextCityToImprove(CvCity* pCity)
         }
         else
         {
-            getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+            //getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+            GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pBestCity, pBestPlot, MISSION_MOVE_TO, NO_BUILD, 0, false, "CvUnitAI::AI_nextCityToImprove");
 
             std::vector<BuildTypes> additionalBuilds = GC.getGame().getAltAI()->getPlayer(getOwner())->addAdditionalPlotBuilds(pBestPlot, eBestBuild);
             for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
             {
-                getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+                //getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+                GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pBestCity, pBestPlot, MISSION_BUILD, additionalBuilds[i], 0, getGroup()->getLengthMissionQueue() > 0, "CvUnitAI::AI_nextCityToImprove");
             }
         }
 		return true;
@@ -14097,35 +14271,46 @@ bool CvUnitAI::AI_improveBonus(int iMinValue, CvPlot** ppBestPlot, BuildTypes* p
 
 	bCanRoute = canBuildRoute();
 
+    const CvCity* pTargetCity = NULL;
+
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
         AltAI::CityIter cityIter(CvPlayerAI::getPlayer(m_eOwner));
+        const bool isWater = getDomainType() == DOMAIN_SEA;
+
         while (const CvCity* pCity = cityIter())
         {
             XYCoords coords;
             BuildTypes buildType = NO_BUILD;
-            boost::tie(coords, buildType) = GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).getBestBonusImprovement(getDomainType() == DOMAIN_SEA);
+            boost::tie(coords, buildType) = GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).getBestBonusImprovement(isWater);
 
             pLoopPlot = GC.getMap().plot(coords.iX, coords.iY);
-            if (getDomainType() != DOMAIN_SEA && pLoopPlot->getSubArea() != plot()->getSubArea())
+            // skip unreachable sub areas until get worker needs transport logic working
+            if (!isWater && pLoopPlot->getSubArea() != plot()->getSubArea())
             {
                 continue;
             }
 
             if (buildType != NO_BUILD)
             {
-                iValue = GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity->getID()).getBestImprovement(coords, "AI_improveBonus").second;
+                iValue = GC.getGame().getAltAI()->getPlayer(getOwner())->getCity(pCity).getBestImprovement(coords, "AI_improveBonus").second;
                 if (iValue > iBestValue)
                 {
-                    iBestResourceValue = iValue;
+                    iBestValue = iValue;
                     pBestPlot = pLoopPlot;
                     eBestBuild = buildType;
+                    pTargetCity = pCity;
                 }
             }
         }
 
-        if (!pBestPlot && getDomainType() != DOMAIN_LAND)
+        if (!pBestPlot && isWater)
         {
+            if (GC.getGame().getAltAI()->getPlayer(getOwner())->checkResourcesOutsideCities(this, std::multimap<int, const CvPlot*>()))
+            {
+                return true;
+            }
+
             if (AI_exploreRange(3))
 			{
 				return true;
@@ -14358,12 +14543,15 @@ bool CvUnitAI::AI_improveBonus(int iMinValue, CvPlot** ppBestPlot, BuildTypes* p
             }
             else
             {
-                getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+                //getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+                GC.getGame().getAltAI()->getPlayer(getOwner())->clearWorkerMission(this);
+                GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pTargetCity, pBestPlot, MISSION_MOVE_TO, NO_BUILD, 0, false, "CvUnitAI::AI_improveBonus");
 
                 std::vector<BuildTypes> additionalBuilds = GC.getGame().getAltAI()->getPlayer(getOwner())->addAdditionalPlotBuilds(pBestPlot, eBestBuild);
                 for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
                 {
-                    getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+                    //getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+                    GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pTargetCity, pBestPlot, MISSION_BUILD, additionalBuilds[i], 0, getGroup()->getLengthMissionQueue() > 0, "CvUnitAI::AI_improveBonus");
                 }
             }
 
@@ -17695,6 +17883,12 @@ void CvUnitAI::read(FDataStreamBase* pStream)
 
 	pStream->Read((int*)&m_eUnitAIType);
 	pStream->Read(&m_iAutomatedAbortTurn);
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->addUnit(this, true);
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getUnit(this).read(pStream);
+    }
 }
 
 
@@ -17709,6 +17903,11 @@ void CvUnitAI::write(FDataStreamBase* pStream)
 
 	pStream->Write(m_eUnitAIType);
 	pStream->Write(m_iAutomatedAbortTurn);
+    
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getUnit(this).write(pStream);
+    }
 }
 
 // Private Functions...

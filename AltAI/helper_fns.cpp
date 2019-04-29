@@ -1,6 +1,7 @@
 #include "AltAI.h"
 
 #include "./helper_fns.h"
+#include "./iters.h"
 
 namespace AltAI
 {
@@ -9,7 +10,7 @@ namespace AltAI
         const char* rootPath = ::getenv("USERPROFILE");
         std::string path = rootPath ? rootPath : "C:";
             
-        path.append("\\My Documents\\My Games\\Beyond The Sword\\Logs\\");
+        path.append("\\Documents\\My Games\\Beyond The Sword\\Logs\\");
         return path;
     }
 
@@ -43,16 +44,44 @@ namespace AltAI
         TeamTypes teamType = player.getTeam();
 
         int iNumVassalCities = 0;
-	    for (int iPlayer = 0; iPlayer < MAX_CIV_PLAYERS; ++iPlayer)
-	    {
+        for (int iPlayer = 0; iPlayer < MAX_CIV_PLAYERS; ++iPlayer)
+        {
             const CvPlayer& kLoopPlayer = CvPlayerAI::getPlayer((PlayerTypes)iPlayer);
             if (kLoopPlayer.getTeam() != teamType && CvTeamAI::getTeam(kLoopPlayer.getTeam()).isVassal(teamType))
-		    {
-			    iNumVassalCities += kLoopPlayer.getNumCities();
-		    }
-	    }
-	    
+            {
+                iNumVassalCities += kLoopPlayer.getNumCities();
+            }
+        }
+        
         return iNumVassalCities;
+    }
+
+    bool isFriendlyCity(TeamTypes teamId, const CvCity* pCity)
+    {
+        return pCity && (pCity->getTeam() == teamId || CvTeamAI::getTeam(teamId).isOpenBorders(pCity->getTeam()));
+    }
+
+    std::vector<int> getBorderingSubAreas(TeamTypes teamId, const CvPlot* pPlot)
+    {
+        int plotSubArea = pPlot->getSubArea();
+        std::set<int> borderingSubAreas;
+
+        NeighbourPlotIter iter(pPlot);
+        while (IterPlot pLoopPlot = iter())
+        {
+            if (pLoopPlot.valid())
+            {
+                if (pLoopPlot->isRevealed(teamId, false))
+                {
+                    if (pLoopPlot->getSubArea() != plotSubArea)
+                    {
+                        borderingSubAreas.insert(pLoopPlot->getSubArea());
+                    }
+                }
+            }
+        }
+
+        return std::vector<int>(borderingSubAreas.begin(), borderingSubAreas.end());
     }
 
     BuildingClassTypes getBuildingClass(BuildingTypes buildingType)
@@ -148,6 +177,27 @@ namespace AltAI
         return lastType;
     }
 
+    int getImprovementBuildTime(BuildTypes buildType, FeatureTypes featureType, TerrainTypes terrainType)
+    {
+        int buildTime = gGlobals.getBuildInfo(buildType).getTime();
+
+        if (featureType != NO_FEATURE)
+        {
+            buildTime += gGlobals.getBuildInfo(buildType).getFeatureTime(featureType);
+        }
+
+        buildTime *= std::max<int>(0, (gGlobals.getTerrainInfo(terrainType).getBuildModifier() + 100));
+        buildTime /= 100;
+
+        buildTime *= gGlobals.getGameSpeedInfo(gGlobals.getGame().getGameSpeedType()).getBuildPercent();
+        buildTime /= 100;
+
+        buildTime *= gGlobals.getEraInfo(gGlobals.getGame().getStartEra()).getBuildPercent();
+        buildTime /= 100;
+
+        return buildTime;
+    }
+
     bool improvementIsUpgradeOf(ImprovementTypes currentPlotImprovement, ImprovementTypes requestedImprovement)
     {
         if (currentPlotImprovement == NO_IMPROVEMENT || requestedImprovement == NO_IMPROVEMENT)
@@ -231,5 +281,44 @@ namespace AltAI
             }
         }
         return bestProcessType;
+    }
+
+    std::string safeGetCityName(IDInfo city)
+    {
+        const CvCity* pCity = ::getCity(city);
+        if (pCity)
+        {
+            return narrow(pCity->getName());
+        }
+        else
+        {
+            return "none?";
+        }
+    }
+
+    std::string safeGetCityName(const CvCity* pCity)
+    {
+        if (pCity)
+        {
+            return narrow(pCity->getName());
+        }
+        else
+        {
+            return "none";
+        }
+    }
+
+    std::string getUnitAIString(UnitAITypes eUnitAI)
+    {
+        CvWString AITypeString;
+        getUnitAIString(AITypeString, eUnitAI);
+        return narrow(AITypeString);
+    }
+
+    std::string getMissionAIString(MissionAITypes eMissionAI)
+    {
+        CvWString AITypeString;
+        getMissionAIString(AITypeString, eMissionAI);
+        return narrow(AITypeString);
     }
 }

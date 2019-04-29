@@ -11,6 +11,8 @@
 #include "./gamedata_analysis.h"
 #include "./civ_log.h"
 
+#include "boost/assign/list_of.hpp"
+
 namespace AltAI
 {
     namespace 
@@ -37,14 +39,6 @@ namespace AltAI
                             (waterType + numWaterTypes * 
                                 (riverMask + numRiverMaskTypes *
                                     (cityType))))));
-
-            /*return plotType + (numPlotTypes *
-                        terrainType + (numTerrainTypes * 
-                            featureType + (numFeatureTypes * 
-                                bonusType + (numBonusTypes * 
-                                    waterType + (numWaterTypes * 
-                                        riverMask + (numRiverMaskTypes *
-                                            cityType))))));*/
         }
 
         bool testKeyUniqueness()
@@ -115,7 +109,7 @@ namespace AltAI
             FeatureTypes featureType;
             BonusTypes bonusType;
             ImprovementTypes improvementType;
-            bool isHills, isLake, isRiver, hasFreshWaterAccess;
+            bool isHills, isLake, isRiver, hasFreshWaterAccess, isFreshWater;
             PlotYield parentYield, parentBonusYield;
         };
 
@@ -138,134 +132,120 @@ namespace AltAI
         // variation of CvPlot::canHaveImprovement which allows for whether the plot's irrigatable area has freshwater access
         bool couldHaveImprovement(const CvPlot* pPlot, const PlotInfoRequestData& requestData)
         {
-	        if (pPlot->isCity() || pPlot->isImpassable())
-	        {
-		        return false;
-	        }
-
-            const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(requestData.improvementType);
-	        if (improvementInfo.isWater() != pPlot->isWater())
-	        {
-		        return false;
-	        }
-
-	        if (requestData.featureType != NO_FEATURE && gGlobals.getFeatureInfo(requestData.featureType).isNoImprovement())
+            // assume we can build improvements if we can't see any city here (no cheating!)
+            if ((pPlot->isCity() && pPlot->getPlotCity()->wasRevealed(requestData.teamID, false)) || pPlot->isImpassable())
             {
                 return false;
-	        }
+            }
 
-	        if (requestData.bonusType != NO_BONUS && improvementInfo.isImprovementBonusMakesValid(requestData.bonusType))
-	        {
-		        return true;
-	        }
+            const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(requestData.improvementType);
+            if (improvementInfo.isWater() != pPlot->isWater())
+            {
+                return false;
+            }
 
-	        if (improvementInfo.isNoFreshWater() && pPlot->isFreshWater())
-	        {
-		        return false;
-	        }
+            if (requestData.featureType != NO_FEATURE && gGlobals.getFeatureInfo(requestData.featureType).isNoImprovement())
+            {
+                return false;
+            }
 
-	        if (improvementInfo.isRequiresFlatlands() && !pPlot->isFlatlands())
-	        {
-		        return false;
-	        }
+            if (requestData.bonusType != NO_BONUS && improvementInfo.isImprovementBonusMakesValid(requestData.bonusType))
+            {
+                return true;
+            }
 
-	        if (improvementInfo.isRequiresFeature() && requestData.featureType == NO_FEATURE)
-	        {
-		        return false;
-	        }
+            if (improvementInfo.isNoFreshWater() && pPlot->isFreshWater())
+            {
+                return false;
+            }
+
+            if (improvementInfo.isRequiresFlatlands() && !pPlot->isFlatlands())
+            {
+                return false;
+            }
+
+            if (improvementInfo.isRequiresFeature() && requestData.featureType == NO_FEATURE)
+            {
+                return false;
+            }
 
             bool isValid = false;
-	        if (improvementInfo.isHillsMakesValid() && requestData.isHills)
-	        {
-		        isValid = true;
-	        }
+            if (improvementInfo.isHillsMakesValid() && requestData.isHills)
+            {
+                isValid = true;
+            }
 
-	        if (improvementInfo.isFreshWaterMakesValid() && pPlot->isFreshWater())
-	        {
-		        isValid = true;
-	        }
+            if (improvementInfo.isFreshWaterMakesValid() && pPlot->isFreshWater())
+            {
+                isValid = true;
+            }
 
-	        if (improvementInfo.isRiverSideMakesValid() && requestData.isRiver)
-	        {
-		        isValid = true;
-	        }
+            if (improvementInfo.isRiverSideMakesValid() && requestData.isRiver)
+            {
+                isValid = true;
+            }
 
-	        if (improvementInfo.getTerrainMakesValid(requestData.terrainType))
-	        {
-		        isValid = true;
-	        }
+            if (improvementInfo.getTerrainMakesValid(requestData.terrainType))
+            {
+                isValid = true;
+            }
 
-	        if (requestData.featureType != NO_FEATURE && improvementInfo.getFeatureMakesValid(requestData.featureType))
-	        {
-		        isValid = true;
-	        }
+            if (requestData.featureType != NO_FEATURE && improvementInfo.getFeatureMakesValid(requestData.featureType))
+            {
+                isValid = true;
+            }
 
-	        if (!isValid)
-	        {
-		        return false;
-	        }
+            if (!isValid)
+            {
+                return false;
+            }
 
-	        if (improvementInfo.isRequiresRiverSide())
-	        {
-		        isValid = false;
+            if (improvementInfo.isRequiresRiverSide())
+            {
+                isValid = false;
 
                 CardinalPlotIter plotIter(pPlot);
-
-                // debug
-                /*if (pPlot->getX() == 73 && pPlot->getY() == 32)
-                {
-                    const CvPlayerAI& player = CvPlayerAI::getPlayer(requestData.playerID);
-                    std::ostream& os = CivLog::getLog(player)->getStream();
-                    CardinalPlotIter plotIter(pPlot);
-                    os << "\nChecking watermill at: " << XYCoords(pPlot->getX(), pPlot->getY());
-                    while (IterPlot iterPlot = plotIter())
-                    {
-                        if (iterPlot.valid())
-                        {
-                            os << " " << XYCoords(iterPlot->getX(), iterPlot->getY()) << ", crossing = " << pPlot->isRiverCrossing(directionXY(pPlot, iterPlot));
-			            }
-		            }
-                }*/
 
                 while (IterPlot iterPlot = plotIter())
                 {
                     if (iterPlot.valid())
                     {
-				        if (pPlot->isRiverCrossing(directionXY(pPlot, iterPlot)))
-				        {
-					        if (iterPlot->getImprovementType() != requestData.improvementType)
-					        {
-						        isValid = true;
-						        break;
-					        }
-				        }
-			        }
-		        }
+                        if (pPlot->isRiverCrossing(directionXY(pPlot, iterPlot)))
+                        {
+                            // check can actually build in dotmap/city improvements logic - as allows selection of set of plots to optimise placement
+                            //if (iterPlot->getImprovementType() != requestData.improvementType)
+                            //{
+                                isValid = true;
+                                break;
+                            //}
+                        }
+                    }
+                }
 
-		        if (!isValid)
-		        {
-			        return false;
-		        }
-	        }
+                if (!isValid)
+                {
+                    return false;
+                }
+            }
 
-	        for (int i = 0, count = NUM_YIELD_TYPES; i < count; ++i)
-	        {
-		        if (pPlot->calculateNatureYield(((YieldTypes)i), requestData.teamID) < improvementInfo.getPrereqNatureYield(i))
-		        {
-			        return false;
-		        }
-	        }
+            for (int i = 0, count = NUM_YIELD_TYPES; i < count; ++i)
+            {
+                if (pPlot->calculateNatureYield(((YieldTypes)i), requestData.teamID) < improvementInfo.getPrereqNatureYield(i))
+                {
+                    return false;
+                }
+            }
 
             /*  // deal with this is BuildConditions now
             // todo - use civhelper for techs?
             if ((requestData.teamID == NO_TEAM) || !(CvTeamAI::getTeam(requestData.teamID).isIgnoreIrrigation()))
-	        {
+            {
                 // here if need irrigation but have no route to fresh water and can't yet build farms without irrigation
-		        if (!requestData.hasFreshWaterAccess && improvementInfo.isRequiresIrrigation())
-		        {
-			        return false;
-		        }
-	        }
+                if (!requestData.hasFreshWaterAccess && improvementInfo.isRequiresIrrigation())
+                {
+                    return false;
+                }
+            }
 
             // check if can't yet chain irrigation and plot doesn't have fresh water access
             if (requestData.teamID != NO_TEAM && !CvTeamAI::getTeam(requestData.teamID).isIrrigation() && improvementInfo.isRequiresIrrigation())
@@ -274,7 +254,7 @@ namespace AltAI
             }
             */
 
-	        return true;
+            return true;
         }
 
         std::vector<PlotInfo::BuildCondition> improvementBuildConditions(const CvPlot* pPlot, const PlotInfoRequestData& requestData)
@@ -317,6 +297,11 @@ namespace AltAI
                 conditions.push_back(orConditions);
             }
 
+            if (improvementInfo.isRequiresRiverSide())
+            {
+                conditions.push_back(PlotInfo::HasAvailableRiverSide());
+            }
+
             return conditions;
         }
 
@@ -331,9 +316,15 @@ namespace AltAI
             PlotYield improvementYield, bonusYield;
             for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
             {
-                improvementYield[yieldType] = improvementInfo.getYieldChange(yieldType) + improvementInfo.getIrrigatedYieldChange(yieldType);
-                bonusYield[yieldType] = 0;
+                improvementYield[yieldType] = improvementInfo.getYieldChange(yieldType);
+                const int irrigatedYieldChange = improvementInfo.getIrrigatedYieldChange(yieldType);
 
+                // since can build non fresh water farms without freshwater on bonuses, we want to
+                // keep the irrigated yield separate for a tech requirement for those cases
+                if (irrigatedYieldChange > 0 && (requestData.isFreshWater || requestData.bonusType == NO_BONUS))
+                {
+                    improvementYield[yieldType] += irrigatedYieldChange;
+                }
                 if (requestData.isRiver)
                 {
                     improvementYield[yieldType] += improvementInfo.getRiverSideYieldChange(yieldType);
@@ -344,26 +335,46 @@ namespace AltAI
                 }
                 if (requestData.bonusType != NO_BONUS)
                 {
-                    bonusYield[yieldType] += improvementInfo.getImprovementBonusYield(requestData.bonusType, yieldType);
+                    bonusYield[yieldType] = improvementInfo.getImprovementBonusYield(requestData.bonusType, yieldType);
                 }
             }
             return std::make_pair(improvementYield, bonusYield);
         }
 
-        template <typename NodeType> void getTechYields(NodeType& node, const CvImprovementInfo& improvementInfo)
+        template <typename NodeType> void getTechYields(NodeType& node, const CvImprovementInfo& improvementInfo, const PlotInfoRequestData& requestData)
         {
             for (int techIndex = 0, techCount = gGlobals.getNumTechInfos(); techIndex < techCount; ++techIndex)
             {
                 PlotYield techYield;
                 for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
                 {
-		            techYield[yieldType] = improvementInfo.getTechYieldChanges(techIndex, yieldType);
+                    techYield[yieldType] = improvementInfo.getTechYieldChanges(techIndex, yieldType);
                 }
 
                 if (!isEmpty(techYield))
                 {
                     node.techYields.push_back(std::make_pair((TechTypes)techIndex, techYield));
                 }
+            }
+
+            // set tech requirement in build conditions, but add tech yield for irrigation to non irrigated bonus improvements
+            // covers the case of wheat/rice/corn which is not irrigated until civil service
+            // since allows separation of the irrigated yield and bonus yields which are available with different techs
+            // the ability to build the improvement is covered by the tech in the build conditions
+            // and the irrigation bonus comes here, whereas for non bonus non-irrigated farms the ability to build
+            // the improvement is sufficent (biology still adds another tech yield in both cases)
+            if (requestData.bonusType != NO_BONUS && !requestData.isFreshWater && requestData.hasFreshWaterAccess)
+            {
+                PlotYield irrigatedYield = const_cast<CvImprovementInfo&>(improvementInfo).getIrrigatedYieldChangeArray();
+                if (!isEmpty(irrigatedYield))                
+                {
+                    std::vector<TechTypes> carryIrrigationTechs = GameDataAnalysis::getCarriesIrrigationTechs();
+                    if (!carryIrrigationTechs.empty())
+                    {
+                        // todo - handle case of more than one tech granting carry irrigation and take one with least depth here
+                        node.techYields.push_back(std::make_pair(carryIrrigationTechs[0], irrigatedYield));
+                    }
+                }                
             }
         }
 
@@ -373,7 +384,7 @@ namespace AltAI
             for (int routeIndex = 0, routeCount = gGlobals.getNumRouteInfos(); routeIndex < routeCount; ++routeIndex)
             {
                 // wtf?
-                PlotYield routeYield = (const_cast<CvImprovementInfo&>(improvementInfo).getRouteYieldChangesArray(routeIndex));
+                PlotYield routeYield = const_cast<CvImprovementInfo&>(improvementInfo).getRouteYieldChangesArray(routeIndex);
 
                 if (!isEmpty(routeYield))
                 {
@@ -386,19 +397,19 @@ namespace AltAI
         template <typename NodeType> void getCivicYields(NodeType& node, ImprovementTypes improvementType)
         {
             for (int civicIndex = 0, civicCount = gGlobals.getNumCivicInfos(); civicIndex < civicCount; ++civicIndex)
-	        {
+            {
                 const CvCivicInfo& civicInfo = gGlobals.getCivicInfo((CivicTypes)civicIndex);
                 PlotYield civicYield;
                 for (int yieldType = 0; yieldType < NUM_YIELD_TYPES; ++yieldType)
                 {
-		            civicYield[yieldType] = civicInfo.getImprovementYieldChanges(improvementType, yieldType);
+                    civicYield[yieldType] = civicInfo.getImprovementYieldChanges(improvementType, yieldType);
                 }
 
                 if (!isEmpty(civicYield))
                 {
                     node.civicYields.push_back(std::make_pair((CivicTypes)civicIndex, civicYield));
                 }
-		    }
+            }
         }
 
         PlotInfo::UpgradeNode getUpgradeNode(const CvPlot* pPlot, const PlotInfoRequestData& requestData)
@@ -423,7 +434,7 @@ namespace AltAI
             node.bonusYield += bonusYield;
 
             // get tech modifiers
-            getTechYields(node, improvementInfo);
+            getTechYields(node, improvementInfo, requestData);
 
             // get route modifiers
             getRouteYields(node, improvementInfo);
@@ -462,7 +473,7 @@ namespace AltAI
                 node.bonusYield += bonusYield;
 
                 // get tech modifiers
-                getTechYields(node, improvementInfo);
+                getTechYields(node, improvementInfo, requestData);
 
                 // get route modifiers
                 getRouteYields(node, improvementInfo);
@@ -584,15 +595,6 @@ namespace AltAI
                 improvementRequestData.parentYield = headNode.yield;
                 improvementRequestData.parentBonusYield = headNode.bonusYield;
 
-                // debug
-                /*if (pPlot->getX() == 73 && pPlot->getY() == 32)
-                {
-                    const CvPlayerAI& player = CvPlayerAI::getPlayer(requestData.playerID);
-                    std::ostream& os = CivLog::getLog(player)->getStream();
-                    os << "\nChecking for improvement at: " << XYCoords(pPlot->getX(), pPlot->getY()) << gGlobals.getImprovementInfo((ImprovementTypes)improvementIndex).getType()
-                        << " couldHaveImprovement = " << couldHaveImprovement(pPlot, improvementRequestData);
-                }*/
-
                 // won't show up a mine if can't see copper on flatlands, for example.
                 if (couldHaveImprovement(pPlot, improvementRequestData))
                 {
@@ -609,9 +611,9 @@ namespace AltAI
                     if (buildType != NO_BUILD)
                     {
                         // not all features can be removed - if have feature then consider builds which don't remove it
-                        if ((requestData.featureType != NO_FEATURE && !gGlobals.getBuildInfo(buildType).isFeatureRemove(requestData.featureType))
+                        if (requestData.featureType == NO_FEATURE
                             ||
-                            requestData.featureType == NO_FEATURE)
+                            (requestData.featureType != NO_FEATURE && !gGlobals.getBuildInfo(buildType).isFeatureRemove(requestData.featureType)))
                         {
                             PlotInfo::ImprovementNode improvementNode = getImprovementNode(pPlot, improvementRequestData);
 
@@ -686,6 +688,132 @@ namespace AltAI
 
 namespace AltAI
 {
+    std::string shortTerrainType(TerrainTypes terrainType)
+    {
+        if (terrainType == NO_TERRAIN)
+        {
+            return "NO_TERRAIN";
+        }
+
+        const CvTerrainInfo& terrainInfo = gGlobals.getTerrainInfo(terrainType);
+        
+        std::string typeString = terrainInfo.getType();
+
+        static std::map<std::string, std::string> terrainStringsMap = boost::assign::map_list_of("TERRAIN_GRASS", "grassland")
+            ("TERRAIN_PLAINS", "plains")("TERRAIN_DESERT", "desert")("TERRAIN_TUNDRA", "tundra")
+            ("TERRAIN_SNOW", "ice")("TERRAIN_COAST", "coast")("TERRAIN_OCEAN", "ocean")
+            ("TERRAIN_PEAK", "mountain")("TERRAIN_HILL", "hills");
+
+        std::map<std::string, std::string>::const_iterator ci = terrainStringsMap.find(terrainInfo.getType());
+
+        if (ci != terrainStringsMap.end())
+        {
+            return ci->second;
+        }
+        else
+        {
+            return "Unknown terrain type";
+        }
+    }
+
+    std::string shortFeatureType(FeatureTypes featureType)
+    {
+        if (featureType == NO_FEATURE)
+        {
+            return "";
+        }
+
+        const CvFeatureInfo& featureInfo = gGlobals.getFeatureInfo(featureType);
+        
+        std::string typeString = featureInfo.getType();
+
+        static std::map<std::string, std::string> featureStringsMap = boost::assign::map_list_of
+            ("FEATURE_ICE", "ice")("FEATURE_JUNGLE", "jungle")("FEATURE_OASIS", "oasis")
+            ("FEATURE_FLOOD_PLAINS", "floodplains")("FEATURE_FOREST", "forest")("FEATURE_FALLOUT", "fallout");
+
+        std::map<std::string, std::string>::const_iterator ci = featureStringsMap.find(featureInfo.getType());
+
+        if (ci != featureStringsMap.end())
+        {
+            return ci->second;
+        }
+        else
+        {
+            return "Unknown feature type";
+        }
+    }
+
+    std::string shortImprovementType(ImprovementTypes improvementType)
+    {
+        if (improvementType == NO_IMPROVEMENT)
+        {
+            return "";
+        }
+
+        const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(improvementType);
+        
+        std::string typeString = improvementInfo.getType();
+
+        static std::map<std::string, std::string> improvementStringsMap = boost::assign::map_list_of
+            ("IMPROVEMENT_LAND_WORKED", "")("IMPROVEMENT_WATER_WORKED", "")("IMPROVEMENT_CITY_RUINS", "ruins")
+            ("IMPROVEMENT_GOODY_HUT", "goody hut")("IMPROVEMENT_FARM", "farm")("IMPROVEMENT_FISHING_BOATS", "fishing boats")
+            ("IMPROVEMENT_WHALING_BOATS", "whaling boats")("IMPROVEMENT_MINE", "mine")("IMPROVEMENT_WORKSHOP", "workshop")
+            ("IMPROVEMENT_LUMBERMILL", "lumbermill")("IMPROVEMENT_WINDMILL", "windmill")("IMPROVEMENT_WATERMILL", "watermill")
+            ("IMPROVEMENT_PLANTATION", "plantation")("IMPROVEMENT_QUARRY", "quarry")("IMPROVEMENT_PASTURE", "pasture")
+            ("IMPROVEMENT_CAMP", "camp")("IMPROVEMENT_WELL", "well")("IMPROVEMENT_OFFSHORE_PLATFORM", "offshore platform")
+            ("IMPROVEMENT_WINERY", "winery")("IMPROVEMENT_COTTAGE", "cottage")("IMPROVEMENT_HAMLET", "hamlet")
+            ("IMPROVEMENT_VILLAGE", "village")("IMPROVEMENT_TOWN", "town")("IMPROVEMENT_FORT", "fort")
+            ("IMPROVEMENT_FOREST_PRESERVE", "preserve");
+
+        std::map<std::string, std::string>::const_iterator ci = improvementStringsMap.find(improvementInfo.getType());
+
+        if (ci != improvementStringsMap.end())
+        {
+            return ci->second;
+        }
+        else
+        {
+            return "Unknown improvement type";
+        }
+    }
+
+    std::string shortBonusType(BonusTypes bonusType)
+    {
+        if (bonusType == NO_BONUS)
+        {
+            return "";
+        }
+
+        const CvBonusInfo& bonusInfo = gGlobals.getBonusInfo(bonusType);
+        
+        std::string typeString = bonusInfo.getType();
+
+        static std::map<std::string, std::string> bonusStringsMap = boost::assign::map_list_of
+            ("BONUS_ALUMINUM", "aluminium")("BONUS_COAL", "coal")("BONUS_COPPER", "copper")
+            ("BONUS_HORSE", "horses")("BONUS_IRON", "iron")("BONUS_MARBLE", "marble")
+            ("BONUS_OIL", "oil")("BONUS_STONE", "stone")("BONUS_URANIUM", "uranium")
+            ("BONUS_BANANA", "bananas")("BONUS_CLAM", "clam")("BONUS_CORN", "corn")
+            ("BONUS_COW", "cows")("BONUS_CRAB", "crab")("BONUS_DEER", "deer")
+            ("BONUS_FISH", "fish")("BONUS_PIG", "pigs")("BONUS_RICE", "rice")
+            ("BONUS_SHEEP", "sheep")("BONUS_WHEAT", "wheat")("BONUS_DYE", "dyes")
+            ("BONUS_FUR", "furs")("BONUS_GEMS", "gems")("BONUS_GOLD", "gold")
+            ("BONUS_INCENSE", "incense")("BONUS_IVORY", "elephants")("BONUS_SILK", "silk")
+            ("BONUS_SILVER", "silver")("BONUS_SPICES", "spices")("BONUS_SUGAR", "sugar")
+            ("BONUS_WINE", "wine")("BONUS_WHALE", "whale")("BONUS_DRAMA", "hit dramas")
+            ("BONUS_MUSIC", "hit musicals")("BONUS_MOVIES", "hit movies");
+
+        std::map<std::string, std::string>::const_iterator ci = bonusStringsMap.find(bonusInfo.getType());
+
+        if (ci != bonusStringsMap.end())
+        {
+            return ci->second;
+        }
+        else
+        {
+            return "Unknown bonus type";
+        }
+    }
+
     PlotInfo::PlotInfo(const CvPlot* pPlot, PlayerTypes playerType) : pPlot_(pPlot), playerType_(playerType), key_(-1)
     {
 #ifdef ALTAI_DEBUG
@@ -699,7 +827,7 @@ namespace AltAI
         {
             const CvPlayerAI& player = CvPlayerAI::getPlayer(playerType);
             std::ostream& os = CivLog::getLog(player)->getStream();
-            os << "\nplot: " << XYCoords(pPlot->getX(), pPlot->getY()) << " mask = " << riverMask;
+            os << "\nplot: " << pPlot->getCoords() << " mask = " << riverMask;
         }*/
 
         key_ = makeKey_(hasFreshWaterAccess, riverMask);
@@ -789,9 +917,9 @@ namespace AltAI
                     {
                         riverMask |= (1 << directionType / 2);  // this relies on the cardinal direction type enums being 0, 2, 4, 6 (N, E, S, W)
                     }
-			    }
+                }
             }
-		}
+        }
         return riverMask;
     }
 
@@ -832,8 +960,9 @@ namespace AltAI
 
         requestData.isLake = requestData.plotType == ::PLOT_OCEAN && pPlot_->isLake();
         requestData.isRiver = pPlot_->getRiverCrossingCount() > 0;
-        requestData.isHills = requestData.plotType == PLOT_HILLS;
         requestData.hasFreshWaterAccess = hasFreshWaterAccess;
+        requestData.isFreshWater = pPlot_->isFreshWater();
+        requestData.isHills = pPlot_->isHills();
 
         node_ = getHeadNode(pPlot_, requestData);
     }
@@ -864,7 +993,7 @@ namespace AltAI
 
         //const int numRiverMaskTypes = 16;
 
-        int cityType = pPlot_->isCity() ? 1 : 0;
+        int cityType = pPlot_->isCity() && pPlot_->getPlotCity()->wasRevealed(teamID, false) ? 1 : 0;
         //const int numCityTypes = 2;
 
         FAssertMsg(!(isLake && isRiver), "Plot is river and lake?");

@@ -9,6 +9,11 @@ namespace AltAI
         return os << "(" << coords.iX << ", " << coords.iY << ")";
     }
 
+    std::ostream& operator << (std::ostream& os, const IDInfo& idInfo)
+    {
+        return os << "(" << idInfo.eOwner << ", " << idInfo.iID << ")";
+    }
+
     YieldWeights makeYieldW(int y1, int y2, int y3)
     {
         YieldWeights w = boost::assign::list_of(y1)(y2)(y3);

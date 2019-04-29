@@ -9,20 +9,31 @@ namespace AltAI
         techTactics_.push_back(pTechTactic);
     }
 
+    void PlayerTechTactics::removeTactic(const int tacticID)
+    {
+        for (TechTacticPtrListIter iter(techTactics_.begin()); iter != techTactics_.end(); ++iter)
+        {
+            if ((*iter)->getID() == tacticID)
+            {
+                techTactics_.erase(iter);
+            }
+        }
+    }
+
     void PlayerTechTactics::apply(TacticSelectionData& selectionData)
     {
-        for (size_t i = 0, count = techTactics_.size(); i < count; ++i)
+        for (TechTacticPtrListIter iter(techTactics_.begin()); iter != techTactics_.end(); ++iter)
         {
-            techTactics_[i]->apply(shared_from_this(), selectionData);
+            (*iter)->apply(shared_from_this(), selectionData);
         }
     }
 
     void PlayerTechTactics::debug(std::ostream& os) const
     {
         os << "\nPlayer tech tactics for tech: " << gGlobals.getTechInfo(techType_).getType();
-        for (size_t i = 0, count = techTactics_.size(); i < count; ++i)
+        for (TechTacticPtrListConstIter iter(techTactics_.begin()); iter != techTactics_.end(); ++iter)
         {
-            techTactics_[i]->debug(os);
+            (*iter)->debug(os);
         }
     }
 
@@ -45,9 +56,9 @@ namespace AltAI
 
         const size_t tacticCount = techTactics_.size();
         pStream->Write(tacticCount);
-        for (size_t i = 0; i < tacticCount; ++i)
+        for (TechTacticPtrListConstIter iter(techTactics_.begin()); iter != techTactics_.end(); ++iter)
         {
-            techTactics_[i]->write(pStream);
+            (*iter)->write(pStream);
         }
     }
 

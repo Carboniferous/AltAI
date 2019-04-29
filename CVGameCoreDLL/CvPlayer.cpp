@@ -336,7 +336,7 @@ void CvPlayer::init(PlayerTypes eID)
 	AI_init();
 
     // AltAI
-    if (isHuman() || m_eID == BARBARIAN_PLAYER)
+    if (isHuman()) // || m_eID == BARBARIAN_PLAYER)
     {
         m_bUsingAltAI = true;
     }
@@ -3151,8 +3151,11 @@ bool CvPlayer::hasBusyUnit() const
 		{
 		    if (pLoopSelectionGroup->getNumUnits() == 0)
 		    {
-		        pLoopSelectionGroup->kill();
-		        return false;
+                // looks suspect that this has to happen here
+		        pLoopSelectionGroup->kill();  
+                // looks like a bug to me - just because this group is empty, doesn't mean there is a later one which is busy and not empty
+		        // return false; // AltAI - think this is wrong
+                continue;  // AltAI - continue iterating over selection groups instead
 		    }
 
 			return true;
@@ -4941,7 +4944,7 @@ void CvPlayer::receiveGoody(CvPlot* pPlot, GoodyTypes eGoody, CvUnit* pUnit)
 
 		FAssertMsg(eBestTech != NO_TECH, "BestTech is not assigned a valid value");
 
-		GET_TEAM(getTeam()).setHasTech(eBestTech, true, getID(), true, true);
+		GET_TEAM(getTeam()).setHasTech(eBestTech, true, getID(), true, true, AltAI::GOODY_TECH);
 		GET_TEAM(getTeam()).setNoTradeTech(eBestTech, true);
 	}
 
@@ -13898,7 +13901,7 @@ bool CvPlayer::doEspionageMission(EspionageMissionTypes eMission, PlayerTypes eT
 		int iTech = iExtraData;
 
 		szBuffer = gDLL->getText("TXT_KEY_ESPIONAGE_TARGET_TECH_BOUGHT", GC.getTechInfo((TechTypes) iTech).getDescription()).GetCString();
-		GET_TEAM(getTeam()).setHasTech((TechTypes) iTech, true, getID(), false, true);
+		GET_TEAM(getTeam()).setHasTech((TechTypes) iTech, true, getID(), false, true, AltAI::STOLEN_TECH);
 		GET_TEAM(getTeam()).setNoTradeTech((TechTypes)iTech, true);
 
 		bSomethingHappened = true;
@@ -14553,7 +14556,7 @@ void CvPlayer::doAdvancedStartAction(AdvancedStartActionTypes eAction, int iX, i
 			{
 				if (getAdvancedStartPoints() >= iCost)
 				{
-					GET_TEAM(getTeam()).setHasTech(eTech, true, getID(), false, false);
+					GET_TEAM(getTeam()).setHasTech(eTech, true, getID(), false, false, AltAI::INITIAL_TECH);
 					changeAdvancedStartPoints(-iCost);
 				}
 			}
@@ -14561,7 +14564,7 @@ void CvPlayer::doAdvancedStartAction(AdvancedStartActionTypes eAction, int iX, i
 			// Remove Tech from the Team
 			else
 			{
-				GET_TEAM(getTeam()).setHasTech(eTech, false, getID(), false, false);
+				GET_TEAM(getTeam()).setHasTech(eTech, false, getID(), false, false, AltAI::INITIAL_TECH);
 				changeAdvancedStartPoints(iCost);
 			}
 
@@ -19565,7 +19568,7 @@ bool CvPlayer::splitEmpire(int iAreaId)
 		{
 			if (GET_TEAM(getTeam()).isHasTech((TechTypes)i))
 			{
-				kNewTeam.setHasTech((TechTypes)i, true, eNewPlayer, false, false);
+				kNewTeam.setHasTech((TechTypes)i, true, eNewPlayer, false, false, AltAI::INITIAL_TECH);
 				if (GET_TEAM(getTeam()).isNoTradeTech((TechTypes)i) || GC.getGameINLINE().isOption(GAMEOPTION_NO_TECH_BROKERING))
 				{
 					kNewTeam.setNoTradeTech((TechTypes)i, true);
@@ -21671,7 +21674,7 @@ void CvPlayer::cheat(bool bCtrl, bool bAlt, bool bShift)
 {
 	if (gDLL->getChtLvl() > 0)
 	{
-		GET_TEAM(getTeam()).setHasTech(getCurrentResearch(), true, getID(), true, false);
+		GET_TEAM(getTeam()).setHasTech(getCurrentResearch(), true, getID(), true, false, AltAI::CHEAT_TECH);
 	}
 }
 

@@ -11,9 +11,11 @@
 #include "./area_helper.h"
 #include "./building_helper.h"
 #include "./trade_route_helper.h"
+#include "./vote_helper.h"
 #include "./modifiers_helper.h"
 #include "./maintenance_helper.h"
 #include "./religion_helper.h"
+#include "./unit_helper.h"
 #include "./bonus_helper.h"
 #include "./specialist_helper.h"
 #include "./iters.h"
@@ -30,10 +32,10 @@ namespace AltAI
     namespace
     {
         // update CityData with changes resulting from construction of supplied BuildingInfo nodes
-        class CityOutputUpdater : public boost::static_visitor<>
+        class CityBuildingsUpdater : public boost::static_visitor<>
         {
         public:
-            explicit CityOutputUpdater(CityData& data) : data_(data)
+            CityBuildingsUpdater(CityData& data, BuildingTypes buildingType) : data_(data), buildingType_(buildingType)
             {
                 pPlayer_ = gGlobals.getGame().getAltAI()->getPlayer(data.getOwner()); 
             }
@@ -70,56 +72,7 @@ namespace AltAI
                     boost::apply_visitor(*this, node.nodes[i]);
                 }
             }
-
-            void operator() (const BuildingInfo::SpecialistNode& node) const
-            {
-                // find 'plots' which represent specialists and update their outputs
-                for (size_t i = 0, count = node.specialistTypesAndYields.size(); i < count; ++i)
-                {
-                    for (PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
-                    {
-                        // TODO - double check everything is in correct units here
-                        if (!iter->isActualPlot() && (SpecialistTypes)iter->coords.iY == node.specialistTypesAndYields[i].first)
-                        {
-                            iter->plotYield += node.specialistTypesAndYields[i].second;
-                            iter->commerce += node.extraCommerce;
-
-                            TotalOutput specialistOutput(makeOutput(iter->plotYield, iter->commerce, makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent()));
-                            iter->actualOutput = iter->output = specialistOutput;
-                        }
-                    }
-                }
-            }
-
-            void operator() (const BuildingInfo::SpecialistSlotNode& node) const
-            {
-                const CvPlayer& player = CvPlayerAI::getPlayer(data_.getOwner());
-
-                // add any 'plots' for new specialist slots (if we aren't maxed out already for that type)
-                for (size_t i = 0, count = node.specialistTypes.size(); i < count; ++i)
-                {
-                    int specialistCount = data_.getNumPossibleSpecialists(node.specialistTypes[i].first);
-
-                    // todo - should this total population?
-                    if (specialistCount < data_.getWorkingPopulation())  // if this is also changed by this building (e.g. HG)? - OK as long as add pop code updates specs
-                    {
-                        data_.addSpecialistSlots(node.specialistTypes[i].first, std::min<int>(node.specialistTypes[i].second, data_.getWorkingPopulation() - specialistCount));
-                    }
-                }
-
-                // add free specialists
-                for (size_t i = 0, count = node.freeSpecialistTypes.size(); i < count; ++i)
-                {
-                    data_.getSpecialistHelper()->changeFreeSpecialistCount(node.freeSpecialistTypes[i].first, node.freeSpecialistTypes[i].second);
-                }
-
-                // update city data to include any free specialists added for given improvement types (National Park + Forest Preserves)
-                for (size_t i = 0, count = node.improvementFreeSpecialists.size(); i < count; ++i)
-                {
-                    data_.changeFreeSpecialistCountPerImprovement(node.improvementFreeSpecialists[i].first, node.improvementFreeSpecialists[i].second);
-                }
-            }
-
+            
             void operator() (const BuildingInfo::YieldNode& node) const
             {
                 // TODO - check whether yield modifiers can be conditional on plots too (only store one in CityData)
@@ -148,16 +101,16 @@ namespace AltAI
 
                 if (!node.plotCond)  // applies to building itself
                 {
-                    data_.getCityPlotOutput().plotYield += node.yield;
+                    data_.getCityPlotData().plotYield += node.yield;
                 }
                 else
                 {
-                    int xCoord = data_.getCityPlotOutput().coords.iX, yCoord = data_.getCityPlotOutput().coords.iY;
+                    int xCoord = data_.getCityPlotData().coords.iX, yCoord = data_.getCityPlotData().coords.iY;
                     CvPlot* pPlot = gGlobals.getMap().plot(xCoord, yCoord);
 
                     if ((pPlot->*(node.plotCond))())
                     {
-                        data_.getCityPlotOutput().plotYield += node.yield;
+                        data_.getCityPlotData().plotYield += node.yield;
                     }
 
                     // update plot yields
@@ -176,15 +129,40 @@ namespace AltAI
                 }
             }
 
+            void operator() (const BuildingInfo::SpecialistNode& node) const
+            {
+                // find 'plots' which represent specialists and update their outputs
+                for (size_t i = 0, count = node.specialistTypesAndYields.size(); i < count; ++i)
+                {
+                    for (PlotDataListIter iter(data_.getPlotOutputs().begin()), endIter(data_.getPlotOutputs().end()); iter != endIter; ++iter)
+                    {
+                        // TODO - double check everything is in correct units here
+                        if (!iter->isActualPlot() && (SpecialistTypes)iter->coords.iY == node.specialistTypesAndYields[i].first)
+                        {
+                            iter->plotYield += node.specialistTypesAndYields[i].second;
+                            iter->commerce += node.extraCommerce;
+
+                            TotalOutput specialistOutput(makeOutput(iter->plotYield, iter->commerce, makeYield(100, 100, data_.getCommerceYieldModifier()), makeCommerce(100, 100, 100, 100), data_.getCommercePercent()));
+                            iter->actualOutput = iter->output = specialistOutput;
+                        }
+                    }
+                }
+            }
+
             void operator() (const BuildingInfo::CommerceNode& node) const
             {
                 // update city commerce and/or commerce modifier
-                data_.getCityPlotOutput().commerce += 100 * node.commerce;
-                data_.getCityPlotOutput().commerce += 100 * node.obsoleteSafeCommerce;
+                data_.getCityPlotData().commerce += 100 * node.commerce;
+                data_.getCityPlotData().commerce += 100 * node.obsoleteSafeCommerce;
 
                 if (!isEmpty(node.modifier))
                 {
                     data_.getModifiersHelper()->changeCommerceModifier(node.modifier);
+                }
+
+                if (!isEmpty(node.stateReligionCommerce))
+                {
+                    data_.getModifiersHelper()->changeStateReligionCommerceModifier(node.stateReligionCommerce);
                 }
             }
 
@@ -213,6 +191,73 @@ namespace AltAI
                 if (node.foreignTradeRouteModifier != 0)
                 {
                     data_.getTradeRouteHelper()->changeForeignTradeRouteModifier(node.foreignTradeRouteModifier);
+                }
+            }
+
+            void operator() (const BuildingInfo::PowerNode& node) const
+            {
+                data_.getBuildingsHelper()->updatePower(node.isDirty, true);
+                if (node.areaCleanPower)  // stored in building helper to save passing areaHelper - todo - redesign CityData so helpers keep back pointer to it
+                {
+                    data_.getAreaHelper()->changeCleanPowerCount(true);
+                    data_.getBuildingsHelper()->updateAreaCleanPower(data_.getAreaHelper()->getCleanPowerCount() > 0);
+                }
+
+                data_.getHealthHelper()->updatePowerHealth(data_);  // double use of CityData reinforces above comment!
+            }
+
+            void operator() (const BuildingInfo::UnitExpNode& node) const
+            {
+                if (node.freeExperience != 0)
+                {
+                    data_.getUnitHelper()->changeUnitFreeExperience(node.freeExperience);
+                }
+                if (node.globalFreeExperience != 0)
+                {
+                    data_.getUnitHelper()->changeUnitFreeExperience(node.globalFreeExperience);
+                }
+                for (int i = 0, count = node.domainFreeExperience.size(); i < count; ++i)
+                {
+                    if (node.domainFreeExperience[i].second != 0)
+                    {
+                        data_.getUnitHelper()->changeDomainFreeExperience(node.domainFreeExperience[i].first, node.domainFreeExperience[i].second);
+                    }
+                }
+                for (int i = 0, count = node.combatTypeFreeExperience.size(); i < count; ++i)
+                {
+                    if (node.combatTypeFreeExperience[i].second != 0)
+                    {
+                        data_.getUnitHelper()->changeUnitCombatTypeFreeExperience(node.combatTypeFreeExperience[i].first, node.combatTypeFreeExperience[i].second);
+                    }
+                }
+            }
+
+            void operator() (const BuildingInfo::SpecialistSlotNode& node) const
+            {
+                const CvPlayer& player = CvPlayerAI::getPlayer(data_.getOwner());
+
+                // add any 'plots' for new specialist slots (if we aren't maxed out already for that type)
+                for (size_t i = 0, count = node.specialistTypes.size(); i < count; ++i)
+                {
+                    int specialistCount = data_.getNumPossibleSpecialists(node.specialistTypes[i].first);
+
+                    // todo - should this be total population?
+                    if (specialistCount < data_.getWorkingPopulation())  // if this is also changed by this building (e.g. HG)? - OK as long as add pop code updates specs
+                    {
+                        data_.addSpecialistSlots(node.specialistTypes[i].first, std::min<int>(node.specialistTypes[i].second, data_.getWorkingPopulation() - specialistCount));
+                    }
+                }
+
+                // add free specialists
+                for (size_t i = 0, count = node.freeSpecialistTypes.size(); i < count; ++i)
+                {
+                    data_.getSpecialistHelper()->changeFreeSpecialistCount(node.freeSpecialistTypes[i].first, node.freeSpecialistTypes[i].second);
+                }
+
+                // update city data to include any free specialists added for given improvement types (National Park + Forest Preserves)
+                for (size_t i = 0, count = node.improvementFreeSpecialists.size(); i < count; ++i)
+                {
+                    data_.changeFreeSpecialistCountPerImprovement(node.improvementFreeSpecialists[i].first, node.improvementFreeSpecialists[i].second);
                 }
             }
 
@@ -264,16 +309,35 @@ namespace AltAI
                 updateCityData(data_, pPlayer_->getAnalysis()->getResourceInfo(node.bonusType), false);
             }
 
-            void operator() (const BuildingInfo::PowerNode& node) const
+            void operator() (const BuildingInfo::CityDefenceNode& node) const
             {
-                data_.getBuildingsHelper()->updatePower(node.isDirty, true);
-                if (node.areaCleanPower)  // stored in building helper to save passing areaHelper - todo - redesign CityData so helpers keep back pointer to it
+                if (node.defenceBonus != 0)
                 {
-                    data_.getAreaHelper()->changeCleanPowerCount(true);
-                    data_.getBuildingsHelper()->updateAreaCleanPower(data_.getAreaHelper()->getCleanPowerCount() > 0);
+                    data_.getUnitHelper()->changeBuildingDefence(node.defenceBonus);
                 }
+                if (node.globalDefenceBonus != 0)
+                {
+                    data_.getUnitHelper()->changeBuildingDefence(node.globalDefenceBonus);
+                }
+            }
 
-                data_.getHealthHelper()->updatePowerHealth(data_);  // double use of CityData reinforces above comment!
+            void operator() (const BuildingInfo::ReligionNode& node) const
+            {
+                if (node.religionType != NO_RELIGION)
+                {
+                    PlotYield yieldChange = data_.getVoteHelper()->getReligiousBuildingYieldChange(node.religionType);
+                    Commerce commerceChange = data_.getVoteHelper()->getReligiousBuildingCommerceChange(node.religionType);
+
+                    if (!isEmpty(yieldChange))
+                    {
+                        data_.getBuildingsHelper()->changeBuildingYieldChange(getBuildingClass(buildingType_), yieldChange);
+                    }
+
+                    if (!isEmpty(commerceChange))
+                    {
+                        data_.getBuildingsHelper()->changeBuildingCommerceChange(getBuildingClass(buildingType_), commerceChange);
+                    }
+                }
             }
 
             void operator() (const BuildingInfo::AreaEffectNode& node) const
@@ -346,8 +410,9 @@ namespace AltAI
             }
 
         private:
-            boost::shared_ptr<Player> pPlayer_;
+            PlayerPtr pPlayer_;
             CityData& data_;
+            BuildingTypes buildingType_;
         };
 
         // update CityData with changes resulting from construction of supplied BuildingInfo nodes from building constructed in another city
@@ -422,12 +487,12 @@ namespace AltAI
 
                     if (node.plotCond)
                     {
-                        int xCoord = pCityData_->getCityPlotOutput().coords.iX, yCoord = pCityData_->getCityPlotOutput().coords.iY;
+                        int xCoord = pCityData_->getCityPlotData().coords.iX, yCoord = pCityData_->getCityPlotData().coords.iY;
                         CvPlot* pPlot = gGlobals.getMap().plot(xCoord, yCoord);
 
                         if ((pPlot->*(node.plotCond))())
                         {
-                            pCityData_->getCityPlotOutput().plotYield += node.yield;
+                            pCityData_->getCityPlotData().plotYield += node.yield;
                         }
 
                         // update plot yields
@@ -545,7 +610,7 @@ namespace AltAI
             }
 
         private:
-            boost::shared_ptr<Player> pPlayer_;
+            PlayerPtr pPlayer_;
             CityDataPtr pCityData_;
             const CvCity* pBuiltCity_;
         };
@@ -553,14 +618,22 @@ namespace AltAI
 
     void updateRequestData(CityData& data, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
     {
-        boost::apply_visitor(CityOutputUpdater(data), pBuildingInfo->getInfo());
+        boost::apply_visitor(CityBuildingsUpdater(data, pBuildingInfo->getBuildingType()), pBuildingInfo->getInfo());
         data.recalcOutputs();
     }
 
     void updateGlobalRequestData(const CityDataPtr& pCityData, const CvCity* pBuiltCity, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
     {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
+        os << "\nUpdating global data for city: " << narrow(pCityData->getCity()->getName());
+        pCityData->debugBasicData(os);
+#endif
         boost::apply_visitor(CityGlobalOutputUpdater(pCityData, pBuiltCity), pBuildingInfo->getInfo());
         pCityData->recalcOutputs();
+#ifdef ALTAI_DEBUG
+        pCityData->debugBasicData(os);
+#endif
     }
 
     boost::shared_ptr<BuildingInfo> makeBuildingInfo(BuildingTypes buildingType, PlayerTypes playerType)
@@ -722,7 +795,7 @@ namespace AltAI
                 }
                 else
                 {
-                    int xCoord = data_.getCityPlotOutput().coords.iX, yCoord = data_.getCityPlotOutput().coords.iY;
+                    int xCoord = data_.getCityPlotData().coords.iX, yCoord = data_.getCityPlotData().coords.iY;
                     CvPlot* pPlot = gGlobals.getMap().plot(xCoord, yCoord);
 
                     if ((pPlot->*(node.plotCond))())
@@ -1017,7 +1090,7 @@ namespace AltAI
     
         result_type operator() (const BuildingInfo::FreeBonusNode& node) const
         {
-            boost::shared_ptr<Player> pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
+            PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
 
             std::pair<int, int> militaryUnitCounts = getResourceMilitaryUnitCount(pPlayer->getAnalysis()->getResourceInfo(node.freeBonuses.first));
 
@@ -1079,7 +1152,7 @@ namespace AltAI
     class PlotBuildCondVisitor : public boost::static_visitor<bool>
     {
     public:
-        explicit PlotBuildCondVisitor(const City& city) : pCity_(city.getCvCity()), pPlot_(city.getCvCity()->plot())
+        explicit PlotBuildCondVisitor(const CvCity* pCity) : pCity_(pCity), pPlot_(pCity->plot())
         {
         }
 
@@ -1241,7 +1314,7 @@ namespace AltAI
         {
             bool isValid = true;
 
-            const boost::shared_ptr<Player>& player = gGlobals.getGame().getAltAI()->getPlayer(playerType);
+            const PlayerPtr& player = gGlobals.getGame().getAltAI()->getPlayer(playerType);
             const boost::shared_ptr<BuildingInfo>& pBuildingInfo = player->getAnalysis()->getBuildingInfo(conditionalYieldEnchancingBuildings[i].buildingType);
             const BuildingInfo::BaseNode& node = boost::get<BuildingInfo::BaseNode>(pBuildingInfo->getInfo());
 
@@ -1342,8 +1415,15 @@ namespace AltAI
     class CouldConstructBuildingVisitor : public boost::static_visitor<bool>
     {
     public:
-        CouldConstructBuildingVisitor(const Player& player, const City& city, int lookaheadDepth, bool ignoreRequiredBuildings)
-            : player_(player), city_(city), lookaheadDepth_(lookaheadDepth), ignoreRequiredBuildings_(ignoreRequiredBuildings)
+        CouldConstructBuildingVisitor(const Player& player, const CvCity* pCity, int lookaheadDepth, bool ignoreRequiredBuildings, bool ignoreCost)
+            : player_(player), pCity_(pCity), pPlot_(pCity->plot()), lookaheadDepth_(lookaheadDepth), ignoreRequiredBuildings_(ignoreRequiredBuildings), ignoreCost_(ignoreCost)
+        {
+            civHelper_ = player.getCivHelper();
+            pAnalysis_ = player.getAnalysis();
+        }
+
+        CouldConstructBuildingVisitor(const Player& player, const CvPlot* pPlot, int lookaheadDepth)
+            : player_(player), pCity_(NULL), pPlot_(pPlot), lookaheadDepth_(lookaheadDepth), ignoreRequiredBuildings_(true), ignoreCost_(false)
         {
             civHelper_ = player.getCivHelper();
             pAnalysis_ = player.getAnalysis();
@@ -1357,7 +1437,7 @@ namespace AltAI
 
         bool operator() (const BuildingInfo::BaseNode& node) const
         {
-            if (node.cost < 0)
+            if (!ignoreCost_ && node.cost < 0)
             {
                 return false;
             }
@@ -1371,11 +1451,11 @@ namespace AltAI
                     return false;
                 }
             }
-
-            PlotBuildCondVisitor plotConditionsVisitor(city_);
-            if (ignoreRequiredBuildings_)
+            
+            PlotBuildCondVisitor plotConditionsVisitor(pPlot_);
+            if (pCity_ && !ignoreRequiredBuildings_)
             {
-                plotConditionsVisitor = PlotBuildCondVisitor(city_.getCvCity()->plot());
+                plotConditionsVisitor = PlotBuildCondVisitor(pCity_);
             }
 
             for (size_t i = 0, count = node.buildConditions.size(); i < count; ++i)
@@ -1410,21 +1490,32 @@ namespace AltAI
 
         bool operator() (const BuildingInfo::MiscEffectNode& node) const
         {
-            return !(node.isGovernmentCenter && city_.getCvCity()->isGovernmentCenter());
+            return !(node.isGovernmentCenter && pCity_ && pCity_->isGovernmentCenter());
         }
 
     private:
-        const Player& player_;
-        const City& city_;
+        const Player& player_;        
+        const CvCity* pCity_;
+        const CvPlot* pPlot_;
         int lookaheadDepth_;
-        bool ignoreRequiredBuildings_;
+        bool ignoreRequiredBuildings_, ignoreCost_;
         boost::shared_ptr<CivHelper> civHelper_;
         boost::shared_ptr<PlayerAnalysis> pAnalysis_;
     };
 
     bool couldConstructBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, bool ignoreRequiredBuildings)
     {
-        return boost::apply_visitor(CouldConstructBuildingVisitor(player, city, lookaheadDepth, ignoreRequiredBuildings), pBuildingInfo->getInfo());
+        return boost::apply_visitor(CouldConstructBuildingVisitor(player, city.getCvCity(), lookaheadDepth, ignoreRequiredBuildings, false), pBuildingInfo->getInfo());
+    }
+
+    bool couldConstructUnitBuilding(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    {
+        return boost::apply_visitor(CouldConstructBuildingVisitor(player, city.getCvCity(), lookaheadDepth, false, true), pBuildingInfo->getInfo());
+    }
+
+    bool couldConstructBuilding(const Player& player, const CvPlot* pPlot, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    {
+        return boost::apply_visitor(CouldConstructBuildingVisitor(player, pPlot, lookaheadDepth), pBuildingInfo->getInfo());
     }
 
     bool couldConstructSpecialBuilding(const Player& player, int lookaheadDepth, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
@@ -1433,7 +1524,7 @@ namespace AltAI
         SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)buildingInfo.getSpecialBuildingType();
 
         if (specialBuildingType != NO_SPECIALBUILDING)
-	    {
+        {
             TechTypes prereqTech = (TechTypes)gGlobals.getSpecialBuildingInfo(specialBuildingType).getTechPrereq();
             if (prereqTech != NO_TECH)
             {
@@ -1446,58 +1537,5 @@ namespace AltAI
         }
 
         return true;
-    }
-
-    class BuildingProjectionEventVisitor : public boost::static_visitor<>
-    {
-    public:
-        BuildingProjectionEventVisitor(const Player& player, int baseTurn)
-            : baseTurn_(baseTurn)
-        {
-            civHelper_ = player.getCivHelper();
-            pAnalysis_ = player.getAnalysis();
-        }
-
-        template <typename T>
-            void operator() (const T&)
-        {
-        }
-
-        void operator() (const BuildingInfo::BaseNode& node)
-        {
-            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
-            {
-                boost::apply_visitor(*this, node.nodes[i]);
-            }
-        }
-
-        void operator() (const BuildingInfo::MiscEffectNode& node)
-        {
-            for (size_t i = 0, count = node.civicTypes.size(); i < count; ++i)
-            {
-                if (!civHelper_->civicIsAvailable(node.civicTypes[i]) && !civHelper_->isInCivic(node.civicTypes[i]))
-                {
-                    events_.push_back(IProjectionEventPtr(new ProjectionChangeCivicEvent(pAnalysis_->getCivicInfo(node.civicTypes[i]), baseTurn_)));
-                }
-            }
-        }
-
-        const std::vector<IProjectionEventPtr>& getEvents() const
-        {
-            return events_;
-        }
-
-    private:
-        boost::shared_ptr<CivHelper> civHelper_;
-        boost::shared_ptr<PlayerAnalysis> pAnalysis_;
-        std::vector<IProjectionEventPtr> events_;
-        const int baseTurn_;
-    };
-
-    std::vector<IProjectionEventPtr> getPossibleEvents(const Player& player, const boost::shared_ptr<BuildingInfo>& pBuildingInfo, int baseEventTurn)
-    {
-        BuildingProjectionEventVisitor visitor(player, baseEventTurn);
-        boost::apply_visitor(visitor, pBuildingInfo->getInfo());
-        return visitor.getEvents();
     }
 }

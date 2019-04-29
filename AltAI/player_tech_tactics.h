@@ -16,6 +16,7 @@ namespace AltAI
         virtual PlayerTypes getPlayer() const;
 
         virtual void addTactic(const ITechTacticPtr&);
+        virtual void removeTactic(const int tacticID);
         virtual void apply(TacticSelectionData&);
 
         // save/load functions
@@ -27,6 +28,7 @@ namespace AltAI
     private:
         TechTypes techType_;
         PlayerTypes playerType_;
-        std::vector<ITechTacticPtr> techTactics_;
+        
+        std::list<ITechTacticPtr> techTactics_;
     };
 }

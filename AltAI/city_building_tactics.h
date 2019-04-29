@@ -9,7 +9,7 @@ namespace AltAI
     {
     public:
         CityBuildingTactic() : buildingType_(NO_BUILDING) {}
-        CityBuildingTactic(BuildingTypes buildingType, IDInfo city);
+        CityBuildingTactic(BuildingTypes buildingType, int buildingCost, IDInfo city, ComparisonFlags compFlag);
 
         virtual IDInfo getCity() const;
         virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
@@ -24,7 +24,9 @@ namespace AltAI
         virtual void apply(TacticSelectionData& selectionData);
 
         virtual BuildingTypes getBuildingType() const;
+        virtual int getBuildingCost() const;
         virtual ProjectionLadder getProjection() const;
+        virtual ComparisonFlags getComparisonFlag() const;
 
         virtual void debug(std::ostream& os) const;
 
@@ -40,8 +42,11 @@ namespace AltAI
         std::vector<ResearchTechDependencyPtr> techDependencies_;
         std::list<ICityBuildingTacticPtr> buildingTactics_;
         ProjectionLadder projection_;
+        std::vector<ProjectionLadder> hurryProjections_;
         BuildingTypes buildingType_;
+        int buildingCost_;
         IDInfo city_;
+        ComparisonFlags compFlag_;
     };
 
     class ProcessTactic : public IProcessTactics
@@ -69,17 +74,19 @@ namespace AltAI
         ProcessTypes processType_;
     };
 
-    // world wonders
-    class GlobalBuildingTactic : public IGlobalBuildingTactics
+    // world + national wonders (limited buildings)
+    class LimitedBuildingTactic : public IGlobalBuildingTactics
     {
     public:
-        GlobalBuildingTactic() : buildingType_(NO_BUILDING) {}
-        explicit GlobalBuildingTactic(BuildingTypes buildingType);
+        LimitedBuildingTactic() : buildingType_(NO_BUILDING), isGlobal_(false) {}
+        explicit LimitedBuildingTactic(BuildingTypes buildingType);
 
         virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
         virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
         virtual void update(const Player& player);
+        virtual void update(const Player&, const CityDataPtr&);
         virtual void updateDependencies(const Player& player);
+        virtual bool areDependenciesSatisfied(IDInfo city, int ignoreFlags) const;
         virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
         virtual ICityBuildingTacticsPtr getCityTactics(IDInfo city) const;
         virtual void apply(TacticSelectionDataMap& selectionDataMap, int ignoreFlags);
@@ -99,42 +106,9 @@ namespace AltAI
         static const int ID = 0;
 
     private:
+        TotalOutput getGlobalDelta_(IDInfo builtCity, int buildTime);
         BuildingTypes buildingType_;
-        typedef std::map<IDInfo, ICityBuildingTacticsPtr> CityTacticsMap;
-        CityTacticsMap cityTactics_;
-    };
-
-    //national wonders
-    class NationalBuildingTactic : public IGlobalBuildingTactics
-    {
-    public:
-        NationalBuildingTactic() : buildingType_(NO_BUILDING) {}
-        explicit NationalBuildingTactic(BuildingTypes buildingType);
-
-        virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
-        virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
-        virtual void update(const Player& player);
-        virtual void updateDependencies(const Player& player);
-        virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
-        virtual ICityBuildingTacticsPtr getCityTactics(IDInfo city) const;
-        virtual void apply(TacticSelectionDataMap& selectionDataMap, int ignoreFlags);
-        virtual void apply(TacticSelectionData& selectionData);
-        virtual void removeCityTactics(IDInfo city);
-        virtual bool empty() const;
-
-        virtual BuildingTypes getBuildingType() const;
-
-        virtual void debug(std::ostream& os) const;
-
-        virtual std::pair<int, IDInfo> getFirstBuildCity() const;
-
-        virtual void write(FDataStreamBase* pStream) const;
-        virtual void read(FDataStreamBase* pStream);
-
-        static const int ID = 1;
-
-    private:
-        BuildingTypes buildingType_;
+        bool isGlobal_;
         typedef std::map<IDInfo, ICityBuildingTacticsPtr> CityTacticsMap;
         CityTacticsMap cityTactics_;
     };

@@ -6,6 +6,7 @@
 #include "./city_data.h"
 #include "./health_helper.h"
 #include "./happy_helper.h"
+#include "./building_helper.h"
 #include "./player.h"
 #include "./city.h"
 #include "./player_analysis.h"
@@ -16,10 +17,10 @@ namespace AltAI
     namespace
     {
         // update CityData with changes resulting from bonus being added/removed
-        class CityOutputUpdater : public boost::static_visitor<>
+        class CityResourcesUpdater : public boost::static_visitor<>
         {
         public:
-            CityOutputUpdater(CityData& data, bool isAdding) : data_(data), multiplier_(isAdding ? 1 : -1)
+            CityResourcesUpdater(CityData& data, bool isAdding) : data_(data), multiplier_(isAdding ? 1 : -1)
             {
             }
 
@@ -50,7 +51,10 @@ namespace AltAI
 
                 for (size_t i = 0, count = node.buildingNodes.size(); i < count; ++i)
                 {
-                    (*this)(node.buildingNodes[i]);
+                    if (data_.getBuildingsHelper()->getNumBuildings(node.buildingNodes[i].buildingType) > 0)
+                    {
+                        (*this)(node.buildingNodes[i]);
+                    }
                 }
             }
 
@@ -137,7 +141,8 @@ namespace AltAI
     class HappyInfoResourceVisitor : public boost::static_visitor<>
     {
     public:
-        explicit HappyInfoResourceVisitor(PlayerTypes playerType) : playerType_(playerType)
+        explicit HappyInfoResourceVisitor(PlayerTypes playerType, ResourceQuery::ResourceQueryFlags mode)
+            : playerType_(playerType), mode_(mode)
         {
         }
 
@@ -165,9 +170,19 @@ namespace AltAI
             int actualHappy = 0, potentialHappy = 0, unusedHappy = 0;
             while (pLoopCity = iter())
             {
+                bool cityHasBonus = pLoopCity->hasBonus(node.bonusType);
+
+                if (mode_ == ResourceQuery::OnlyCitiesWithResource && !cityHasBonus ||
+                    mode_ == ResourceQuery::OnlyCitiesWithoutResource && cityHasBonus)
+                {
+                    continue;
+                }
+
                 int unhappyCitizens = std::max<int>(0, pLoopCity->unhappyLevel() - pLoopCity->happyLevel());
 
                 int baseHappy = std::min<int>(node.baseHappy, unhappyCitizens);
+                info.actualHappy = baseHappy;
+
                 // have we got any left?
                 unhappyCitizens = std::max<int>(0, unhappyCitizens - baseHappy);
 
@@ -175,7 +190,6 @@ namespace AltAI
                 {
                     unusedHappy += node.baseHappy - baseHappy;
                 }
-                actualHappy += baseHappy;
 
                 for (size_t i = 0, count = info.buildingHappy.size(); i < count; ++i)
                 {
@@ -183,14 +197,14 @@ namespace AltAI
                     if (buildingCount > 0)
                     {
                         int thisBuildingCount = std::min<int>(buildingCount * info.buildingHappy[i].second, unhappyCitizens);
+                        actualHappy += thisBuildingCount;
+
                         unhappyCitizens = std::max<int>(0, unhappyCitizens - thisBuildingCount);
 
                         if (unhappyCitizens == 0)
                         {
                             unusedHappy += buildingCount * info.buildingHappy[i].second - thisBuildingCount;
                         }
-
-                        actualHappy += thisBuildingCount;
                     }
                     else  // just assumes one building allowed (should use getCITY_MAX_NUM_BUILDINGS(), but this would be wrong if building is limited in some other way, e.g. wonders)
                     {
@@ -216,11 +230,12 @@ namespace AltAI
     private:
         PlayerTypes playerType_;
         ResourceHappyInfo info;
+        ResourceQuery::ResourceQueryFlags mode_;
     };
 
-    ResourceHappyInfo getResourceHappyInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo)
+    ResourceHappyInfo getResourceHappyInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo, ResourceQuery::ResourceQueryFlags mode)
     {
-        HappyInfoResourceVisitor visitor(pResourceInfo->getPlayerType());
+        HappyInfoResourceVisitor visitor(pResourceInfo->getPlayerType(), mode);
         boost::apply_visitor(visitor, pResourceInfo->getInfo());
         return visitor.getInfo();
     }
@@ -251,6 +266,7 @@ namespace AltAI
             int actualHealth = 0, potentialHealth = 0, unusedHealth = 0;
             while (pLoopCity = iter())
             {
+                // todo - handle resources that create unhealthiness (e.g. coal/oil)
                 int unhealthyCitizens = pLoopCity->healthRate();
 
                 int baseHealth = std::min<int>(node.baseHealth, unhealthyCitizens);
@@ -313,12 +329,41 @@ namespace AltAI
 
     void updateCityData(CityData& data, const boost::shared_ptr<ResourceInfo>& pResourceInfo, bool isAdding)
     {
-        boost::apply_visitor(CityOutputUpdater(data, isAdding), pResourceInfo->getInfo());
+        boost::apply_visitor(CityResourcesUpdater(data, isAdding), pResourceInfo->getInfo());
         data.recalcOutputs();
     }
 
     std::vector<BuildTypes> getBuildTypes(const boost::shared_ptr<ResourceInfo>& pResourceInfo)
     {
         return pResourceInfo->getBuildTypes();
+    }
+
+    class ResourceRevealTechVisitor : public boost::static_visitor<>
+    {
+    public:
+        template <typename T>
+            result_type operator() (const T&) const
+        {
+        }
+
+        result_type operator() (const ResourceInfo::BaseNode& node)
+        {
+            revealTech_ = node.revealTech;
+        }
+
+        TechTypes getRevealTech() const
+        {
+            return revealTech_;
+        }
+
+    private:
+        TechTypes revealTech_;
+    };
+
+    TechTypes getTechForResourceReveal(const boost::shared_ptr<ResourceInfo>& pResourceInfo)
+    {
+        ResourceRevealTechVisitor visitor;
+        boost::apply_visitor(visitor, pResourceInfo->getInfo());
+        return visitor.getRevealTech();
     }
 }

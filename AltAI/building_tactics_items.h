@@ -80,6 +80,11 @@ namespace AltAI
     class CultureBuildingTactic : public ICityBuildingTactic
     {
     public:
+        CultureBuildingTactic() : baseCommerce(0), baseGlobalCommerce(0) {}
+        CultureBuildingTactic(int baseCommerce_, int baseGlobalCommerce_)
+            : baseCommerce(baseCommerce_), baseGlobalCommerce(baseGlobalCommerce_)
+        {}
+
         virtual void debug(std::ostream& os) const;
         virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
 
@@ -87,6 +92,7 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
 
         static const int ID = 6;
+        int baseCommerce, baseGlobalCommerce;
     };
 
     class EspionageBuildingTactic : public ICityBuildingTactic
@@ -152,5 +158,40 @@ namespace AltAI
         std::map<DomainTypes, int> domainFreeExperience;
         std::map<UnitCombatTypes, int> combatTypeFreeExperience;
         PromotionTypes freePromotion;
+    };
+
+    class CityDefenceBuildingTactic : public ICityBuildingTactic
+    {
+    public:
+        CityDefenceBuildingTactic() : cityDefence(0), globalCityDefence(0), bombardDefence(0) {}
+        CityDefenceBuildingTactic(int cityDefence_, int globalCityDefence_, int bombardDefence_)
+         : cityDefence(cityDefence_), globalCityDefence(globalCityDefence_), bombardDefence(bombardDefence_)
+        {
+        }
+
+        virtual void debug(std::ostream& os) const;
+        virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 11;
+
+    private:
+        int cityDefence, globalCityDefence, bombardDefence;
+    };
+
+    class FreeTechBuildingTactic : public ICityBuildingTactic
+    {
+    public:
+        FreeTechBuildingTactic() {}
+
+        virtual void debug(std::ostream& os) const;
+        virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 12;
     };
 }

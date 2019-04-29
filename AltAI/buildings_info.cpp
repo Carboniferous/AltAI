@@ -112,6 +112,10 @@ namespace AltAI
                 node.commerce = commerce;
                 node.obsoleteSafeCommerce = obsoleteSafeCommerce;
                 node.stateReligionCommerce = stateReligionCommerce;
+                if (!isEmpty(node.stateReligionCommerce))
+                {
+                    node.global = true;
+                }
                 node.modifier = modifier;
                 baseNode.nodes.push_back(node);
             }
@@ -315,12 +319,14 @@ namespace AltAI
             node.cityMaintenanceModifierChange = buildingInfo.getMaintenanceModifier();
             node.foodKeptPercent = buildingInfo.getFoodKept();
             node.hurryAngerModifier = buildingInfo.getHurryAngerModifier();
+            node.workerSpeedModifier = buildingInfo.getWorkerSpeedModifier();
             node.noUnhealthinessFromBuildings = buildingInfo.isBuildingOnlyHealthy();
             node.noUnhealthinessFromPopulation = buildingInfo.isNoUnhealthyPopulation();
             node.startsGoldenAge = buildingInfo.isGoldenAge();
             node.globalPopChange = buildingInfo.getGlobalPopulationChange();
             node.makesCityCapital = buildingInfo.isCapital();
             node.isGovernmentCenter = buildingInfo.isGovernmentCenter();
+            node.nFreeTechs = buildingInfo.getFreeTechs();
 
             BuildingClassTypes freeBuildingClass = (BuildingClassTypes)buildingInfo.getFreeBuildingClass();
             if (freeBuildingClass != NO_BUILDINGCLASS)
@@ -341,10 +347,10 @@ namespace AltAI
                 }
             }
 
-            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 ||
+            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 || node.workerSpeedModifier != 0 || 
                 node.globalPopChange != 0 || node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation ||
                 node.makesCityCapital || node.isGovernmentCenter || node.startsGoldenAge || 
-                node.freeBuildingType != NO_BUILDING || !node.civicTypes.empty())
+                node.freeBuildingType != NO_BUILDING || !node.civicTypes.empty() || node.nFreeTechs > 0)
             {
                 baseNode.nodes.push_back(node);
             }
@@ -419,7 +425,7 @@ namespace AltAI
             SpecialBuildingTypes specialBuildingType = (SpecialBuildingTypes)buildingInfo.getSpecialBuildingType();
 
             if (specialBuildingType != NO_SPECIALBUILDING)
-	        {
+            {
                 TechTypes prereqTech = (TechTypes)gGlobals.getSpecialBuildingInfo(specialBuildingType).getTechPrereq();
                 if (prereqTech != NO_TECH)
                 {
@@ -466,7 +472,7 @@ namespace AltAI
                 if (requiredCount > 0)
                 {
                     requiredCount *= std::max<int>(0, (gGlobals.getWorldInfo(gGlobals.getMap().getWorldSize()).getBuildingClassPrereqModifier() + 100));
-	                requiredCount /= 100;
+                    requiredCount /= 100;
 
                     requiredBuildings.buildingCounts.push_back(std::make_pair(getPlayerVersion(requestData.playerType, (BuildingClassTypes)i), requiredCount));
                 }

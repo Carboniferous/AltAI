@@ -26,7 +26,8 @@
 				RuntimeLibrary="2"
 				ForceConformanceInForLoopScope="TRUE"
 				RuntimeTypeInfo="TRUE"
-				UsePrecompiledHeader="0"
+				UsePrecompiledHeader="3"
+				PrecompiledHeaderThrough="AltAI.h"
 				BrowseInformation="1"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="FALSE"
@@ -66,7 +67,8 @@
 				AdditionalIncludeDirectories="&quot;..\CVGameCoreDLL\Boost-1.32.0\include\&quot;;..\CVGameCoreDLL\;..\CVGameCoreDLL\Python24\include\"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;UTILS_EXPORTS"
 				RuntimeLibrary="2"
-				UsePrecompiledHeader="0"
+				UsePrecompiledHeader="3"
+				PrecompiledHeaderThrough="AltAI.h"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="FALSE"
 				DebugInformationFormat="3"/>
@@ -105,7 +107,8 @@
 				AdditionalIncludeDirectories="&quot;..\CVGameCoreDLL\Boost-1.32.0\include\&quot;;..\CVGameCoreDLL\;..\CVGameCoreDLL\Python24\include\"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;UTILS_EXPORTS;ALTAI_DEBUG"
 				RuntimeLibrary="2"
-				UsePrecompiledHeader="0"
+				UsePrecompiledHeader="3"
+				PrecompiledHeaderThrough="AltAI.h"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="FALSE"
 				DebugInformationFormat="3"/>
@@ -184,12 +187,6 @@
 			</File>
 			<File
 				RelativePath=".\player_analysis.h">
-			</File>
-			<File
-				RelativePath=".\plot_events.cpp">
-			</File>
-			<File
-				RelativePath=".\plot_events.h">
 			</File>
 			<File
 				RelativePath=".\settler_manager.cpp">
@@ -367,6 +364,18 @@
 			<File
 				RelativePath=".\trade_route_helper.h">
 			</File>
+			<File
+				RelativePath=".\unit_helper.cpp">
+			</File>
+			<File
+				RelativePath=".\unit_helper.h">
+			</File>
+			<File
+				RelativePath=".\vote_helper.cpp">
+			</File>
+			<File
+				RelativePath=".\vote_helper.h">
+			</File>
 		</Filter>
 		<Filter
 			Name="Utils"
@@ -394,6 +403,9 @@
 			</File>
 			<File
 				RelativePath=".\helper_fns.h">
+			</File>
+			<File
+				RelativePath=".\iters.cpp">
 			</File>
 			<File
 				RelativePath=".\iters.h">
@@ -491,6 +503,12 @@
 				RelativePath=".\city_data.h">
 			</File>
 			<File
+				RelativePath=".\city_improvement_projections.cpp">
+			</File>
+			<File
+				RelativePath=".\city_improvement_projections.h">
+			</File>
+			<File
 				RelativePath=".\city_projections.cpp">
 			</File>
 			<File
@@ -552,6 +570,24 @@
 			<File
 				RelativePath=".\unit_analysis.h">
 			</File>
+			<File
+				RelativePath=".\unit_explore.cpp">
+			</File>
+			<File
+				RelativePath=".\unit_explore.h">
+			</File>
+			<File
+				RelativePath=".\unit_history.cpp">
+			</File>
+			<File
+				RelativePath=".\unit_history.h">
+			</File>
+			<File
+				RelativePath=".\unit_mission.cpp">
+			</File>
+			<File
+				RelativePath=".\unit_mission.h">
+			</File>
 		</Filter>
 		<Filter
 			Name="Teams"
@@ -611,12 +647,6 @@
 				RelativePath=".\building_tactics_items.h">
 			</File>
 			<File
-				RelativePath=".\building_tactics_visitors.cpp">
-			</File>
-			<File
-				RelativePath=".\building_tactics_visitors.h">
-			</File>
-			<File
 				RelativePath=".\city_building_tactics.cpp">
 			</File>
 			<File
@@ -635,22 +665,52 @@
 				RelativePath=".\city_unit_tactics.h">
 			</File>
 			<File
+				RelativePath=".\civic_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\civic_tactics.h">
+			</File>
+			<File
+				RelativePath=".\great_people_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\great_people_tactics.h">
+			</File>
+			<File
+				RelativePath=".\military_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\military_tactics.h">
+			</File>
+			<File
+				RelativePath=".\player_tech_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\player_tech_tactics.h">
+			</File>
+			<File
 				RelativePath=".\project_tactics.cpp">
 			</File>
 			<File
 				RelativePath=".\project_tactics.h">
 			</File>
 			<File
-				RelativePath=".\project_tactics_visitors.cpp">
+				RelativePath=".\resource_tactics.cpp">
 			</File>
 			<File
-				RelativePath=".\project_tactics_visitors.h">
+				RelativePath=".\resource_tactics.h">
 			</File>
 			<File
 				RelativePath=".\tactic_actions.cpp">
 			</File>
 			<File
 				RelativePath=".\tactic_actions.h">
+			</File>
+			<File
+				RelativePath=".\tactic_selection_data.cpp">
+			</File>
+			<File
+				RelativePath=".\tactic_selection_data.h">
 			</File>
 			<File
 				RelativePath=".\tactic_streams.cpp">
@@ -677,12 +737,6 @@
 				RelativePath=".\tech_tactics_items.h">
 			</File>
 			<File
-				RelativePath=".\tech_tactics_visitors.cpp">
-			</File>
-			<File
-				RelativePath=".\tech_tactics_visitors.h">
-			</File>
-			<File
 				RelativePath=".\tictacs.cpp">
 			</File>
 			<File
@@ -701,12 +755,76 @@
 				RelativePath=".\unit_tactics_items.h">
 			</File>
 			<File
+				RelativePath=".\worker_tactics.cpp">
+			</File>
+			<File
+				RelativePath=".\worker_tactics.h">
+			</File>
+		</Filter>
+		<Filter
+			Name="Tactics Visitors"
+			Filter="">
+			<File
+				RelativePath=".\building_tactics_visitors.cpp">
+			</File>
+			<File
+				RelativePath=".\building_tactics_visitors.h">
+			</File>
+			<File
+				RelativePath=".\civic_tactics_visitors.cpp">
+			</File>
+			<File
+				RelativePath=".\civic_tactics_visitors.h">
+			</File>
+			<File
+				RelativePath=".\project_tactics_visitors.cpp">
+			</File>
+			<File
+				RelativePath=".\project_tactics_visitors.h">
+			</File>
+			<File
+				RelativePath=".\resource_tactics_visitors.cpp">
+			</File>
+			<File
+				RelativePath=".\resource_tactics_visitors.h">
+			</File>
+			<File
+				RelativePath=".\tech_tactics_visitors.cpp">
+			</File>
+			<File
+				RelativePath=".\tech_tactics_visitors.h">
+			</File>
+			<File
 				RelativePath=".\unit_tactics_visitors.cpp">
 			</File>
 			<File
 				RelativePath=".\unit_tactics_visitors.h">
 			</File>
 		</Filter>
+		<File
+			RelativePath=".\AltAI.cpp">
+			<FileConfiguration
+				Name="Debug|Win32">
+				<Tool
+					Name="VCCLCompilerTool"
+					UsePrecompiledHeader="1"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="Release|Win32">
+				<Tool
+					Name="VCCLCompilerTool"
+					UsePrecompiledHeader="1"/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="Logged_Release|Win32">
+				<Tool
+					Name="VCCLCompilerTool"
+					UsePrecompiledHeader="1"/>
+			</FileConfiguration>
+		</File>
+		<File
+			RelativePath=".\AltAI.h">
+		</File>
 		<File
 			RelativePath=".\todo.txt">
 		</File>
