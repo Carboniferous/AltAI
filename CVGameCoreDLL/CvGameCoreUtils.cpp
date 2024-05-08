@@ -38,6 +38,9 @@
 #define PATH_EXISTING_WORKED_IMPROVEMENT_WEIGHT  (2)
 #define PATH_EXISTING_GOOD_FEATURE_WEIGHT (1)
 
+#include "unit_analysis.h"
+#include "unit_tactics.h"
+
 namespace
 {
     // repeat of one in GameDataAnalysis, but include files conflict
@@ -220,6 +223,7 @@ CvUnit* getUnit(IDInfo unit)
 	return NULL;
 }
 
+// order is: player id, domain type, combat strength, unit type, level, experience, unit id
 bool isBeforeUnitCycle(const CvUnit* pFirstUnit, const CvUnit* pSecondUnit)
 {
 	FAssert(pFirstUnit != NULL);
@@ -2616,18 +2620,20 @@ int routeStepCost(FAStarNode* parent, FAStarNode* node, int data, const void* po
     CvPlot* pFromPlot = GC.getMapINLINE().plotSorenINLINE(parent->m_iX, parent->m_iY);
 	CvPlot* pToPlot = GC.getMapINLINE().plotSorenINLINE(node->m_iX, node->m_iY);
 
-    // todo - store both these in the finder, and somehow pass player in *pointer too
-    RouteTypes routeType = *((RouteTypes *)pointer);
-    //RouteTypes routeType = (RouteTypes)(gDLL->getFAStarIFace()->GetInfo(finder));
-    BuildTypes routeBuildType = getBuildTypeForRouteType(routeType);
+    RouteStepFinderData* pRouteData = (RouteStepFinderData*)pointer;
 
     int cost = 1;
-    if (pToPlot->getRouteType() != routeType)
+    if (pToPlot->getRouteType() != pRouteData->routeType)
     {
-        cost += pToPlot->getBuildTime(routeBuildType) - pToPlot->getBuildProgress(routeBuildType);
+        cost += pToPlot->getBuildTime(pRouteData->routeBuildType) - pToPlot->getBuildProgress(pRouteData->routeBuildType);
 
         int plotMoveCost = pToPlot->getFeatureType() == NO_FEATURE ? 
             GC.getTerrainInfo(pToPlot->getTerrainType()).getMovementCost() : GC.getFeatureInfo(pToPlot->getFeatureType()).getMovementCost();
+
+        if (!pRouteData->hasBridgeBuilding && pFromPlot->isRiverCrossing(directionXY(pFromPlot, pToPlot)))
+        {
+            ++plotMoveCost;
+        }
 
 	    if (pToPlot->isHills())
 	    {
@@ -2819,6 +2825,236 @@ int irrigationStepValid(FAStarNode* parent, FAStarNode* node, int data, const vo
     {
         return FALSE;
     }
+}
+
+// AltAI
+int unitDataPathDestValid(int iToX, int iToY, const void* pointer, FAStar* finder)
+{
+	PROFILE_FUNC();
+
+	const CvPlot* pToPlot = GC.getMapINLINE().plotSorenINLINE(iToX, iToY);
+    const CvPlot* pStartPlot = GC.getMapINLINE().plotSorenINLINE(gDLL->getFAStarIFace()->GetStartX(finder), gDLL->getFAStarIFace()->GetStartY(finder));
+
+    const std::vector<AltAI::UnitData>* units;
+    units = ((const std::vector<AltAI::UnitData> *)pointer);
+    FAssert(!units->empty());
+
+    // todo - add impassable feature logic for subs and maybe landing logic
+    if (pToPlot->getSubArea() != pStartPlot->getSubArea())
+    {
+        return FALSE;
+    }
+
+    // skip war logic of pathDestValid - this version assumes we're calculating the path for combat reasons
+	return TRUE;
+}
+
+// AltAI
+int unitDataPathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder)
+{
+	CvPlot* pFromPlot;
+	CvPlot* pToPlot;
+	int iWorstCost;
+	int iCost;
+	int iWorstMovesLeft;
+	int iMovesLeft;
+	int iWorstMax;
+	int iMax;
+
+    static const int MOVE_DENOMINATOR = gGlobals.getMOVE_DENOMINATOR();
+
+    const std::vector<AltAI::UnitData>* units;
+    units = ((const std::vector<AltAI::UnitData> *)pointer);
+    FAssert(!units->empty());
+
+    int finderInfo = gDLL->getFAStarIFace()->GetInfo(finder);
+    PlayerTypes playerType = (PlayerTypes)(LOBYTE(finderInfo));
+    TeamTypes teamType = CvPlayerAI::getPlayer(playerType).getTeam();
+    const CvTeamAI& team = CvTeamAI::getTeam(teamType);
+
+	pFromPlot = GC.getMapINLINE().plotSorenINLINE(parent->m_iX, parent->m_iY);
+	FAssert(pFromPlot != NULL);
+	pToPlot = GC.getMapINLINE().plotSorenINLINE(node->m_iX, node->m_iY);
+	FAssert(pToPlot != NULL);
+
+	iWorstCost = MAX_INT;
+	iWorstMovesLeft = MAX_INT;
+	iWorstMax = MAX_INT;
+
+    for (size_t i = 0, count = units->size(); i < count; ++i)
+    {
+        if (parent->m_iData1 > 0)
+		{
+			iMax = parent->m_iData1;
+		}
+		else
+		{
+            iMax = (*units)[i].pUnitInfo->getMoves() * MOVE_DENOMINATOR;
+		}
+
+        if ((*units)[i].pUnitInfo->getDomainType() == DOMAIN_LAND)
+        {
+            iCost = AltAI::landMovementCost(AltAI::UnitMovementData((*units)[i]), pFromPlot, pToPlot, team);
+        }
+        else
+        {
+            iCost = AltAI::seaMovementCost(AltAI::UnitMovementData((*units)[i]), pFromPlot, pToPlot, team);
+        }
+
+        iMovesLeft = std::max<int>(0, (iMax - iCost));
+        if (iMovesLeft <= iWorstMovesLeft)
+		{
+			if ((iMovesLeft < iWorstMovesLeft) || (iMax <= iWorstMax))
+			{
+				if (iMovesLeft == 0)
+				{
+					iCost = (PATH_MOVEMENT_WEIGHT * iMax);
+
+					if (pToPlot->getTeam() != teamType)
+					{
+						iCost += PATH_TERRITORY_WEIGHT;
+					}
+
+					// Damage caused by features (mods)
+					if (0 != GC.getPATH_DAMAGE_WEIGHT())
+					{
+						if (pToPlot->getFeatureType() != NO_FEATURE)
+						{
+							iCost += (GC.getPATH_DAMAGE_WEIGHT() * std::max<int>(0, GC.getFeatureInfo(pToPlot->getFeatureType()).getTurnDamage())) / GC.getMAX_HIT_POINTS();
+						}
+
+						if (pToPlot->getExtraMovePathCost() > 0)
+						{
+							iCost += (PATH_MOVEMENT_WEIGHT * pToPlot->getExtraMovePathCost());
+						}
+					}
+				}
+				else
+				{
+					iCost = (PATH_MOVEMENT_WEIGHT * iCost);
+				}
+
+                if ((*units)[i].baseCombat > 0)
+				{
+					if (iMovesLeft == 0)
+					{
+						iCost += (PATH_DEFENSE_WEIGHT * std::max<int>(0, (200 - ((*units)[i].pUnitInfo->isNoDefensiveBonus()) ? 0 : pToPlot->defenseModifier(teamType, false))));
+					}
+
+					{
+                        if (!(*units)[i].pUnitInfo->isOnlyDefensive())
+						{
+							if (gDLL->getFAStarIFace()->IsPathDest(finder, pToPlot->getX_INLINE(), pToPlot->getY_INLINE()))
+							{
+								if (pToPlot->getVisibleEnemyDefender(playerType))
+								{
+									iCost += (PATH_DEFENSE_WEIGHT * std::max(0, (200 - ((*units)[i].pUnitInfo->isNoDefensiveBonus() ? 0 : pFromPlot->defenseModifier(teamType, false)))));
+
+									if (!(pFromPlot->isCity()))
+									{
+										iCost += PATH_CITY_WEIGHT;
+									}
+
+									if (pFromPlot->isRiverCrossing(directionXY(pFromPlot, pToPlot)))
+									{
+                                        // skip river promotion check
+										iCost += (PATH_RIVER_WEIGHT * -(GC.getRIVER_ATTACK_MODIFIER()));
+										iCost += (PATH_MOVEMENT_WEIGHT * iMovesLeft);
+									}
+								}
+							}
+						}
+					}
+				}
+
+				if (iCost < iWorstCost)
+				{
+					iWorstCost = iCost;
+					iWorstMovesLeft = iMovesLeft;
+					iWorstMax = iMax;
+				}
+			}
+		}
+    }
+
+	FAssert(iWorstCost != MAX_INT);
+
+	iWorstCost += PATH_STEP_WEIGHT;
+
+	if ((pFromPlot->getX_INLINE() != pToPlot->getX_INLINE()) && (pFromPlot->getY_INLINE() != pToPlot->getY_INLINE()))
+	{
+		iWorstCost += PATH_STRAIGHT_WEIGHT;
+	}
+
+	FAssert(iWorstCost > 0);
+
+	return iWorstCost;
+}
+
+int unitDataPathAdd(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder)
+{
+    static const int MOVE_DENOMINATOR = gGlobals.getMOVE_DENOMINATOR();
+
+    const std::vector<AltAI::UnitData>* units;
+    units = ((const std::vector<AltAI::UnitData> *)pointer);
+    FAssert(!units->empty());
+
+    int finderInfo = gDLL->getFAStarIFace()->GetInfo(finder);
+    PlayerTypes playerType = (PlayerTypes)(LOBYTE(finderInfo));
+    TeamTypes teamType = CvPlayerAI::getPlayer(playerType).getTeam();
+    const CvTeamAI& team = CvTeamAI::getTeam(teamType);
+
+	int iTurns = 1;
+	int iMoves = MAX_INT;
+
+	if (data == ASNC_INITIALADD)
+	{
+        iMoves = MAX_INT;
+        // assume units have all their moves since these are (possibly) theoretical units
+        for (size_t i = 0, count = units->size(); i < count; ++i)
+        {
+		    iMoves = std::min<int>(iMoves, (*units)[i].pUnitInfo->getMoves() * MOVE_DENOMINATOR);
+        }
+	}
+	else
+	{
+		CvPlot* pFromPlot = GC.getMapINLINE().plotSorenINLINE(parent->m_iX, parent->m_iY);
+		FAssertMsg(pFromPlot != NULL, "FromPlot is not assigned a valid value");
+		CvPlot* pToPlot = GC.getMapINLINE().plotSorenINLINE(node->m_iX, node->m_iY);
+		FAssertMsg(pToPlot != NULL, "ToPlot is not assigned a valid value");
+
+		int iStartMoves = parent->m_iData1;
+		iTurns = parent->m_iData2;
+		if (iStartMoves == 0)
+		{
+			iTurns++;
+		}
+
+		for (size_t i = 0, count = units->size(); i < count; ++i)
+		{
+			int iUnitMoves = iStartMoves == 0 ? (*units)[i].pUnitInfo->getMoves() * MOVE_DENOMINATOR : iStartMoves;
+
+            if ((*units)[i].pUnitInfo->getDomainType() == DOMAIN_LAND)
+            {
+                iUnitMoves -= AltAI::landMovementCost(AltAI::UnitMovementData((*units)[i]), pFromPlot, pToPlot, team);
+            }
+            else
+            {
+                iUnitMoves -= AltAI::seaMovementCost(AltAI::UnitMovementData((*units)[i]), pFromPlot, pToPlot, team);
+            }
+
+			iUnitMoves = std::max<int>(iUnitMoves, 0); // unit's moves can't be less than 0
+			
+			iMoves = std::min<int>(iMoves, iUnitMoves);
+		}
+	}
+
+	FAssertMsg(iMoves >= 0, "iMoves is expected to be non-negative (invalid Index)");
+
+	node->m_iData1 = iMoves;
+	node->m_iData2 = iTurns;
+
+	return 1;
 }
 
 int plotGroupValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder)
@@ -3124,9 +3360,12 @@ void getMissionAIString(CvWString& szString, MissionAITypes eMissionAI)
 	case MISSIONAI_PICKUP: szString = L"MISSIONAI_PICKUP"; break;
     // AltAI mission types...
     case MISSIONAI_ESCORT: szString = L"MISSIONAI_ESCORT"; break;
+    case MISSIONAI_ESCORT_WORKER: szString = L"MISSIONAI_ESCORT_WORKER"; break;
     case MISSIONAI_COUNTER: szString = L"MISSIONAI_COUNTER"; break;
+    case MISSIONAI_RESERVE: szString = L"MISSIONAI_RESERVE"; break;
+    case MISSIONAI_MONITOR: szString = L"MISSIONAI_MONITOR"; break;
 
-	default: szString = CvWString::format(L"UNKOWN_MISSION_AI(%d)", eMissionAI); break;
+	default: szString = CvWString::format(L"UNKNOWN_MISSION_AI(%d)", eMissionAI); break;
 	}
 }
 

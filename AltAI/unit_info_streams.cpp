@@ -249,6 +249,10 @@ namespace AltAI
         {
             os << " min area size = " << node.minAreaSize;
         }
+        if (node.requireAreaBonuses)
+        {
+            os << " requires bonuses in area to build";
+        }
 
         for (size_t i = 0, count = node.andBonusTypes.size(); i < count; ++i)
         {

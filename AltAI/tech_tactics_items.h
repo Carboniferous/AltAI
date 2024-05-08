@@ -187,5 +187,20 @@ namespace AltAI
         static const int ID = 4;
         BonusTypes bonusType;
     };
+
+    class EconomicTechTactic : public ITechTactic
+    {
+    public:
+        EconomicTechTactic() {}
+        virtual void debug(std::ostream& os) const;
+
+        virtual void apply(const ITechTacticsPtr& pTechTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+        virtual const int getID() const { return ID; }
+
+        static const int ID = 5;
+    };
     
 }

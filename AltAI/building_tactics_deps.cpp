@@ -4,12 +4,12 @@
 #include "./game.h"
 #include "./player.h"
 #include "./player_analysis.h"
-#include "./city.h"
 #include "./city_data.h"
 #include "./civ_helper.h"
 #include "./building_helper.h"
 #include "./religion_helper.h"
 #include "./bonus_helper.h"
+#include "./resource_info_visitors.h"
 #include "./iters.h"
 #include "./save_utils.h"
 #include "./civ_log.h"
@@ -23,11 +23,13 @@ namespace AltAI
     void ResearchTechDependency::apply(const CityDataPtr& pCityData)
     {
         pCityData->getCivHelper()->addTech(techType_);
+        pCityData->recalcOutputs();
     }
 
     void ResearchTechDependency::remove(const CityDataPtr& pCityData)
     {
         pCityData->getCivHelper()->removeTech(techType_);
+        pCityData->recalcOutputs();
     }
 
     bool ResearchTechDependency::required(const CvCity* pCity, int ignoreFlags) const
@@ -81,11 +83,13 @@ namespace AltAI
     void CityBuildingDependency::apply(const CityDataPtr& pCityData)
     {
         pCityData->getBuildingsHelper()->changeNumRealBuildings(buildingType_);
+        pCityData->recalcOutputs();
     }
 
     void CityBuildingDependency::remove(const CityDataPtr& pCityData)
     {
         pCityData->getBuildingsHelper()->changeNumRealBuildings(buildingType_, false);
+        pCityData->recalcOutputs();
     }
 
     bool CityBuildingDependency::required(const CvCity* pCity, int ignoreFlags) const
@@ -232,11 +236,13 @@ namespace AltAI
     void ReligiousDependency::apply(const CityDataPtr& pCityData)
     {
         pCityData->getReligionHelper()->changeReligionCount(religionType_);
+        pCityData->recalcOutputs();
     }
 
     void ReligiousDependency::remove(const CityDataPtr& pCityData)
     {
         pCityData->getReligionHelper()->changeReligionCount(religionType_, -1);
+        pCityData->recalcOutputs();
     }
 
     bool ReligiousDependency::required(const CvCity* pCity, int ignoreFlags) const
@@ -291,6 +297,7 @@ namespace AltAI
         if (stateReligion != NO_RELIGION)
         {
             pCityData->getReligionHelper()->changeReligionCount(stateReligion);
+            pCityData->recalcOutputs();
         }
     }
 
@@ -300,6 +307,7 @@ namespace AltAI
         if (stateReligion != NO_RELIGION)
         {
             pCityData->getReligionHelper()->changeReligionCount(stateReligion, -1);
+            pCityData->recalcOutputs();
         }
     }
 
@@ -371,25 +379,34 @@ namespace AltAI
 
     void CityBonusDependency::apply(const CityDataPtr& pCityData)
     {
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner());
+
         for (size_t i = 0, count = andBonusTypes_.size(); i < count; ++i)
         {
-            pCityData->getBonusHelper()->changeNumBonuses(andBonusTypes_[i], 1);
+            pCityData->getBonusHelper()->changeNumBonuses(andBonusTypes_[i], 1);            
+            updateRequestData(*pCityData,  pPlayer->getAnalysis()->getResourceInfo(andBonusTypes_[i]), true);
         }
         for (size_t i = 0, count = orBonusTypes_.size(); i < count; ++i)
         {
             pCityData->getBonusHelper()->changeNumBonuses(orBonusTypes_[i], 1);
+            updateRequestData(*pCityData,  pPlayer->getAnalysis()->getResourceInfo(orBonusTypes_[i]), true);
         }
+
     }
 
     void CityBonusDependency::remove(const CityDataPtr& pCityData)
     {
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner());
+
         for (size_t i = 0, count = andBonusTypes_.size(); i < count; ++i)
         {
             pCityData->getBonusHelper()->changeNumBonuses(andBonusTypes_[i], -1);
+            updateRequestData(*pCityData,  pPlayer->getAnalysis()->getResourceInfo(andBonusTypes_[i]), false);
         }
         for (size_t i = 0, count = orBonusTypes_.size(); i < count; ++i)
         {
             pCityData->getBonusHelper()->changeNumBonuses(orBonusTypes_[i], -1);
+            updateRequestData(*pCityData,  pPlayer->getAnalysis()->getResourceInfo(orBonusTypes_[i]), false);
         }
     }
 
@@ -600,6 +617,7 @@ namespace AltAI
 
     void CivUnitDependency::apply(const CityDataPtr& pCityData)
     {
+        // nothing to do unless as the unit creates the building - so we just handle via ignoreFlags
     }
 
     void CivUnitDependency::remove(const CityDataPtr& pCityData)
@@ -666,5 +684,77 @@ namespace AltAI
     void CivUnitDependency::read(FDataStreamBase* pStream)
     {
         pStream->Read((int*)&unitType_);
+    }
+
+    ResouceProductionBonusDependency::ResouceProductionBonusDependency(BonusTypes bonusType, int productionModifier)
+        : bonusType_(bonusType), productionModifier_(productionModifier)
+    {
+    }
+
+    void ResouceProductionBonusDependency::apply(const CityDataPtr& pCityData)
+    {
+        pCityData->getBonusHelper()->changeNumBonuses(bonusType_, 1);
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner());
+        updateRequestData(*pCityData,  pPlayer->getAnalysis()->getResourceInfo(bonusType_), true);
+    }
+
+    void ResouceProductionBonusDependency::remove(const CityDataPtr& pCityData)
+    {
+        pCityData->getBonusHelper()->changeNumBonuses(bonusType_, -1);
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner());
+        updateRequestData(*pCityData,  pPlayer->getAnalysis()->getResourceInfo(bonusType_), false);
+    }
+
+    bool ResouceProductionBonusDependency::required(const CvCity* pCity, int ignoreFlags) const
+    {
+        return false;
+    }
+
+    bool ResouceProductionBonusDependency::required(const Player& player, int ignoreFlags) const
+    {
+        return false;
+    }
+
+    bool ResouceProductionBonusDependency::removeable() const
+    {
+        return true;
+    }
+
+    std::pair<BuildQueueTypes, int> ResouceProductionBonusDependency::getBuildItem() const
+    {
+        return std::make_pair(NoItem, -1);
+    }
+
+    std::vector<DependencyItem> ResouceProductionBonusDependency::getDependencyItems() const
+    {
+        return std::vector<DependencyItem>(1, std::make_pair(ID, bonusType_));
+    }
+
+    void ResouceProductionBonusDependency::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\nProduction modifier dependent on having resource: ";
+        if (bonusType_ != NO_BONUS)
+        {
+            os << gGlobals.getBonusInfo(bonusType_).getType();
+        }
+        else
+        {
+            os << " none? ";
+        }
+#endif
+    }
+
+    void ResouceProductionBonusDependency::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+        pStream->Write(bonusType_);
+        pStream->Write(productionModifier_);
+    }
+
+    void ResouceProductionBonusDependency::read(FDataStreamBase* pStream)
+    {
+        pStream->Read((int*)&bonusType_);
+        pStream->Read(&productionModifier_);
     }
 }

@@ -253,6 +253,7 @@ public:
 		return &(m_pMapPlots[plotNumINLINE(iX, iY)]);
 	}
 #endif
+    CvPlot* plot(XYCoords coords) const;
 	DllExport CvPlot* pointToPlot(float fX, float fY);
 
 	int getIndexAfterLastArea();														// Exposed to Python
@@ -305,8 +306,10 @@ protected:
 
 	FFreeListTrashArray<CvArea> m_areas;
     // AltAI
+    // sub area id -> sub area
     std::map<int, boost::shared_ptr<AltAI::SubArea> > m_subAreas;
     boost::shared_ptr<AltAI::SubAreaGraph> m_subAreaGraph;
+    // irrigatable read id -> irrigatable area
     std::map<int, boost::shared_ptr<AltAI::IrrigatableArea> > m_irrigatableAreas;
 
 	void calculateAreas();

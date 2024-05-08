@@ -1679,6 +1679,7 @@ void CvPlot::changeAdjacentSight(TeamTypes eTeam, int iRange, bool bIncrement, C
 						CvPlot* pPlot = plotXY(getX_INLINE(), getY_INLINE(), dx, dy);
 						if (NULL != pPlot)
 						{
+                            // if pUnit is NULL, this call makes a plot (in)visible through cultural or espionage or vassal means
 							pPlot->changeVisibilityCount(eTeam, ((bIncrement) ? 1 : -1), aSeeInvisibleTypes[i], bUpdatePlotGroups);
 						}
 					}
@@ -3139,7 +3140,8 @@ bool CvPlot::isVisibleToWatchingHuman() const
 	{
 		if (GET_PLAYER((PlayerTypes)iI).isAlive())
 		{
-			if (GET_PLAYER((PlayerTypes)iI).isHuman())
+            // isHumanDisabled() check : AltAI - autoplay hack to show moves
+            if (GET_PLAYER((PlayerTypes)iI).isHuman() || GET_PLAYER((PlayerTypes)iI).isHumanDisabled())
 			{
 				if (isVisible(GET_PLAYER((PlayerTypes)iI).getTeam(), false))
 				{
@@ -3225,6 +3227,7 @@ bool CvPlot::isRevealedGoody(TeamTypes eTeam) const
 
 void CvPlot::removeGoody()
 {
+    const ImprovementTypes removedImp = getImprovementType();
 	setImprovementType(NO_IMPROVEMENT);
 }
 
@@ -3862,6 +3865,38 @@ CvArea* CvPlot::secondWaterArea() const
 int CvPlot::getArea() const
 {
 	return m_iArea;
+}
+
+std::vector<const CvArea*> CvPlot::getAdjacentAreas() const
+{
+    std::vector<const CvArea*> adjacentAreas;
+    const CvArea* pOurArea = area();
+    const CvArea* pPreviousArea = NULL;
+
+    for (int iI = 0; iI < NUM_DIRECTION_TYPES; ++iI)
+	{
+		const CvPlot* pAdjacentPlot = plotDirection(getX_INLINE(), getY_INLINE(), (DirectionTypes)iI);
+
+		if (pAdjacentPlot)
+        {
+            const CvArea* pAdjacentArea = pAdjacentPlot->area();
+            if (pAdjacentArea == pOurArea || pAdjacentArea == pPreviousArea)
+            {
+                continue;
+            }
+            else
+            {
+                pPreviousArea = pAdjacentArea;
+            }
+
+            if (std::find(adjacentAreas.begin(), adjacentAreas.end(), pAdjacentArea) == adjacentAreas.end())
+            {
+                adjacentAreas.push_back(pAdjacentArea);
+            }
+        }
+    }
+
+    return adjacentAreas;
 }
 
 // AltAI
@@ -4586,6 +4621,7 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
 
 			if (isOwned())
 			{
+                // where old owner looses visibility of the plot's neighbours
 				changeAdjacentSight(getTeam(), GC.getDefineINT("PLOT_VISIBILITY_RANGE"), false, NULL, bUpdatePlotGroup);
 
 				if (area())
@@ -4634,7 +4670,7 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
 			}
 
             // AltAI - store each team's view of this plot's current ownership
-            PlayerTypes oldOwner = (PlayerTypes)m_eOwner;
+            /*PlayerTypes oldOwner = (PlayerTypes)m_eOwner;
             std::map<TeamTypes, PlayerTypes> previousRevealedOwnersMap;
             if (GC.getGame().getAltAI()->isInit())
             {
@@ -4644,7 +4680,7 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
                 {
                     previousRevealedOwnersMap[teamType] = getRevealedOwner(teamType, false);
                 }
-            }
+            }*/
 
             // actually switch the owner
 			m_eOwner = eNewValue;
@@ -4654,6 +4690,7 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
 
 			if (isOwned())
 			{
+                // update new owner's visibility
 				changeAdjacentSight(getTeam(), GC.getDefineINT("PLOT_VISIBILITY_RANGE"), true, NULL, bUpdatePlotGroup);
 
 				if (area())
@@ -5429,7 +5466,12 @@ void CvPlot::setImprovementType(ImprovementTypes eNewValue)
                     {
                         if (GET_PLAYER(pLoopCity->getOwner()).isUsingAltAI())
                         {
-                            GC.getGame().getAltAI()->getPlayer(pLoopCity->getOwner())->getCity(pLoopCity->getID()).updateImprovements(this, eNewValue);
+                            AltAI::PlayerPtr pPlayer = GC.getGame().getAltAI()->getPlayer(pLoopCity->getOwner());
+                            // might be called during city initialisation
+                            if (pPlayer->isCity(pLoopCity->getID()))
+                            {
+                                pPlayer->getCity(pLoopCity->getID()).updateImprovements(this, eNewValue);
+                            }
                         }
                     }
 				}
@@ -5538,11 +5580,16 @@ void CvPlot::setRouteType(RouteTypes eNewValue, bool bUpdatePlotGroups)
 				if (pLoopCity != NULL)
 				{
                     // AltAI
-                    if (m_eOwner == pLoopCity->getOwner())
+                    if (iI > 0 && m_eOwner == pLoopCity->getOwner())
                     {
                         if (GET_PLAYER(pLoopCity->getOwner()).isUsingAltAI())
                         {
-                            GC.getGame().getAltAI()->getPlayer(pLoopCity->getOwner())->getCity(pLoopCity->getID()).updateRoutes(this, eNewValue);
+                            AltAI::PlayerPtr pPlayer = GC.getGame().getAltAI()->getPlayer(pLoopCity->getOwner());
+                            // might be called during city initialisation
+                            if (pPlayer->isCity(pLoopCity->getID()))
+                            {
+                                pPlayer->getCity(pLoopCity->getID()).updateRoutes(this, eNewValue);
+                            }
                         }
                     }
 				}
@@ -5680,7 +5727,7 @@ void CvPlot::updateWorkingCity()
     // if getWorkingCityOverride() returns NULL, uses original algorithm to find best city
 	CvCity* pOldWorkingCity;
 	CvCity* pLoopCity;
-	CvCity* pBestCity;
+	const CvCity* pBestCity;
 	CvPlot* pLoopPlot;
 	int iBestPlot;
 	int iI;
@@ -5692,38 +5739,54 @@ void CvPlot::updateWorkingCity()
 		pBestCity = getWorkingCityOverride();
 		FAssertMsg((pBestCity == NULL) || (pBestCity->getOwnerINLINE() == getOwnerINLINE()), "pBest city is expected to either be NULL or the current plot instance's");
 	}
-
-	if ((pBestCity == NULL) && isOwned())  // find cities in range if this plot is owned and we have no override and plot is not a city
+    
+	if ((pBestCity == NULL) && isOwned())
 	{
-		iBestPlot = 0;
+        // AltAI
+        const CvPlayerAI& player = GET_PLAYER((PlayerTypes)m_eOwner);
+        bool plotOwnerisUsingAltAI = player.isUsingAltAI(), isSharedPlot = false;
+        if (plotOwnerisUsingAltAI)
+        {
+            isSharedPlot = GC.getGame().getAltAI()->getPlayer((PlayerTypes)m_eOwner)->isSharedPlot(this);            
+        }
 
-		for (iI = 0; iI < NUM_CITY_PLOTS; ++iI)
-		{
-			pLoopPlot = plotCity(getX_INLINE(), getY_INLINE(), iI);
+        // for shared plots and using AltAI - assignment handled in AltAI
+        if (!plotOwnerisUsingAltAI || !isSharedPlot)  
+        {
+		    iBestPlot = 0;
+            // find cities in range if this plot is owned and we have no override and plot is not a city
+		    for (iI = 0; iI < NUM_CITY_PLOTS; ++iI)
+		    {
+			    pLoopPlot = plotCity(getX_INLINE(), getY_INLINE(), iI);
 
-			if (pLoopPlot != NULL)
-			{
-				pLoopCity = pLoopPlot->getPlotCity();
+			    if (pLoopPlot != NULL)
+			    {
+				    pLoopCity = pLoopPlot->getPlotCity();
 
-				if (pLoopCity != NULL)
-				{
-					if (pLoopCity->getOwnerINLINE() == getOwnerINLINE())
-					{
-						// XXX use getGameTurnAcquired() instead???
-						if ((pBestCity == NULL) ||
-							  (GC.getCityPlotPriority()[iI] < GC.getCityPlotPriority()[iBestPlot]) ||
-							  ((GC.getCityPlotPriority()[iI] == GC.getCityPlotPriority()[iBestPlot]) &&
-							   ((pLoopCity->getGameTurnFounded() < pBestCity->getGameTurnFounded()) ||
-							    ((pLoopCity->getGameTurnFounded() == pBestCity->getGameTurnFounded()) &&
-							     (pLoopCity->getID() < pBestCity->getID())))))
-						{
-							iBestPlot = iI;
-							pBestCity = pLoopCity;
-						}
-					}
-				}
-			}
-		}
+				    if (pLoopCity != NULL)
+				    {
+					    if (pLoopCity->getOwnerINLINE() == getOwnerINLINE())
+					    {
+						    // XXX use getGameTurnAcquired() instead???
+						    if ((pBestCity == NULL) ||
+							      (GC.getCityPlotPriority()[iI] < GC.getCityPlotPriority()[iBestPlot]) ||
+							      ((GC.getCityPlotPriority()[iI] == GC.getCityPlotPriority()[iBestPlot]) &&
+							       ((pLoopCity->getGameTurnFounded() < pBestCity->getGameTurnFounded()) ||
+							        ((pLoopCity->getGameTurnFounded() == pBestCity->getGameTurnFounded()) &&
+							         (pLoopCity->getID() < pBestCity->getID())))))
+						    {
+							    iBestPlot = iI;
+							    pBestCity = pLoopCity;
+						    }
+					    }
+				    }
+			    }
+		    }
+        }
+        else if (isSharedPlot)
+        {
+            pBestCity = GC.getGame().getAltAI()->getPlayer((PlayerTypes)m_eOwner)->getSharedPlotAssignedCity(this);
+        }
 	}
 
 	pOldWorkingCity = getWorkingCity();
@@ -5748,11 +5811,11 @@ void CvPlot::updateWorkingCity()
 
         // AltAI - at least one should not be null - plot owner may be NO_PLAYER if city is being captured - so use the old working city
         // the owner of the city must have owned the plot
-        PlayerTypes playerType = (PlayerTypes)(m_eOwner == NO_PLAYER && pOldWorkingCity ? pOldWorkingCity->getOwner() : m_eOwner);
+        /*PlayerTypes playerType = (PlayerTypes)(m_eOwner == NO_PLAYER && pOldWorkingCity ? pOldWorkingCity->getOwner() : m_eOwner);
         if (playerType != NO_PLAYER && GET_PLAYER(playerType).isUsingAltAI())
         {
             GC.getGame().getAltAI()->getPlayer(playerType)->setWorkingCityOverride(this, pOldWorkingCity, pBestCity);
-        }
+        }*/
 
 		if (pOldWorkingCity != NULL)
 		{
@@ -6794,6 +6857,12 @@ void CvPlot::changeVisibilityCount(TeamTypes eTeam, int iChange, InvisibleTypes 
 					GET_TEAM(getTeam()).meet(eTeam, true);
 				}
 			}
+            else
+            {
+                // AltAI - track that we've lost sight of any units on this plot
+                // todo - this won't work correctly for units we see through see invisible means - e.g. submarines
+                GC.getGame().getAltAI()->getTeam(eTeam)->updatePlotRevealed(this, false, false);
+            }
 
 			pCity = getPlotCity();
 
@@ -7385,7 +7454,8 @@ void CvPlot::setRevealed(TeamTypes eTeam, bool bNewValue, bool bTerrainOnly, Tea
             }
 
             // also updates units which have been revealed at this plot
-            GC.getGame().getAltAI()->getTeam(eTeam)->updatePlotRevealed(this, !wasRevealed);            
+            // only calls through to players in team using AltAI
+            GC.getGame().getAltAI()->getTeam(eTeam)->updatePlotRevealed(this, !wasRevealed, true);            
 		}
 		else
 		{
@@ -7494,10 +7564,11 @@ void CvPlot::setRevealedImprovementType(TeamTypes eTeam, ImprovementTypes eNewVa
 		}
 
         // AltAI...
-        // keep track of forts
+        // keep track of forts and goody huts
         if (previousImpType != NO_IMPROVEMENT)
         {
-            if (GC.getImprovementInfo(previousImpType).isActsAsCity())
+            // todo - just track all imp changes regardless of properties - might simplify logic overall
+            if (GC.getImprovementInfo(previousImpType).isActsAsCity() || GC.getImprovementInfo(previousImpType).isGoody())
             {
                 AltAI::PlayerIter playerIter(eTeam);
                 while (const CvPlayerAI* player = playerIter())
@@ -7649,6 +7720,17 @@ bool CvPlot::changeBuildProgress(BuildTypes eBuild, int iChange, TeamTypes eTeam
 			}
 
 			bFinished = true;
+
+            // AltAI
+            if (isOwned() && GET_PLAYER((PlayerTypes)m_eOwner).isUsingAltAI())
+            {
+                const CvCity* pCity = getWorkingCityOverride();
+                if (!pCity) pCity = getWorkingCity();
+                if (pCity)
+                {
+		            GC.getGame().getAltAI()->getPlayer((PlayerTypes)m_eOwner)->getCity(pCity->getID()).setFlag(AltAI::City::NeedsProjectionCalcs | AltAI::City::NeedsCityDataCalc);
+                }
+            }
 		}
 	}
 
@@ -8693,6 +8775,8 @@ void CvPlot::read(FDataStreamBase* pStream)
 	pStream->Read(&m_iX);
 	pStream->Read(&m_iY);
 	pStream->Read(&m_iArea);
+    pStream->Read(&m_iSubArea);
+    pStream->Read(&m_iIrrigatableArea);
 	// m_pPlotArea not saved
 	pStream->Read(&m_iFeatureVariety);
 	pStream->Read(&m_iOwnershipDuration);
@@ -8918,6 +9002,8 @@ void CvPlot::write(FDataStreamBase* pStream)
 	pStream->Write(m_iX);
 	pStream->Write(m_iY);
 	pStream->Write(m_iArea);
+    pStream->Write(m_iSubArea);
+    pStream->Write(m_iIrrigatableArea);
 	// m_pPlotArea not saved
 	pStream->Write(m_iFeatureVariety);
 	pStream->Write(m_iOwnershipDuration);

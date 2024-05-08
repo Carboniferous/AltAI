@@ -112,4 +112,19 @@ namespace AltAI
     {
         improvementFreeSpecSlotCount_ = std::max<int>(0, improvementFreeSpecSlotCount_ + change);
     }
+
+    void SpecialistHelper::changePlayerGPPModifier(int change)
+    {
+        playerGPPModifier_ += change;
+    }
+
+    void SpecialistHelper::changeCityGPPModifier(int change)
+    {
+        cityGPPModifier_ += change;
+    }
+
+    void SpecialistHelper::changeStateReligionGPPModifier(int change)
+    {
+        stateReligionGPPModifier_ += change;
+    }
 }

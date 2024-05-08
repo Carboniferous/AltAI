@@ -6,7 +6,7 @@
 namespace AltAI
 {
     // does not take into account flag: "IGNORE_PLOT_GROUP_FOR_TRADE_ROUTES" (false for unmodified game)
-    TradeRouteHelper::TradeRouteHelper(const CvCity* pCity) : pCity_(pCity), isDirty_(true)
+    TradeRouteHelper::TradeRouteHelper(const CvCity* pCity) : pCity_(pCity), isDirty_(false)
     {
         const CvPlayerAI& player = CvPlayerAI::getPlayer(pCity_->getOwner());
 
@@ -52,6 +52,11 @@ namespace AltAI
 
     void TradeRouteHelper::updateTradeRoutes()
     {
+#ifdef ALTAI_DEBUG  // store previous trade route data to see if we need to log any change
+        int prevNumRoutes = tradeCities_.size();
+        std::vector<IDInfo> prevTradeCities(tradeCities_);
+        PlotYield prevTotalTradeYield = totalTradeYield_;
+#endif
         tradeCities_.clear();
         tradeCities_.resize(numTradeRoutes_);
         std::vector<int> bestValueRoutes(numTradeRoutes_);
@@ -102,12 +107,29 @@ namespace AltAI
             }
         }
 
-        updateTradeYield_();
-        isDirty_ = false;
+        updateTradeYield_();        
 
 #ifdef ALTAI_DEBUG
-        logTradeRoutes_();
+        // avoid logging from ctor call
+        bool logRoutes = isDirty_ && (numTradeRoutes_ != prevNumRoutes || totalTradeYield_ != prevTotalTradeYield || prevTradeCities.size() != tradeCities_.size());
+        if (logRoutes)  
+        {
+            for (size_t i = 0, count = tradeCities_.size(); i < count; ++i)
+            {
+                if (std::find(prevTradeCities.begin(), prevTradeCities.end(), tradeCities_[i]) == prevTradeCities.end())
+                {
+                    logRoutes = true;
+                    break;
+                }
+            }
+        }
+
+        if (logRoutes)
+        {
+            logTradeRoutes_();
+        }
 #endif
+        isDirty_ = false;
     }
 
     PlotYield TradeRouteHelper::getTradeYield() const

@@ -226,6 +226,9 @@ public:
 	void setArea(int iNewValue);			
 
     // AltAI
+    std::vector<const CvArea*> getAdjacentAreas() const;
+
+    // AltAI
     int getSubArea() const;
     void setSubArea(int iNewValue);
 

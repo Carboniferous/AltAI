@@ -3,7 +3,6 @@
 #include "./resource_info.h"
 #include "./game.h"
 #include "./player.h"
-#include "./city.h"
 #include "./unit.h"
 #include "./gamedata_analysis.h"
 
@@ -39,9 +38,6 @@ namespace AltAI
 
             node.revealTech = (TechTypes)bonusInfo.getTechReveal();
             node.obsoleteTech = (TechTypes)bonusInfo.getTechObsolete();
-
-            
-
             node.baseHealth = bonusInfo.getHealth();
             node.baseHappy = bonusInfo.getHappiness();
 

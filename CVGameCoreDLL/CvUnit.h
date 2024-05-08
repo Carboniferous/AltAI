@@ -73,7 +73,7 @@ public:
 	virtual ~CvUnit();
 	
 	void reloadEntity();
-	void init(int iID, UnitTypes eUnit, UnitAITypes eUnitAI, PlayerTypes eOwner, int iX, int iY, DirectionTypes eFacingDirection);
+	void init(int iID, UnitTypes eUnit, UnitAITypes eUnitAI, PlayerTypes eOwner, int iX, int iY, DirectionTypes eFacingDirection, const CvUnit* pUpgradingUnit = (const CvUnit*)0);
 	void uninit();
 	void reset(int iID = 0, UnitTypes eUnit = NO_UNIT, PlayerTypes eOwner = NO_PLAYER, bool bConstructorCall = false);
 	void setupGraphical();
@@ -885,6 +885,9 @@ protected:
 	void resolveCombat(CvUnit* pDefender, CvPlot* pPlot, CvBattleDefinition& kBattle);
 	void resolveAirCombat(CvUnit* pInterceptor, CvPlot* pPlot, CvAirMissionDefinition& kBattle);
 	void checkRemoveSelectionAfterAttack();
+
+    // AltAI
+    void notifyMove(const CvPlot* pFromPlot, const CvPlot* pToPlot) const;
 };
 
 #endif

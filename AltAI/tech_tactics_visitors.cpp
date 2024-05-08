@@ -179,7 +179,7 @@ namespace AltAI
     class MakePlayerTechTacticsVisitor : public boost::static_visitor<>
     {
     public:
-        MakePlayerTechTacticsVisitor(TechTypes techType, const Player& player) : techType_(techType), player_(player)
+        MakePlayerTechTacticsVisitor(TechTypes techType, const Player& player) : techType_(techType), player_(player), isEconomicTech_(false)
         {
         }
 
@@ -214,6 +214,14 @@ namespace AltAI
             }
         }
 
+        void operator() (const TechInfo::ImprovementNode& node)
+        {
+            if (!isEmpty(node.modifier))
+            {
+                isEconomicTech_ = true;
+            }
+        }
+
         void operator() (const TechInfo::BonusNode& node)
         {
             if (node.tradeBonus != NO_BONUS)
@@ -232,6 +240,14 @@ namespace AltAI
             }
         }
 
+        void operator() (const TechInfo::TradeNode& node)
+        {
+            if (node.extraTradeRoutes != 0)
+            {
+                isEconomicTech_ = true;
+            }
+        }
+
         void operator() (const TechInfo::FirstToNode& node)
         {
             if (node.freeTechCount > 0)
@@ -247,8 +263,13 @@ namespace AltAI
             }
         }
 
-        const ITechTacticsPtr& getTactics() const
+        const ITechTacticsPtr& getTactics()
         {
+            if (isEconomicTech_)
+            {
+                pTactics_ = makeTactics_();
+                pTactics_->addTactic(ITechTacticPtr(new EconomicTechTactic()));
+            }
             return pTactics_;
         }
 
@@ -265,6 +286,7 @@ namespace AltAI
         TechTypes techType_;
         const Player& player_;
         ITechTacticsPtr pTactics_;
+        bool isEconomicTech_;
     };
 
     std::list<CityImprovementTacticsPtr> makeCityBuildTactics(const Player& player, const City& city)
@@ -288,19 +310,19 @@ namespace AltAI
                 std::vector<FeatureTypes> removeFeatureTypes;
                 if (techAffectsImprovements(pTechInfo, affectedImprovements, removeFeatureTypes))
                 {
-#ifdef ALTAI_DEBUG
-                    os << "\nchecking imp tactics for: " << gGlobals.getTechInfo((TechTypes)i).getType();
-                    os << " ";
-                    for (size_t j = 0, impCount = affectedImprovements.size(); j < impCount; ++j)
-                    {
-                        os << gGlobals.getImprovementInfo(affectedImprovements[j]).getType() << " ";
-                    }
-                    os << " ";
-                    for (size_t j = 0, featureCount = removeFeatureTypes.size(); j < featureCount; ++j)
-                    {
-                        os << gGlobals.getFeatureInfo(removeFeatureTypes[j]).getType() << " ";
-                    }
-#endif
+//#ifdef ALTAI_DEBUG
+//                    os << "\nchecking imp tactics for: " << gGlobals.getTechInfo((TechTypes)i).getType();
+//                    os << " ";
+//                    for (size_t j = 0, impCount = affectedImprovements.size(); j < impCount; ++j)
+//                    {
+//                        os << gGlobals.getImprovementInfo(affectedImprovements[j]).getType() << " ";
+//                    }
+//                    os << " ";
+//                    for (size_t j = 0, featureCount = removeFeatureTypes.size(); j < featureCount; ++j)
+//                    {
+//                        os << gGlobals.getFeatureInfo(removeFeatureTypes[j]).getType() << " ";
+//                    }
+//#endif
                     MakeCityBuildTacticsVisitor visitor(player, city, techImprovements, affectedImprovements, removeFeatureTypes);
                     boost::apply_visitor(visitor, pTechInfo->getInfo());
 

@@ -5,7 +5,6 @@
 #include "./civic_tactics.h"
 #include "./building_tactics_deps.h"
 #include "./player.h"
-#include "./city.h"
 
 namespace AltAI
 {

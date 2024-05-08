@@ -1,9 +1,13 @@
 #pragma once
 
 #include "./utils.h"
+#include "./unit_tactics.h"
 
 namespace AltAI
 {
+    class IUnitMission;
+    typedef boost::shared_ptr<IUnitMission> UnitMissionPtr;
+
     class IUnitMission
     {
     public:
@@ -16,9 +20,13 @@ namespace AltAI
         virtual bool isComplete() const = 0;
         virtual CvCity* getTargetCity() const = 0;
         virtual UnitAITypes getAIType() const = 0;
-    };
 
-    typedef boost::shared_ptr<IUnitMission> UnitMissionPtr;
+        // save/load functions
+        virtual void write(FDataStreamBase*) const = 0;
+        virtual void read(FDataStreamBase*) = 0;
+
+        static UnitMissionPtr factoryRead(FDataStreamBase*);
+    };
 
     struct HasTarget
     {
@@ -64,4 +72,114 @@ namespace AltAI
 
         const int areaID;
     };
+
+    class IUnitsMission
+    {
+    public:
+        virtual ~IUnitsMission() = 0 {}
+        virtual bool doUnitMission(CvUnitAI* pUnit) = 0;
+        virtual void update(Player& player) = 0;
+    };
+
+    typedef boost::shared_ptr<IUnitsMission> IUnitsMissionPtr;
+
+    struct MilitaryMissionData
+    {
+        MilitaryMissionData() : plotTarget(-1, -1), missionType(NO_MISSIONAI), recalcOdds(false) {}
+        explicit MilitaryMissionData(MissionAITypes missionType_) : plotTarget(-1, -1), missionType(missionType_) {}
+
+        std::set<IDInfo> targets, specialTargets;
+        XYCoords plotTarget;
+        std::set<IDInfo> assignedUnits;
+        std::vector<RequiredUnitStack::UnitDataChoices> requiredUnits;
+
+        PlotSet ourReachablePlots, hostilesReachablePlots;
+        typedef std::map<const CvPlot*, std::list<IDInfo>, CvPlotOrderF> ReachablePlotDetails;
+        ReachablePlotDetails ourReachablePlotDetails, hostileReachablePlotDetails;
+
+        MissionAITypes missionType;
+
+        IUnitsMissionPtr pUnitsMission;
+
+        // dynamic turn data
+        CombatGraph::Data ourAttackOdds, hostileAttackOdds;
+        std::map<IDInfo, CombatGraph::Data> cityAttackOdds;
+        std::vector<UnitData> ourAttackers, ourDefenders;
+        IDInfo firstAttacker, closestCity;
+        std::set<IDInfo> attackableUnits;
+        bool recalcOdds;
+
+        void resetDynamicData();
+
+        int getRequiredUnitCount(UnitTypes unitType) const
+        {
+            return std::count_if(requiredUnits.begin(), requiredUnits.end(), UnitTypeInList(unitType));
+        }
+
+        int getAssignedUnitCount(const CvPlayer* pPlayer, UnitTypes unitType) const;
+
+        std::vector<IDInfo> updateRequiredUnits(const Player& player, std::set<IDInfo> availableUnits);
+
+        void assignUnit(const CvUnit* pUnit, bool updateRequiredUnits = true);
+        void unassignUnit(const CvUnit* pUnit, bool updateRequiredUnits);
+
+        template <typename Pred> 
+            std::vector<IDInfo> getOurMatchingUnits(const Pred& p) const
+        {
+            std::vector<IDInfo> matchedUnits;
+            for (std::set<IDInfo>::const_iterator ci(assignedUnits.begin()), ciEnd(assignedUnits.end()); ci != ciEnd; ++ci)
+            {
+                if (p(*ci))
+                {
+                    matchedUnits.push_back(*ci);
+                }
+            }
+            return matchedUnits;
+        }
+
+        std::set<CvSelectionGroup*, CvSelectionGroupOrderF> getAssignedGroups() const;
+        std::vector<const CvUnit*> getAssignedUnits(bool includeCanOnlyDefend) const;
+        std::vector<const CvUnit*> getHostileUnits(TeamTypes ourTeamId, bool includeCanOnlyDefend) const;
+
+        void updateReachablePlots(const Player& player, bool ourUnits, bool useMaxMoves, bool canAttack);
+
+        std::set<XYCoords> getReachablePlots(IDInfo unit) const;
+
+        PlotSet getTargetPlots() const;
+
+        const CvPlot* getTargetPlot() const;  // city plot if set, otherwise target coords (if valid)
+
+        void debug(std::ostream& os) const;
+        void debugReachablePlots(std::ostream& os) const;
+
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
+    };
+
+    typedef boost::shared_ptr<MilitaryMissionData> MilitaryMissionDataPtr;
+
+    class ReserveMission : public IUnitsMission
+    {
+    public:
+        virtual ~ReserveMission() {}
+        virtual bool doUnitMission(CvUnitAI* pUnit);
+        virtual void update(Player& player);
+
+    private:
+
+    };
+
+    class GuardBonusesMission : public IUnitsMission
+    {
+    public:
+        explicit GuardBonusesMission(int subArea);
+        virtual ~GuardBonusesMission() {}
+        virtual bool doUnitMission(CvUnitAI* pUnit);
+        virtual void update(Player& player);
+
+    private:
+        int subArea_;
+        std::map<XYCoords, BonusTypes> bonusMap_;
+    };
+
 }

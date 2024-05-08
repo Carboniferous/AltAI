@@ -31,6 +31,10 @@ namespace AltAI
         void changeImprovementFreeSpecialistSlotCount(int change);
         void changeFreeSpecialistCountPerImprovement(ImprovementTypes improvementType, int change);
 
+        void changePlayerGPPModifier(int change);
+        void changeCityGPPModifier(int change);
+        void changeStateReligionGPPModifier(int change);
+
     private:
         std::vector<int> freeSpecialistCounts_;
         std::vector<int> maxSpecialistCounts_;

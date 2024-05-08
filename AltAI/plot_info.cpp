@@ -4,7 +4,6 @@
 #include "./irrigatable_area.h"
 #include "./game.h"
 #include "./player.h"
-#include "./city.h"
 #include "./unit.h"
 #include "./helper_fns.h"
 #include "./iters.h"
@@ -502,14 +501,14 @@ namespace AltAI
             headNode.hasPotentialFreshWaterAccess = requestData.hasFreshWaterAccess;
             headNode.plotType = requestData.plotType;
             headNode.terrainType = requestData.terrainType;
+            headNode.featureType = requestData.featureType;
 
             bool canRemoveFeature = requestData.featureType != NO_FEATURE && GameDataAnalysis::getBuildTypeToRemoveFeature(requestData.featureType) != NO_BUILD;
 
             if (canRemoveFeature)
             {
                 PlotInfoRequestData featureRemoveRequestData(requestData);
-                featureRemoveRequestData.featureType = NO_FEATURE;
-                headNode.featureType = requestData.featureType;
+                featureRemoveRequestData.featureType = NO_FEATURE;                
                 headNode.featureRemovedNode = makeFeatureRemovedNode(getHeadNode(pPlot, featureRemoveRequestData));
                 headNode.featureRemoveTech = GameDataAnalysis::getTechTypeToRemoveFeature(requestData.featureType);
             }

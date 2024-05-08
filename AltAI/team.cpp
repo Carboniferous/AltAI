@@ -3,7 +3,6 @@
 #include "./utils.h"
 #include "./team.h"
 #include "./player.h"
-#include "./city.h"
 #include "./unit.h"
 #include "./player_analysis.h"
 #include "./map_analysis.h"
@@ -15,13 +14,13 @@ namespace AltAI
         players_.push_back(pPlayer);
     }
 
-    void Team::updatePlotRevealed(const CvPlot* pPlot, bool isNew)
+    void Team::updatePlotRevealed(const CvPlot* pPlot, bool isNew, bool isRevealed)
     {
         for (size_t i = 0, count = players_.size(); i < count; ++i)
         {
             if (players_[i]->getCvPlayer()->isUsingAltAI())
             {
-                players_[i]->updatePlotRevealed(pPlot, isNew);
+                players_[i]->updatePlotRevealed(pPlot, isNew, isRevealed);
             }
         }
     }

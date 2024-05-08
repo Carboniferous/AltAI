@@ -84,6 +84,24 @@ namespace AltAI
         return std::vector<int>(borderingSubAreas.begin(), borderingSubAreas.end());
     }
 
+    int getStepDistanceToClosestCity(const CvPlayer& player, const CvPlot* pPlot, bool sameArea)
+    {
+        const int areaID = pPlot->getArea();
+
+        CityIter cityIter(player);
+        int minDistance = MAX_INT;
+
+        const CvCity* pLoopCity;
+        while (pLoopCity = cityIter())
+        {
+            if (!sameArea || pLoopCity->getArea() == areaID)
+            {
+                minDistance = std::min<int>(minDistance, stepDistance(pPlot->getX(), pPlot->getY(), pLoopCity->getX(), pLoopCity->getY()));
+            }
+        }
+        return minDistance;
+    }
+
     BuildingClassTypes getBuildingClass(BuildingTypes buildingType)
     {
         return (BuildingClassTypes)gGlobals.getBuildingInfo(buildingType).getBuildingClassType();

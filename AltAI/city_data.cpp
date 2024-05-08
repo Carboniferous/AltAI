@@ -8,7 +8,6 @@
 #include "./city_simulator.h"
 #include "./game.h"
 #include "./player.h"
-#include "./city.h"
 #include "./unit.h"
 #include "./player_analysis.h"
 #include "./map_analysis.h"
@@ -913,7 +912,7 @@ namespace AltAI
                 int modifier = processInfo.getProductionToCommerceModifier(i);
                 if (modifier > 0)
                 {
-                    processOutput[NUM_YIELD_TYPES - 1 + i] = (currentProduction * modifier) / 100 + output[NUM_YIELD_TYPES - 1 + i];
+                    processOutput[NUM_YIELD_TYPES - 1 + i] = (currentProduction * modifier) / 100;
                 }
             }
         }
@@ -1333,123 +1332,10 @@ namespace AltAI
         return production;
     }
 
-    void CityData::write(FDataStreamBase* pStream) const
-    {
-        pStream->Write(cityPopulation_);
-        pStream->Write(workingPopulation_);
-        pStream->Write(happyCap_);
-
-        pStream->Write(currentFood_);
-        pStream->Write(storedFood_);
-        pStream->Write(accumulatedProduction_);
-        pStream->Write(growthThreshold_);
-        pStream->Write(requiredProduction_);
-        pStream->Write(foodKeptPercent_);
-        pStream->Write(commerceYieldModifier_);
-
-        pStream->Write(specialConditions_);
-
-        std::stack<std::pair<BuildQueueTypes, int> > copyOfBuildQueue(buildQueue_);
-        pStream->Write(copyOfBuildQueue.size());
-        for (size_t i = 0, count = copyOfBuildQueue.size(); i < count; ++i)
-        {
-            pStream->Write(copyOfBuildQueue.top().first);
-            pStream->Write(copyOfBuildQueue.top().second);
-            copyOfBuildQueue.pop();
-        }
-
-        /*int cityPopulation_, workingPopulation_, happyCap_;
-
-        int currentFood_, storedFood_, accumulatedProduction_;
-        int growthThreshold_, requiredProduction_;
-        int foodKeptPercent_;
-        int commerceYieldModifier_;
-
-        SpecialConditions specialConditions_;
-
-        std::stack<std::pair<BuildQueueTypes, int> > buildQueue_;
-
-        const CvCity* pCity_;
-        PlayerTypes owner_;
-        XYCoords coords_;
-
-        YieldModifier yieldModifier_;
-        CommerceModifier commerceModifier_, commercePercent_;
-
-        PlotDataList plotOutputs_, unworkablePlots_;
-        PlotDataList freeSpecOutputs_;
-        PlotData cityPlotOutput_;
-        GreatPersonOutputMap cityGreatPersonOutput_;
-
-        AreaHelperPtr areaHelper_;
-        BonusHelperPtr bonusHelper_;
-        BuildingsHelperPtr buildingsHelper_;
-        CivHelperPtr civHelper_;
-        CorporationHelperPtr corporationHelper_;
-        CultureHelperPtr cultureHelper_;
-        ModifiersHelperPtr modifiersHelper_;
-        HappyHelperPtr happyHelper_;
-        HealthHelperPtr healthHelper_;
-        HurryHelperPtr hurryHelper_;      
-        MaintenanceHelperPtr maintenanceHelper_;
-        ReligionHelperPtr religionHelper_;
-        SpecialistHelperPtr specialistHelper_;
-        TradeRouteHelperPtr tradeRouteHelper_;
-
-        std::queue<CitySimulationEventPtr> events_;
-        bool includeUnclaimedPlots_;
-        int goldenAgeTurns_;*/
-    }
-
-    void CityData::read(FDataStreamBase* pStream)
-    {
-        /*int cityPopulation_, workingPopulation_, happyCap_;
-
-        int currentFood_, storedFood_, accumulatedProduction_;
-        int growthThreshold_, requiredProduction_;
-        int foodKeptPercent_;
-        int commerceYieldModifier_;
-
-        SpecialConditions specialConditions_;
-
-        std::stack<std::pair<BuildQueueTypes, int> > buildQueue_;
-
-        const CvCity* pCity_;
-        PlayerTypes owner_;
-        XYCoords coords_;
-
-        YieldModifier yieldModifier_;
-        CommerceModifier commerceModifier_, commercePercent_;
-
-        PlotDataList plotOutputs_, unworkablePlots_;
-        PlotDataList freeSpecOutputs_;
-        PlotData cityPlotOutput_;
-        GreatPersonOutputMap cityGreatPersonOutput_;
-
-        AreaHelperPtr areaHelper_;
-        BonusHelperPtr bonusHelper_;
-        BuildingsHelperPtr buildingsHelper_;
-        CivHelperPtr civHelper_;
-        CorporationHelperPtr corporationHelper_;
-        CultureHelperPtr cultureHelper_;
-        ModifiersHelperPtr modifiersHelper_;
-        HappyHelperPtr happyHelper_;
-        HealthHelperPtr healthHelper_;
-        HurryHelperPtr hurryHelper_;      
-        MaintenanceHelperPtr maintenanceHelper_;
-        ReligionHelperPtr religionHelper_;
-        SpecialistHelperPtr specialistHelper_;
-        TradeRouteHelperPtr tradeRouteHelper_;
-
-        std::queue<CitySimulationEventPtr> events_;
-        bool includeUnclaimedPlots_;
-        int goldenAgeTurns_;*/
-    }
-
     void CityData::debugSummary(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
-        os << " " << cityPlotOutput_.plotYield << " ";
+        os << " " << cityPlotOutput_.plotYield << "\n\t";
         for (PlotDataListConstIter iter(plotOutputs_.begin()), endIter(plotOutputs_.end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)

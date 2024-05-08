@@ -27,7 +27,7 @@ namespace AltAI
         void addPlayer(const PlayerPtr& pPlayer);
 
         //void pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pPlotEvent);
-        void updatePlotRevealed(const CvPlot* pPlot, bool isNew);
+        void updatePlotRevealed(const CvPlot* pPlot, bool isNew, bool isRevealed);
         void updatePlotBonus(const CvPlot* pPlot, BonusTypes revealedBonusType);
 
     private:

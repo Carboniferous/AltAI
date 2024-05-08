@@ -7,6 +7,7 @@ namespace AltAI
     class Player;
 	typedef boost::shared_ptr<Player> PlayerPtr;
     class Team;
+    typedef boost::shared_ptr<Team> TeamPtr;
 
     // singleton class which contains the current game state for all players
     class Game : boost::noncopyable
@@ -21,10 +22,10 @@ namespace AltAI
         void logMap(const CvMap& map) const;
 
         PlayerPtr getPlayer(PlayerTypes playerType) const;
-        boost::shared_ptr<Team> getTeam(TeamTypes teamType) const;
+        TeamPtr getTeam(TeamTypes teamType) const;
     private:
-        typedef std::map<PlayerTypes, PlayerPtr > PlayerMap;
-        typedef std::map<TeamTypes, boost::shared_ptr<Team> > TeamMap;
+        typedef std::map<PlayerTypes, PlayerPtr> PlayerMap;
+        typedef std::map<TeamTypes, TeamPtr> TeamMap;
 
         PlayerMap players_;
         TeamMap teams_;

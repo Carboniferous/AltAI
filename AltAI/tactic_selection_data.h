@@ -20,6 +20,11 @@ namespace AltAI
         void debug(std::ostream& os) const;
     };
 
+    struct CultureBuildingTacticValueComp
+    {
+        bool operator () (const CultureBuildingValue& first, const CultureBuildingValue& second) const;
+    };
+
     struct EconomicBuildingValue
     {
         EconomicBuildingValue() : buildingType(NO_BUILDING), nTurns(0)
@@ -33,6 +38,11 @@ namespace AltAI
 
         bool operator < (const EconomicBuildingValue& other) const;
         void debug(std::ostream& os) const;
+    };
+
+    struct EconomicBuildingTacticValueComp
+    {
+        bool operator () (const EconomicBuildingValue& first, const EconomicBuildingValue& second) const;
     };
 
     struct EconomicWonderValue
@@ -53,6 +63,18 @@ namespace AltAI
 
         bool operator < (const UnitTacticValue& other) const;
         void debug(std::ostream& os) const;
+    };
+
+    struct UnitTacticValueComp
+    {
+        // sort by unitAnalysisValue / nTurns
+        bool operator () (const UnitTacticValue& first, const UnitTacticValue& second) const;
+    };
+
+    struct UnitTacticTypeLevelComp
+    {
+        // sort by unitType + level
+        bool operator () (const UnitTacticValue& first, const UnitTacticValue& second) const;
     };
 
     struct MilitaryBuildingValue
@@ -84,13 +106,14 @@ namespace AltAI
 
     struct CivicValue
     {
-        CivicValue() : civicType(NO_CIVIC), cost(0)
+        CivicValue() : civicType(NO_CIVIC), cost(0), outputRateDelta(0)
         {
         }
 
         CivicTypes civicType;
         TotalOutput outputDelta;
-        int cost;
+        int cost, outputRateDelta;
+        std::pair<TotalOutput, TotalOutput> yieldOutputDelta;
 
         void debug(std::ostream& os) const;
     };
@@ -180,7 +203,7 @@ namespace AltAI
 
     struct TacticSelectionData
     {
-        TacticSelectionData() : getFreeTech(false), freeTechValue(0)
+        TacticSelectionData() : possibleFreeTech(NO_TECH)
         {
         }
 
@@ -212,8 +235,8 @@ namespace AltAI
             return T::value_type();
         }
 
-        std::multiset<CultureBuildingValue> smallCultureBuildings, largeCultureBuildings;
-        std::multiset<EconomicBuildingValue> economicBuildings;
+        std::set<CultureBuildingValue> smallCultureBuildings, largeCultureBuildings;
+        std::set<EconomicBuildingValue> economicBuildings;
         std::multiset<SettledSpecialistValue> settledSpecialists;
         std::map<BuildingTypes, std::vector<BuildingTypes> > buildingsCityCanAssistWith;
         std::map<BuildingTypes, std::vector<BuildingTypes> > dependentBuildings;
@@ -226,7 +249,8 @@ namespace AltAI
         std::map<UnitTypes, WorkerUnitValue> workerUnits;
         std::map<UnitTypes, SettlerUnitValue> settlerUnits;
         std::map<BonusTypes, std::vector<XYCoords> > connectableResources;
-        std::map<BonusTypes, TotalOutput> potentialResourceOutputDeltas;
+        std::map<BonusTypes, std::pair<TotalOutput, TotalOutput> > potentialResourceOutputDeltas;
+        std::map<BonusTypes, std::vector<BuildingTypes> > potentialAcceleratedBuildings; 
 
         std::list<CivicValue> civicValues;
 
@@ -234,16 +258,42 @@ namespace AltAI
 
         std::set<BuildingTypes> exclusions;
         TotalOutput cityImprovementsDelta;
-        bool getFreeTech;
-        int freeTechValue;
-        TotalOutput resourceOutput;
+        TechTypes possibleFreeTech;
+        TotalOutput baselineDelta, resourceOutput;
         
         std::map<ProcessTypes, TotalOutput> processOutputsMap;
 
         TotalOutput getEconomicBuildingOutput(BuildingTypes buildingType, IDInfo city) const;
 
-        static bool isSignificantTacticItem(const EconomicBuildingValue& tacticItemValue, TotalOutput currentOutput, const std::vector<OutputTypes>& outputTypes);
+        void eraseCityEntries(IDInfo city);
+
+        static bool isSignificantTacticItem(const EconomicBuildingValue& tacticItemValue, TotalOutput currentOutput, const int numTurns, const std::vector<OutputTypes>& outputTypes);
+        static int getUnitTacticValue(const std::set<UnitTacticValue>& unitValues);
+        static std::set<UnitTacticValue>::const_iterator getBestUnitTactic(const std::set<UnitTacticValue>& unitValues);
+        static std::list<std::pair<IDInfo, size_t> > getCityBuildTimes(const std::set<UnitTacticValue>& unitValues, UnitTypes unitType);
+        static std::list<std::pair<UnitTypes, int> > getUnitValueDiffs(const std::set<UnitTacticValue>& tacticUnitValues, const std::set<UnitTacticValue>& refUnitValues);
 
         void debug(std::ostream& os) const;
+    };
+
+    struct SpecialistCultureValue
+    {
+        SpecialistTypes specType;
+        int cultureRate;
+    };
+
+    struct UnitCultureValue
+    {
+        UnitTypes gpType;
+        int settleCulture, cultureRate;
+    };
+
+    struct CultureSelectionData
+    {
+        CultureSelectionData() : playerBaseRate(0), religionBaseRate(0) {}
+
+        std::list<CultureBuildingValue> buildings;
+        int playerBaseRate;
+        int religionBaseRate;
     };
 }

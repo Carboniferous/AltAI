@@ -14,7 +14,6 @@
 #include "./civ_log.h"
 #include "./error_log.h"
 #include "./game.h"
-#include "./city.h"
 
 namespace AltAI
 {
@@ -269,8 +268,8 @@ namespace AltAI
     class YieldsFinder : public boost::static_visitor<std::vector<std::pair<PlotYield, ImprovementTypes> > >
     {
     public:
-        YieldsFinder(PlayerTypes playerType, int lookaheadDepth)
-            : playerType_(playerType), lookaheadDepth_(lookaheadDepth)
+        YieldsFinder(PlayerTypes playerType, bool includeUpgrades, int lookaheadDepth)
+            : playerType_(playerType), includeUpgrades_(includeUpgrades), lookaheadDepth_(lookaheadDepth)
         {
             civHelper_ = gGlobals.getGame().getAltAI()->getPlayer(playerType_)->getCivHelper();
             pAnalysis_ = gGlobals.getGame().getAltAI()->getPlayer(playerType_)->getAnalysis();
@@ -347,7 +346,7 @@ namespace AltAI
             // ignore civic effects - just want to construct list of possible improvements
             result_type results(1, std::make_pair(getExtraYield(node.yield + node.bonusYield + totalTechYield + totalRouteYield, playerType_), node.improvementType));
 
-            if (!node.upgradeNode.empty())
+            if (includeUpgrades_ && !node.upgradeNode.empty())
             {
                 result_type upgradeResults((*this)(node.upgradeNode[0]));
                 for (size_t i = 0, count = upgradeResults.size(); i < count; ++i)
@@ -377,12 +376,13 @@ namespace AltAI
         PlayerTypes playerType_;
         boost::shared_ptr<CivHelper> civHelper_;
         boost::shared_ptr<PlayerAnalysis> pAnalysis_;
+        const bool includeUpgrades_;
         const int lookaheadDepth_;
     };
 
-    std::vector<std::pair<PlotYield, ImprovementTypes> > getYields(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, int lookaheadDepth)
+    std::vector<std::pair<PlotYield, ImprovementTypes> > getYields(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, bool includeUpgrades, int lookaheadDepth)
     {
-        return boost::apply_visitor(YieldsFinder(playerType, lookaheadDepth), node);
+        return boost::apply_visitor(YieldsFinder(playerType, includeUpgrades, lookaheadDepth), node);
     }
 
     class HasYieldVisitor : public boost::static_visitor<bool>
@@ -1045,6 +1045,10 @@ namespace AltAI
             upgrades.push_back(PlotData::UpgradeData::Upgrade(upgradeType, remainingTurns, boost::apply_visitor(UpgradeYieldChangeFinder(playerType, improvementType), node).second));
 
             turnsUntilUpgrade = getActualUpgradeTurns(gGlobals.getGame().getImprovementUpgradeTime(upgradeType), upgradeRate);
+            if (turnsUntilUpgrade > remainingTurns)
+            {
+                break;
+            }
             remainingTurns -= turnsUntilUpgrade;
             improvementType = upgradeType;
         }

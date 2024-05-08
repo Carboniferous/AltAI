@@ -6,6 +6,7 @@
 #include "./unit.h"
 #include "./tech_info_streams.h"
 #include "./building_info_visitors.h"
+#include "./buildings_info.h"
 #include "./helper_fns.h"
 #include "./civ_log.h"
 
@@ -13,6 +14,23 @@
 
 namespace AltAI
 {
+    namespace
+    {
+        std::vector<BuildTypes> getImpBuildTypes()
+        {
+            std::vector<BuildTypes> impBuildTypes(gGlobals.getNumImprovementInfos(), NO_BUILD);
+            for (int buildInfoIndex = 0, buildInfoCount = gGlobals.getNumBuildInfos(); buildInfoIndex < buildInfoCount; ++buildInfoIndex)
+            {
+                ImprovementTypes buildImpType = (ImprovementTypes)gGlobals.getBuildInfo((BuildTypes)buildInfoIndex).getImprovement();
+                if (buildImpType != NO_IMPROVEMENT)
+                {
+                    impBuildTypes[buildImpType] = (BuildTypes)buildInfoIndex;
+                }
+            }
+            return impBuildTypes;
+        }
+    }
+
     boost::shared_ptr<GameDataAnalysis> GameDataAnalysis::instance_;
 
     boost::shared_ptr<GameDataAnalysis> GameDataAnalysis::getInstance()
@@ -163,7 +181,11 @@ namespace AltAI
 
     BuildTypes GameDataAnalysis::getBuildTypeForImprovementType(ImprovementTypes improvementType)
     {
-        if (improvementType != NO_IMPROVEMENT)
+        static std::vector<BuildTypes> buildTypesForImpTypes = getImpBuildTypes();
+
+        return improvementType != NO_IMPROVEMENT ? buildTypesForImpTypes[improvementType] : NO_BUILD;
+
+        /*if (improvementType != NO_IMPROVEMENT)
         {
             for (int i = 0, count = gGlobals.getNumBuildInfos(); i < count; ++i)
             {
@@ -174,7 +196,7 @@ namespace AltAI
             }
         }
 
-        return NO_BUILD;
+        return NO_BUILD;*/
     }
 
     BuildTypes GameDataAnalysis::getBuildTypeForRouteType(RouteTypes routeType)

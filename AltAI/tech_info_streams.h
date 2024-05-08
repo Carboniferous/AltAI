@@ -4,6 +4,8 @@
 
 namespace AltAI
 {
+    class TechInfo;
+
     std::ostream& operator << (std::ostream& os, const TechInfo::NullNode& node);
     std::ostream& operator << (std::ostream& os, const TechInfo::BaseNode& node);
     std::ostream& operator << (std::ostream& os, const TechInfo::BuildingNode& node);

@@ -181,9 +181,19 @@ namespace AltAI
             return requiredProduction_;
         }
 
+        void setRequiredProduction(int requiredProduction)
+        {
+            requiredProduction_ = requiredProduction;
+        }
+
         int getAccumulatedProduction() const
         {
             return accumulatedProduction_;
+        }
+
+        void setAccumulatedProduction(int accumulatedProduction)
+        {
+            accumulatedProduction_ = accumulatedProduction;
         }
 
         void updateProduction(int nTurns);
@@ -424,8 +434,8 @@ namespace AltAI
         }
 
         // save/load functions
-        void write(FDataStreamBase* pStream) const;
-        void read(FDataStreamBase* pStream);
+        /*void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);*/
 
         void debugSummary(std::ostream& os) const;
 

@@ -3,11 +3,13 @@
 #include "./iters.h"
 #include "./game.h"
 #include "./player.h"
-#include "./city.h"
+#include "./unit_tactics.h"
 #include "./utils.h"
 #include "./gamedata_analysis.h"
+#include "./map_analysis.h"
 #include "./unit.h"
 #include "./unit_log.h"
+#include "./civ_log.h"
 #include "./save_utils.h"
 
 #include "../CvGameCoreDLL/CvDLLEngineIFaceBase.h"
@@ -183,6 +185,16 @@ namespace AltAI
 
     struct MoveToMission
     {
+        struct MoveToRouteData
+        {
+            MoveToRouteData() : moveCost(MAX_INT), movesLeft(MAX_INT) {}
+            MoveToRouteData(XYCoords coords_, size_t moveCost_, size_t movesLeft_)
+                : coords(coords_), moveCost(moveCost_), movesLeft(movesLeft_) {}
+
+            XYCoords coords;
+            size_t moveCost, movesLeft;
+        };
+
         explicit MoveToMission(const CvUnitAI* pUnit)
             : pUnit_(pUnit), playerType_(pUnit->getOwner()), teamType_(pUnit->getTeam()), unitBaseMoves_(pUnit->baseMoves())
         {
@@ -204,6 +216,7 @@ namespace AltAI
         {
 #ifdef ALTAI_DEBUG
             std::ostream& os = UnitLog::getLog(*gGlobals.getGame().getAltAI()->getPlayer(pUnit_->getOwner())->getCvPlayer())->getStream();
+            std::vector<MoveToRouteData> routeData;
             os << "\nCost for moving from: " << pStartPlot->getCoords() << " to: " << pTargetPlot->getCoords();
 #endif
             FAStar* pStepFinder;
@@ -216,10 +229,11 @@ namespace AltAI
                 pStepFinder = gDLL->getFAStarIFace()->create();
             }
             CvMap& theMap = gGlobals.getMap();
-            gDLL->getFAStarIFace()->Initialize(pStepFinder, theMap.getGridWidth(), theMap.getGridHeight(), theMap.isWrapX(), theMap.isWrapY(), stepDestValid, stepHeuristic, stepCost, areaStepValidWithFlags, stepAdd, NULL, NULL);
+            gDLL->getFAStarIFace()->Initialize(pStepFinder, theMap.getGridWidth(), theMap.getGridHeight(), theMap.isWrapX(), theMap.isWrapY(), stepDestValid, pathHeuristic, pathCost, areaStepValidWithFlags, stepAdd, NULL, NULL);
+            gDLL->getFAStarIFace()->SetData(pStepFinder, pUnit_->getGroup());
 
             int totalCost = MAX_INT;
-            if (gDLL->getFAStarIFace()->GeneratePath(pStepFinder, pStartPlot->getX(), pStartPlot->getY(), pTargetPlot->getX(), pTargetPlot->getY(), false, stepFinderInfo_, true))
+            if (gDLL->getFAStarIFace()->GeneratePath(pStepFinder, pStartPlot->getX(), pStartPlot->getY(), pTargetPlot->getX(), pTargetPlot->getY(), false, stepFinderInfo_, false))
             {
                 std::list<CvPlot*> path;
                 FAStarNode* pNode = gDLL->getFAStarIFace()->GetLastNode(pStepFinder);
@@ -243,8 +257,7 @@ namespace AltAI
 
                     availableMoves = std::max<int>(availableMoves - plotMovementCost, 0);
 #ifdef ALTAI_DEBUG
-                    os << "\n\tmoves after moving to plot: " << pPlot->getCoords() << " = " << availableMoves
-                       << " actual movement cost = " << plotMovementCost;
+                    routeData.push_back(MoveToRouteData((*pathIter)->getCoords(), plotMovementCost, availableMoves));
 #endif
                     if (availableMoves == 0)
                     {
@@ -252,9 +265,6 @@ namespace AltAI
                         availableMoves = unitBaseMoves_;
                     }
 
-#ifdef ALTAI_DEBUG
-                    os << "\n\tactual cost = " << actualCost;
-#endif
                     totalCost += actualCost;
                     pPreviousPlot = pPlot;
                 }                
@@ -264,7 +274,13 @@ namespace AltAI
             {
                 gDLL->getFAStarIFace()->destroy(pStepFinder);
             }
-
+#ifdef ALTAI_DEBUG
+            for (size_t i = 0; i < routeData.size(); ++i)
+            {
+                if (i > 0) os << ", ";
+                os << routeData[i].coords << " l=" << routeData[i].movesLeft << " c=" << routeData[i].moveCost;
+            }
+#endif
             return totalCost;
         }
 
@@ -330,19 +346,26 @@ namespace AltAI
 
     namespace
     {
-        int calculateBuildMissionLength(const CvUnitAI* pUnit, const CvPlot* pStartPlot, const CvPlot* pTargetPlot, BuildTypes buildType)
+        int calculateBuildMissionLength(const CvUnitAI* pUnit, const CvPlot* pStartPlot, const CvPlot* pTargetPlot, BuildTypes buildType, int iFlags)
         {
             int missionLength = 0;
 
-            if (pTargetPlot->getX() != pUnit->getX() || pTargetPlot->getY() != pUnit->getY())
+            if (pTargetPlot->getX() != pStartPlot->getX() || pTargetPlot->getY() != pStartPlot->getY())
             {
-                MoveToMission moveToMission(pUnit);
-                missionLength += moveToMission(pStartPlot, pTargetPlot);
+                UnitPathData unitPathData;
+                unitPathData.calculate(pUnit->getGroup(), pTargetPlot, iFlags);
+                //MoveToMission moveToMission(pUnit);
+                missionLength += unitPathData.pathTurns; // moveToMission(pStartPlot, pTargetPlot);
             }
 
             if (missionLength != MAX_INT)
             {
-                missionLength += (pTargetPlot->getBuildTime(buildType) - pTargetPlot->getBuildProgress(buildType)) / pUnit->workRate(true);
+                const int buildTime = pTargetPlot->getBuildTime(buildType), buildProgress = pTargetPlot->getBuildProgress(buildType), workRate = pUnit->workRate(true);
+                missionLength += (buildTime - buildProgress) / workRate;
+                if ((buildTime - buildProgress) % workRate > 0)
+                {
+                    ++missionLength;
+                }
             }
 
             return missionLength;
@@ -352,8 +375,11 @@ namespace AltAI
         {
             int missionLength = 0;
 
-            RouteToMission routeToMission(pUnit, routeType);
-            missionLength += routeToMission(pStartPlot, pTargetPlot);
+            if (pStartPlot->getCoords() != pTargetPlot->getCoords())
+            {
+                RouteToMission routeToMission(pUnit, routeType);
+                missionLength += routeToMission(pStartPlot, pTargetPlot);
+            }
 
             return missionLength;
         }
@@ -362,8 +388,11 @@ namespace AltAI
         {
             int missionLength = 0;
 
-            MoveToMission moveToMission(pUnit);
-            missionLength += moveToMission(pStartPlot, pTargetPlot);
+            if (pStartPlot->getCoords() != pTargetPlot->getCoords())
+            {
+                MoveToMission moveToMission(pUnit);
+                missionLength += moveToMission(pStartPlot, pTargetPlot);
+            }
 
             return missionLength;
         }
@@ -378,7 +407,7 @@ namespace AltAI
         return pUnit_->getID() < other.pUnit_->getID();
     }
 
-    void Unit::pushWorkerMission(size_t turn, const CvCity* pCity, const CvPlot* pTargetPlot, MissionTypes missionType, BuildTypes buildType)
+    void Unit::pushWorkerMission(size_t turn, const CvCity* pCity, const CvPlot* pTargetPlot, MissionTypes missionType, BuildTypes buildType, int iFlags)
     {
         int thisMissionLength = 1;
         XYCoords startCoords;
@@ -399,11 +428,18 @@ namespace AltAI
         }
         else if (missionType == MISSION_MOVE_TO)
         {
-            thisMissionLength = calculateMoveToMissionLength(pUnit_, pStartPlot, pTargetPlot);
+            UnitPathData unitPathData;
+            // todo - add flags if have escort
+            unitPathData.calculate(pUnit_->getGroup(), pTargetPlot, iFlags);
+            thisMissionLength = unitPathData.pathTurns;
         }
         else if (missionType == MISSION_BUILD)
         {
-            thisMissionLength = calculateBuildMissionLength(pUnit_, pStartPlot, pTargetPlot, buildType);
+            thisMissionLength = calculateBuildMissionLength(pUnit_, pStartPlot, pTargetPlot, buildType, iFlags);
+        }
+        else if (missionType == MISSION_MOVE_TO_UNIT)
+        {
+            thisMissionLength = calculateMoveToMissionLength(pUnit_, pStartPlot, pTargetPlot);
         }
         else if (missionType == MISSION_SKIP)
         {
@@ -416,7 +452,7 @@ namespace AltAI
         //    return;
         //}
 
-        workerMissions_.push_back(Mission(pUnit_, pCity, pTargetPlot, missionType, buildType, thisMissionLength, startCoords));
+        workerMissions_.push_back(WorkerMission(pUnit_, pCity, pTargetPlot, missionType, buildType, iFlags, thisMissionLength, startCoords));
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*gGlobals.getGame().getAltAI()->getPlayer(pUnit_->getOwner())->getCvPlayer())->getStream();
@@ -439,7 +475,7 @@ namespace AltAI
     }
 
     // todo - is this always called when unit has moves available?
-    void Unit::updateMission()
+    /*void Unit::updateMission()
     {
         if (workerMissions_.empty())
         {
@@ -449,7 +485,7 @@ namespace AltAI
         if (workerMissions_[0].missionType == MISSION_BUILD)
         {
             workerMissions_[0].length = !pUnit_->canBuild(workerMissions_[0].getTarget(), workerMissions_[0].buildType)
-                ? 0 : calculateBuildMissionLength(pUnit_, pUnit_->plot(), workerMissions_[0].getTarget(), workerMissions_[0].buildType);
+                ? 0 : calculateBuildMissionLength(pUnit_, pUnit_->plot(), workerMissions_[0].getTarget(), workerMissions_[0].buildType, workerMissions_[0].iFlags);
         }
         else if (workerMissions_[0].missionType == MISSION_ROUTE_TO)
         {
@@ -458,14 +494,14 @@ namespace AltAI
 
         if (workerMissions_[0].length == 0)
         {
-            std::vector<Mission> remainingMissions;
+            std::vector<WorkerMission> remainingMissions;
             for (size_t i = 1, count = workerMissions_.size(); i < count; ++i)
             {
                 remainingMissions.push_back(workerMissions_[i]);
             }
             workerMissions_ = remainingMissions;
         }
-    }
+    }*/
 
     void Unit::updateMission(const CvPlot* pOldPlot, const CvPlot* pNewPlot)
     {
@@ -484,7 +520,7 @@ namespace AltAI
         }
         else
         {
-            std::vector<Mission> remainingMissions;
+            std::vector<WorkerMission> remainingMissions;
             for (size_t i = 1, count = workerMissions_.size(); i < count; ++i)
             {
                 remainingMissions.push_back(workerMissions_[i]);
@@ -512,11 +548,11 @@ namespace AltAI
         missions_.push_back(pMission);
     }
 
-    bool Unit::hasWorkerMissionAt(const CvPlot* pTargetPlot) const
+    bool Unit::hasWorkerMissionAt(XYCoords targetCoords) const
     {
-        for (std::vector<Mission>::const_iterator ci(workerMissions_.begin()), ciEnd(workerMissions_.end()); ci != ciEnd; ++ci)
+        for (std::vector<WorkerMission>::const_iterator ci(workerMissions_.begin()), ciEnd(workerMissions_.end()); ci != ciEnd; ++ci)
         {
-            if (ci->isWorkerMissionAt(pTargetPlot->getCoords()))
+            if (ci->isWorkerMissionAt(targetCoords))
             {
                 return true;
             }
@@ -527,7 +563,7 @@ namespace AltAI
 
     bool Unit::hasBuildOrRouteMission() const
     {
-        for (std::vector<Mission>::const_iterator ci(workerMissions_.begin()), ciEnd(workerMissions_.end()); ci != ciEnd; ++ci)
+        for (std::vector<WorkerMission>::const_iterator ci(workerMissions_.begin()), ciEnd(workerMissions_.end()); ci != ciEnd; ++ci)
         {
             if (ci->buildType != NO_BUILD || ci->missionType == MISSION_ROUTE_TO)
             {
@@ -540,7 +576,7 @@ namespace AltAI
 
     bool Unit::isWorkerMissionFor(const CvCity* pCity) const
     {
-        for (std::vector<Mission>::const_iterator ci(workerMissions_.begin()), ciEnd(workerMissions_.end()); ci != ciEnd; ++ci)
+        for (std::vector<WorkerMission>::const_iterator ci(workerMissions_.begin()), ciEnd(workerMissions_.end()); ci != ciEnd; ++ci)
         {
             if (ci->isWorkerMissionFor(pCity))
             {
@@ -551,7 +587,12 @@ namespace AltAI
         return false;
     }
 
-    const std::vector<Unit::Mission>& Unit::getWorkerMissions() const
+    const std::vector<Unit::WorkerMission>& Unit::getWorkerMissions() const
+    {
+        return workerMissions_;
+    }
+
+    std::vector<Unit::WorkerMission>& Unit::getWorkerMissions()
     {
         return workerMissions_;
     }
@@ -572,55 +613,137 @@ namespace AltAI
         pStream->Read(&workerMissionCount);
         for (size_t i = 0; i < workerMissionCount; ++i)
         {
-            workerMissions_.push_back(Mission(pUnit_));
+            workerMissions_.push_back(WorkerMission(pUnit_));
+            int typeID;
+            pStream->Read(&typeID);  // for factory creation - ignore here
             workerMissions_.rbegin()->read(pStream);
         }
     }
 
-    Unit::Mission::Mission(const CvUnitAI* pUnit)
-        : pUnit_(pUnit), 
+    Unit::WorkerMission::WorkerMission() :
+        targetCoords(-1, -1), missionType(NO_MISSION), buildType(NO_BUILD), iFlags(0), length(-1), startCoords(-1, -1)
+    {
+    }
+
+    Unit::WorkerMission::WorkerMission(const CvUnitAI* pUnit)
+        : unit(pUnit->getIDInfo()), 
           targetCoords(-1, -1), 
-          missionType(NO_MISSION), buildType(NO_BUILD), length(-1), startCoords(-1, -1)
+          missionType(NO_MISSION), buildType(NO_BUILD), iFlags(0), length(-1), startCoords(-1, -1)
     {
     }
 
-    Unit::Mission::Mission(const CvUnitAI* pUnit, const CvCity* pCity, const CvPlot* pTargetPlot, MissionTypes missionType_, BuildTypes buildType_, int length_, XYCoords startCoords_)
-        : pUnit_(pUnit), city(pCity ? pCity->getIDInfo() : IDInfo()), 
+    Unit::WorkerMission::WorkerMission(IDInfo unit_, IDInfo city_, XYCoords targetCoords_, MissionTypes missionType_, BuildTypes buildType_, int iFlags_, int length_, XYCoords startCoords_)
+        : unit(unit_), city(city_), targetCoords(targetCoords_), 
+          missionType(missionType_), buildType(buildType_), iFlags(iFlags_),
+          length(length_), startCoords(startCoords_)
+    {
+    }
+
+    Unit::WorkerMission::WorkerMission(const CvUnitAI* pUnit, const CvCity* pCity, const CvPlot* pTargetPlot, MissionTypes missionType_, BuildTypes buildType_, int iFlags_, int length_, XYCoords startCoords_)
+        : unit(pUnit->getIDInfo()), city(pCity ? pCity->getIDInfo() : IDInfo()), 
           targetCoords(pTargetPlot->getCoords()), 
-          missionType(missionType_), buildType(buildType_), length(length_), startCoords(startCoords_)
+          missionType(missionType_), buildType(buildType_), iFlags(iFlags_), length(length_), startCoords(startCoords_)
     {
     }
 
-    bool Unit::Mission::isWorkerMissionAt(XYCoords coords) const
+    bool Unit::WorkerMission::isWorkerMissionAt(XYCoords coords) const
     {
         return (missionType == MISSION_ROUTE_TO || missionType == MISSION_BUILD) && buildType != NO_BUILD && targetCoords == coords;
     }
 
-    bool Unit::Mission::isWorkerMissionFor(const CvCity* pCity) const
+    bool Unit::WorkerMission::isWorkerMissionFor(const CvCity* pCity) const
     {
         return pCity->getIDInfo() == city;
     }
 
-    const CvUnitAI* Unit::Mission::getUnit() const
+    bool Unit::WorkerMission::canStartMission() const
     {
-        return pUnit_;
+        const CvUnit* pUnit = ::getUnit(unit);
+        if (pUnit)
+        {
+            const bool unitAtPlot = pUnit->plot()->getCoords() == targetCoords;
+            const bool unitCanBuild = buildType != NO_BUILD && pUnit->canBuild(gGlobals.getMap().plot(targetCoords.iX, targetCoords.iY), buildType);
+            if (missionType == MISSION_MOVE_TO)
+            {
+                if (!unitAtPlot)
+                {
+                    UnitPathData unitPathData;
+                    // todo - add flags if have escort
+                    unitPathData.calculate(pUnit->getGroup(), gGlobals.getMap().plot(targetCoords.iX, targetCoords.iY), iFlags);
+
+                    return unitPathData.valid;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else if (missionType == MISSION_BUILD)  // used for road building now too - so MISSION_ROUTE_TO is probably not required here
+            {
+                return unitAtPlot && unitCanBuild;
+            }
+            else if (missionType == MISSION_ROUTE_TO)
+            {
+                // either we're at the target plot, in which case check we need to build a route there, or..
+                // unit is not at the target plot - in which case - can we build the route type on this plot before moving to the target
+                return (unitAtPlot && unitCanBuild) || (!unitAtPlot && pUnit->canBuild(pUnit->plot(), buildType));
+            }
+            else if (missionType == MISSION_SKIP)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
-    CvPlot* Unit::Mission::getTarget() const
+    bool Unit::WorkerMission::isBorderMission(const boost::shared_ptr<MapAnalysis>& pMapAnalysis) const
+    {
+        const CvPlot* pMissionTarget = getTarget();
+        bool isBorderMission = false;
+        if (pMissionTarget)
+        {                                        
+            PlayerTypes targetOwner = pMissionTarget->getOwner();
+            isBorderMission = targetOwner == NO_PLAYER || pMapAnalysis->isOurBorderPlot(pMissionTarget->getSubArea(), pMissionTarget->getCoords());
+        }
+        return isBorderMission;
+    }
+
+    const CvUnitAI* Unit::WorkerMission::getUnit() const
+    {
+        return (const CvUnitAI*)::getUnit(unit);
+    }
+
+    CvPlot* Unit::WorkerMission::getTarget() const
     {
         return gGlobals.getMap().plot(targetCoords.iX, targetCoords.iY);
     }
 
-    bool Unit::Mission::isComplete() const
+    bool Unit::WorkerMission::isComplete() const
     {
+        const CvUnit* pUnit = ::getUnit(unit);
+        if (!pUnit)
+        {
+            return false;
+        }
+
         switch (missionType)
         {
             case MISSION_MOVE_TO:
-                return pUnit_->at(targetCoords.iX, targetCoords.iY);
+                {
+                    bool missionComplete = pUnit->at(targetCoords.iX, targetCoords.iY);
+#ifdef ALTAI_DEBUG
+                    if (!missionComplete)
+                    {
+                        std::ostream& os = UnitLog::getLog(*gGlobals.getGame().getAltAI()->getPlayer(pUnit->getOwner())->getCvPlayer())->getStream();
+                        os << "\nmission not completed for move to: " << targetCoords;
+                    }
+#endif
+                    return missionComplete;
+                }
             case MISSION_ROUTE_TO:
                 {
 #ifdef ALTAI_DEBUG
-                    std::ostream& os = UnitLog::getLog(*gGlobals.getGame().getAltAI()->getPlayer(pUnit_->getOwner())->getCvPlayer())->getStream();
+                    std::ostream& os = UnitLog::getLog(*gGlobals.getGame().getAltAI()->getPlayer(pUnit->getOwner())->getCvPlayer())->getStream();
                     os << "\nChecking mission complete for route from: " << startCoords << " to " << targetCoords;
 #endif
                     CvMap& theMap = gGlobals.getMap();
@@ -651,7 +774,7 @@ namespace AltAI
                         FAStar* pSubAreaStepFinder = gDLL->getFAStarIFace()->create();
                     
                         gDLL->getFAStarIFace()->Initialize(pSubAreaStepFinder, theMap.getGridWidth(), theMap.getGridHeight(), theMap.isWrapX(), theMap.isWrapY(), subAreaStepDestValid, stepHeuristic, stepCost, subAreaStepValid, stepAdd, NULL, NULL);
-                        const int stepFinderInfo = MAKEWORD((short)pUnit_->getOwner(), (short)(SubAreaStepFlags::Team_Territory | SubAreaStepFlags::Unowned_Territory));
+                        const int stepFinderInfo = MAKEWORD((short)pUnit->getOwner(), (short)(SubAreaStepFlags::Team_Territory | SubAreaStepFlags::Unowned_Territory));
 
                         bool complete = true;  // assume we're done if no path is found since we don't want to repeat the mission anyway in that case (e.g. border change could cause this)
                         gDLL->getFAStarIFace()->GeneratePath(pSubAreaStepFinder, startCoords.iX, startCoords.iY, targetCoords.iX, targetCoords.iY, false, stepFinderInfo);
@@ -679,7 +802,7 @@ namespace AltAI
                     const CvPlot* pPlot = gGlobals.getMap().plot(targetCoords.iX, targetCoords.iY);
                     const CvBuildInfo& buildInfo = gGlobals.getBuildInfo(buildType);
 #ifdef ALTAI_DEBUG
-                    std::ostream& os = UnitLog::getLog(*gGlobals.getGame().getAltAI()->getPlayer(pUnit_->getOwner())->getCvPlayer())->getStream();
+                    std::ostream& os = CivLog::getLog(*gGlobals.getGame().getAltAI()->getPlayer(pUnit->getOwner())->getCvPlayer())->getStream(); //UnitLog::getLog(*gGlobals.getGame().getAltAI()->getPlayer(pUnit_->getOwner())->getCvPlayer())->getStream();
                     os << "\nChecking mission complete for build: " << buildInfo.getType() << " at: " << targetCoords;
 #endif
                     ImprovementTypes buildImprovementType = (ImprovementTypes)buildInfo.getImprovement();
@@ -707,72 +830,151 @@ namespace AltAI
                     return !unremovedFeature;
                 }
             case MISSION_SKIP:
-                return true;
+                return pUnit->getGroup()->getActivityType() == ACTIVITY_AWAKE;
             default:
                 return false;
         }
     }
 
-    CvCity* Unit::Mission::getTargetCity() const
+    CvCity* Unit::WorkerMission::getTargetCity() const
     {
         return city.eOwner == NO_PLAYER ? NULL : ::getCity(city);
     }
 
-    UnitAITypes Unit::Mission::getAIType() const
+    UnitAITypes Unit::WorkerMission::getAIType() const
     {
         return UNITAI_WORKER;
     }
 
-    void Unit::Mission::update()
+    void Unit::WorkerMission::update()
     {
-        const CvPlot* pTargetPlot = gGlobals.getMap().plot(targetCoords.iX, targetCoords.iY);
+        const CvUnitAI* pUnit = (const CvUnitAI*)::getUnit(unit);
+        if (pUnit)
+        {
+            const CvPlot* pTargetPlot = gGlobals.getMap().plot(targetCoords.iX, targetCoords.iY),
+                *pStartPlot = gGlobals.getMap().plot(startCoords.iX, startCoords.iY);
 
-        if (missionType == MISSION_BUILD)
-        {
-            length = !pUnit_->canBuild(pTargetPlot, buildType) ? 0 : calculateBuildMissionLength(pUnit_, pUnit_->plot(), pTargetPlot, buildType);
-        }
-        else if (missionType == MISSION_ROUTE_TO)
-        {
-            length = calculateRouteToMissionLength(pUnit_, pUnit_->plot(), pTargetPlot, (RouteTypes)gGlobals.getBuildInfo(buildType).getRoute());
-        }
-        else if (missionType == MISSION_MOVE_TO)
-        {
-            length = calculateMoveToMissionLength(pUnit_, pUnit_->plot(), pTargetPlot);
-        }
+            if (missionType == MISSION_BUILD)
+            {
+                length = !pUnit->canBuild(pTargetPlot, buildType) ? 0 : calculateBuildMissionLength(pUnit, pStartPlot, pTargetPlot, buildType, iFlags);
+            }
+            else if (missionType == MISSION_ROUTE_TO)
+            {
+                UnitPathData unitPathData;
+                unitPathData.calculate(pUnit->getGroup(), pTargetPlot, iFlags);
+                length = unitPathData.pathTurns; // calculateRouteToMissionLength(pUnit, pUnit->plot(), pTargetPlot, (RouteTypes)gGlobals.getBuildInfo(buildType).getRoute());
+            }
+            else if (missionType == MISSION_MOVE_TO)
+            {
+                length = calculateMoveToMissionLength(pUnit, pUnit->plot(), pTargetPlot);
+            }
+            // skip MISSION_SKIP
+        }        
     }
 
-    void Unit::Mission::debug(std::ostream& os) const
+    void Unit::WorkerMission::debug(std::ostream& os) const
     {
         CvWString missionTypeString;
         getMissionTypeString(missionTypeString, missionType);
         const CvCity* pTargetCity = ::getCity(city);
 
-        os << " Mission: city = " << (pTargetCity ? narrow(pTargetCity->getName()) : "none")
+        os << "\n\t WorkerMission: unit: " << unit << " city = " << (pTargetCity ? narrow(pTargetCity->getName()) : "none")
            << " target = " << targetCoords << " mission = " << narrow(missionTypeString)
            << " build = " << (buildType == NO_BUILD ? "none" : gGlobals.getBuildInfo(buildType).getType()) << " mission length = " << length;
     }
 
-    void Unit::Mission::write(FDataStreamBase* pStream) const
+    void Unit::WorkerMission::write(FDataStreamBase* pStream) const
     {
+        pStream->Write(ID);
+
+        unit.write(pStream);
         city.write(pStream);
-        pStream->Write(startCoords.iX);
-        pStream->Write(startCoords.iY);
-        pStream->Write(targetCoords.iX);
-        pStream->Write(targetCoords.iY);
+        startCoords.write(pStream);
+        targetCoords.write(pStream);        
         pStream->Write(missionType);
         pStream->Write(buildType);
+        pStream->Write(iFlags);
+        pStream->Write(missionFlags);
         pStream->Write(length);
     }
 
-    void Unit::Mission::read(FDataStreamBase* pStream)
+    void Unit::WorkerMission::read(FDataStreamBase* pStream)
     {
+        unit.read(pStream);
         city.read(pStream);
-        pStream->Read(&startCoords.iX);
-        pStream->Read(&startCoords.iY);
-        pStream->Read(&targetCoords.iX);
-        pStream->Read(&targetCoords.iY);
+        startCoords.read(pStream);
+        targetCoords.read(pStream);
         pStream->Read((int*)&missionType);
         pStream->Read((int*)&buildType);
+        pStream->Read(&iFlags);
+        pStream->Read(&missionFlags);
         pStream->Read(&length);
+    }
+
+    void debugUnit(std::ostream& os, const CvUnit* pUnit)
+    {
+        os << pUnit->getUnitInfo().getType() << " at: " << pUnit->plot()->getCoords();
+        if (pUnit->currHitPoints() < pUnit->maxHitPoints())
+        {
+            os << " hp = " << pUnit->currHitPoints() << ' ';
+        }
+
+        bool hasPromotions = false;
+        for (size_t i = 0, count = gGlobals.getNumPromotionInfos(); i < count; ++i)
+        {
+            if (pUnit->isHasPromotion((PromotionTypes)i))
+            {
+                if (!hasPromotions) { hasPromotions = true; os << "("; } else { os << " "; }
+                os << gGlobals.getPromotionInfo((PromotionTypes)i).getType();
+            }
+        }
+        if (hasPromotions) os << ")";
+    }
+
+    void debugUnitVector(std::ostream& os, const std::vector<const CvUnit*>& units)
+    {
+        for (size_t i = 0, count = units.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            debugUnit(os, units[i]);
+        }
+    }
+
+    void debugUnitIDInfoVector(std::ostream& os, const std::vector<IDInfo>& units)
+    {
+        for (size_t i = 0, count = units.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            os << units[i] << " - ";
+            const CvUnit* pUnit = ::getUnit(units[i]);
+            if (pUnit)
+            {
+                debugUnit(os, pUnit);
+            }
+            else
+            {
+                os << " (not found) ";
+            }
+        }
+    }
+
+    void debugUnitSet(std::ostream& os, const std::set<IDInfo>& units)
+    {
+        bool first = true;
+        for (std::set<IDInfo>::const_iterator unitsIter(units.begin()), unitsEndIter(units.end()); unitsIter != unitsEndIter; ++unitsIter)
+        {
+            if (!first) os << ", ";
+            os << *unitsIter << " - ";
+            const CvUnit* pUnit = ::getUnit(*unitsIter);
+            if (pUnit)
+            {
+                debugUnit(os, pUnit);
+            }
+            else
+            {
+                os << " (not found)";
+            }
+            first = false;
+        }
     }
 }

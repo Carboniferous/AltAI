@@ -15,4 +15,6 @@ namespace AltAI
     private:
         boost::shared_ptr<GreatPeopleAnalysisImpl> pImpl_;
     };
+
+    bool getSpecialistBuild(const PlayerTactics& playerTactics, CvUnitAI* pUnit);
 }

@@ -24,6 +24,7 @@ namespace AltAI
     int getNumVassalCities(const CvPlayer& player);
     bool isFriendlyCity(TeamTypes teamId, const CvCity* pCity);
     std::vector<int> getBorderingSubAreas(TeamTypes teamId, const CvPlot* pPlot);
+    int getStepDistanceToClosestCity(const CvPlayer& player, const CvPlot* pPlot, bool sameArea);
 
     BuildingClassTypes getBuildingClass(BuildingTypes buildingType);
     BuildingTypes getPlayerVersion(PlayerTypes playerType, BuildingClassTypes buildingClassType);

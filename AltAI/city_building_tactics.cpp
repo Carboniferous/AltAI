@@ -25,6 +25,11 @@ namespace AltAI
         return city_;
     }
 
+    CityDataPtr CityBuildingTactic::getCityData() const
+    {
+        return pCityData_;
+    }
+
     void CityBuildingTactic::addTactic(const ICityBuildingTacticPtr& pBuildingTactic)
     {
         buildingTactics_.push_back(pBuildingTactic);
@@ -50,11 +55,11 @@ namespace AltAI
         return techDependencies_;
     }
 
-    void CityBuildingTactic::update(const Player& player, const CityDataPtr& pCityData)
+    void CityBuildingTactic::update(Player& player, const CityDataPtr& pCityData)
     {
         hurryProjections_.clear();
-        CityDataPtr pCopyCityData = pCityData->clone();
-        pCopyCityData->pushBuilding(buildingType_);
+        pCityData_ = pCityData->clone();
+        pCityData_->pushBuilding(buildingType_);
 
         std::vector<IProjectionEventPtr> events;
         boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(buildingType_);
@@ -63,17 +68,18 @@ namespace AltAI
             pBuildingInfo = player.getAnalysis()->getSpecialBuildingInfo(buildingType_);
         }
 
-        events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCopyCityData->getCity(), pBuildingInfo)));
+        events.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pCityData_->getCity(), pBuildingInfo)));
 
         if (compFlag_ != No_Comparison)
         {
             ConstructItem constructItem(buildingType_);
-            projection_ = getProjectedOutput(player, pCopyCityData, 30, events, constructItem, __FUNCTION__, false);
+            const int numSimTurns = player.getAnalysis()->getNumSimTurns();
+            projection_ = getProjectedOutput(player, pCityData_, numSimTurns, events, constructItem, __FUNCTION__, false, true);
 
             int accumulatedTurns = 0;
             for (size_t i = 0, entryCount = projection_.entries.size(); i < entryCount; ++i)
             {
-                for (size_t j = 0, hurryCount = projection_.entries[i].hurryData.size(); j < hurryCount; ++j)
+                /*for (size_t j = 0, hurryCount = projection_.entries[i].hurryData.size(); j < hurryCount; ++j)
                 {
                     CityDataPtr pHurryCityData = pCityData->clone();
                     pHurryCityData->pushBuilding(buildingType_);
@@ -81,14 +87,14 @@ namespace AltAI
                     std::vector<IProjectionEventPtr> hurryEvents;
                     hurryEvents.push_back(IProjectionEventPtr(new ProjectionBuildingEvent(pHurryCityData->getCity(), pBuildingInfo, 
                         std::make_pair(projection_.entries[i].hurryData[j].hurryType, accumulatedTurns))));
-                    hurryProjections_.push_back(getProjectedOutput(player, pHurryCityData, 30, hurryEvents, constructItem, __FUNCTION__, false));
-                }
+                    hurryProjections_.push_back(getProjectedOutput(player, pHurryCityData, numSimTurns, hurryEvents, constructItem, __FUNCTION__, false));
+                }*/
                 accumulatedTurns += projection_.entries[i].turns;
             }
         }
     }
 
-    void CityBuildingTactic::updateDependencies(const Player& player, const CvCity* pCity)
+    void CityBuildingTactic::updateDependencies(Player& player, const CvCity* pCity)
     {
         std::vector<IDependentTacticPtr>::iterator iter = std::remove_if(dependentTactics_.begin(), dependentTactics_.end(), IsNotRequired(player, pCity));
         dependentTactics_.erase(iter, dependentTactics_.end());
@@ -174,11 +180,11 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         os << "\nCity building: " << gGlobals.getBuildingInfo(buildingType_).getType() << " projection: ";
         projection_.debug(os);
-        for (size_t i = 0, count = hurryProjections_.size(); i < count; ++i)
+        /*for (size_t i = 0, count = hurryProjections_.size(); i < count; ++i)
         {
             os << "\n\thurry projection:\n";
             hurryProjections_[i].debug(os);
-        }
+        }*/
         for (std::list<ICityBuildingTacticPtr>::const_iterator ci(buildingTactics_.begin()), ciEnd(buildingTactics_.end()); ci != ciEnd; ++ci)
         {
             (*ci)->debug(os);
@@ -222,6 +228,7 @@ namespace AltAI
         pStream->Write(buildingType_);
         pStream->Write(buildingCost_);
         city_.write(pStream);
+        // pCityData_ is transitory - modified via calls to update()
         pStream->Write(compFlag_);
     }
 
@@ -291,12 +298,12 @@ namespace AltAI
         const CvCity* pCity = getCity(city);
         if (pCity)
         {
-            const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(city.eOwner);
+            Player& player = *gGlobals.getGame().getAltAI()->getPlayer(city.eOwner);
             CityDataPtr pCopyCityData = player.getCity(city.iID).getCityData()->clone();
             pCopyCityData->pushProcess(processType_);
             std::vector<IProjectionEventPtr> events;
             ConstructItem constructItem(processType_);
-            ladder = getProjectedOutput(player, pCopyCityData, 30, events, constructItem, __FUNCTION__);
+            ladder = getProjectedOutput(player, pCopyCityData, player.getAnalysis()->getNumSimTurns(), events, constructItem, __FUNCTION__);
         }
         return ladder;
     }
@@ -385,23 +392,24 @@ namespace AltAI
         }
     }
 
-    void LimitedBuildingTactic::update(const Player& player)
+    void LimitedBuildingTactic::update(Player& player)
     {
         const int numCities = player.getCvPlayer()->getNumCities();
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
             if (getCity(iter->first))
             {
+                // todo - refine this check to % of best city
                 if (numCities == 1 || player.getCityRank(iter->first, OUTPUT_PRODUCTION).first < 1 + numCities / 2)
                 {
-                    const City& city = player.getCity(iter->first.iID);
+                    City& city = player.getCity(iter->first.iID);
                     iter->second->update(player, city.getCityData());
                 }
             }
         }
     }
 
-    void LimitedBuildingTactic::update(const Player& player, const CityDataPtr& pCityData)
+    void LimitedBuildingTactic::update(Player& player, const CityDataPtr& pCityData)
     {
         CityTacticsMap::iterator iter = cityTactics_.find(pCityData->getCity()->getIDInfo());
         if (iter != cityTactics_.end())
@@ -414,7 +422,7 @@ namespace AltAI
         }
     }
 
-    void LimitedBuildingTactic::updateDependencies(const Player& player)
+    void LimitedBuildingTactic::updateDependencies(Player& player)
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
@@ -459,6 +467,7 @@ namespace AltAI
         PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(builtCity.eOwner);
         const City& city = pPlayer->getCity(builtCity.iID);
         TotalOutput globalDelta;
+        const int numSimTurns = pPlayer->getAnalysis()->getNumSimTurns();
 
         ICityBuildingTactics::ComparisonFlags compFlag = cityTactics_[builtCity]->getComparisonFlag();
         if (compFlag == ICityBuildingTactics::Global_Comparison || compFlag == ICityBuildingTactics::Area_Comparison)
@@ -470,7 +479,7 @@ namespace AltAI
                 IDInfo thisCity = iter->second->getCity();
                 if (thisCity != builtCity)
                 {
-                    const City& city = pPlayer->getCity(thisCity.iID);
+                    City& city = pPlayer->getCity(thisCity.iID);
 
                     if (compFlag == ICityBuildingTactics::Area_Comparison)
                     {
@@ -485,7 +494,7 @@ namespace AltAI
                     std::vector<IProjectionEventPtr> events;
                     events.push_back(IProjectionEventPtr(new ProjectionGlobalBuildingEvent(pBuildingInfo, buildTime, city.getCvCity())));
 
-                    ProjectionLadder thisCityProjection = getProjectedOutput(*pPlayer, pCityData, 30, events, ConstructItem(), __FUNCTION__, true);
+                    ProjectionLadder thisCityProjection = getProjectedOutput(*pPlayer, pCityData, numSimTurns, events, ConstructItem(), __FUNCTION__, true);
                     globalDelta += thisCityProjection.getOutput() - city.getBaseOutputProjection().getOutput();
 
                     /*if (!thisCityProjection.comparisons.empty())
@@ -540,7 +549,7 @@ namespace AltAI
                         bestCity = thisCity;
                     }
 
-                    std::multiset<EconomicBuildingValue>::iterator valueIter(thisCitysData.economicBuildings.begin());
+                    std::set<EconomicBuildingValue>::iterator valueIter(thisCitysData.economicBuildings.begin());
 
                     while (valueIter != thisCitysData.economicBuildings.end())
                     {

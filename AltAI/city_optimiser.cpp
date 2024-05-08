@@ -317,7 +317,7 @@ namespace AltAI
         const int happyCap = pCityData->getHappyCap();
         const bool noUnhappiness = pCityData->getHappyHelper()->isNoUnhappiness();
         const bool canPopRush = pPlayer->getCvPlayer()->canPopRush();
-        const int maxResearchRate = pPlayer->getMaxResearchRate();
+        const int maxResearchRate = pPlayer->getMaxResearchPercent();
         const int cityCount = pPlayer->getCvPlayer()->getNumCities();
         const int atWarCount = CvTeamAI::getTeam(pPlayer->getTeamID()).getAtWarCount(true);
         const bool plotDanger = CvPlayerAI::getPlayer(pCity->getOwner()).AI_getPlotDanger(pCity->plot(), 3) > 0;
@@ -439,7 +439,7 @@ namespace AltAI
         {
             outputWeights = makeOutputW(3, 3, 2, 2, 1, 1);
             outputTypes.push_back(OUTPUT_PRODUCTION);
-            if (gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getMaxResearchRate() > 50)
+            if (gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getMaxResearchPercent() > 50)
             {
                 outputTypes.push_back(OUTPUT_RESEARCH);
             }
@@ -1516,8 +1516,8 @@ namespace AltAI
             ignoreFoodWeights = std::vector<YieldWeights>(1, ignoreFoodWeights_);
         }
 
-        int targetYield = foodPerPop_ * dotMapItem_.plotData.size();
-        DotMapItem::PlotDataIter endPlotIter(dotMapItem_.plotData.end());
+        int targetYield = foodPerPop_ * dotMapItem_.plotDataSet.size();
+        DotMapItem::PlotDataIter endPlotIter(dotMapItem_.plotDataSet.end());
 
         PlotYield plotYield = dotMapItem_.cityPlotYield;
         std::set<XYCoords> donePlots;
@@ -1525,7 +1525,7 @@ namespace AltAI
         YieldValueFunctor valueF(weights_);
         MixedOutputOrderFunctor<PlotYield> mixedF = makeMixedF(weights_); // OUTPUT_FOOD is set as priority type
 
-        for (DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.begin()); plotIter != endPlotIter; ++plotIter)
+        for (DotMapItem::PlotDataIter plotIter(dotMapItem_.plotDataSet.begin()); plotIter != endPlotIter; ++plotIter)
         {
             if (plotIter->possibleImprovements.size() < 2)
             {
@@ -1566,7 +1566,7 @@ namespace AltAI
         while (plotYield[YIELD_FOOD] < targetYield)
         {
             // find first plot not tried yet
-            DotMapItem::PlotDataIter worstPlotIter = dotMapItem_.plotData.begin();
+            DotMapItem::PlotDataIter worstPlotIter = dotMapItem_.plotDataSet.begin();
             while (donePlots.find(worstPlotIter->coords) != donePlots.end() && worstPlotIter != endPlotIter)
             {
                 ++worstPlotIter;
@@ -1637,7 +1637,7 @@ namespace AltAI
 
             while (plotYield[YIELD_FOOD] > targetYield)
             {
-                DotMapItem::PlotDataIter plotIter = dotMapItem_.plotData.begin();
+                DotMapItem::PlotDataIter plotIter = dotMapItem_.plotDataSet.begin();
                 // find plot which hasn't been swapped and doesn't produce a large food surplus
                 while (plotIter != endPlotIter && (donePlots.find(plotIter->coords) != donePlots.end() || plotIter->bonusType != NO_BONUS))// || plotIter->getPlotYield()[YIELD_FOOD] > foodPerPop_))
                 {
@@ -1687,16 +1687,20 @@ namespace AltAI
 
     void DotMapOptimiser::optimise(const std::vector<YieldTypes>& yieldTypes, int availablePopulation)
     {
+        bool doDebug = dotMapItem_.coords.iX == 48 && dotMapItem_.coords.iY == 14;
 #ifdef ALTAI_DEBUG
         const CvCity* pCity = gGlobals.getMap().plot(dotMapItem_.coords.iX, dotMapItem_.coords.iY)->getPlotCity();
         std::ostream& os = pCity ? CityLog::getLog(pCity)->getStream() : CivLog::getLog(CvPlayerAI::getPlayer(playerType_))->getStream();
 #endif
 
         const int targetYield = foodPerPop_ * availablePopulation;
-        DotMapItem::PlotDataIter endPlotIter(dotMapItem_.plotData.end());
+        DotMapItem::PlotDataIter endPlotIter(dotMapItem_.plotDataSet.end());
 
 #ifdef ALTAI_DEBUG
-//        os << "\n\nPlot: " << dotMapItem_.coords << " target Yield  = " << targetYield;
+        if (doDebug)
+        {
+            os << "\n\nPlot: " << dotMapItem_.coords << " target Yield  = " << targetYield;
+        }
 #endif
         PlotYield plotYield = dotMapItem_.cityPlotYield;
         std::set<XYCoords> donePlots;
@@ -1704,7 +1708,7 @@ namespace AltAI
         std::vector<MixedOutputOrderFunctor<PlotYield> > valueFunctors;
         std::vector<std::list<DotMapItem::SelectedImprovement> > bestImprovementSelections;
 
-        for (DotMapItem::PlotDataIter iter(dotMapItem_.plotData.begin()), endIter(dotMapItem_.plotData.end()); iter != endIter; ++iter)
+        for (DotMapItem::PlotDataIter iter(dotMapItem_.plotDataSet.begin()), endIter(dotMapItem_.plotDataSet.end()); iter != endIter; ++iter)
         {
             iter->isSelected = false;
         }
@@ -1713,7 +1717,7 @@ namespace AltAI
 
         for (size_t i = 0, count = yieldTypes.size(); i < count; ++i)
         {
-            valueFunctors.push_back(MixedOutputOrderFunctor<PlotYield>(makeYieldP(yieldTypes[i]), makeYieldW(2, 1, 1)));
+            valueFunctors.push_back(MixedOutputOrderFunctor<PlotYield>(makeYieldP(yieldTypes[i]), makeYieldW(3, 2, 1)));
 
             std::list<DotMapItem::SelectedImprovement> selectedImprovements = dotMapItem_.getBestImprovements(valueFunctors[i]);
             bestImprovementSelections.push_back(selectedImprovements);
@@ -1760,8 +1764,11 @@ namespace AltAI
                 {
                     const int removeCount = std::min<int>(goodImprovements[i].size() - fewestGoodImprovementsInfo.second, fewestGoodImprovementsInfo.second);
 #ifdef ALTAI_DEBUG
-                    //os << "\nRemoving: " << removeCount << " improvements for type: " << gGlobals.getYieldInfo(yieldTypes[i]).getType()
-                    //   << " and keeping type: " << gGlobals.getYieldInfo(yieldTypes[worstYieldTypeindex]).getType();
+                    if (doDebug)
+                    {
+                        os << "\nRemoving: " << removeCount << " improvements for type: " << gGlobals.getYieldInfo(yieldTypes[i]).getType()
+                        << " and keeping type: " << gGlobals.getYieldInfo(yieldTypes[worstYieldTypeindex]).getType();
+                    }
 #endif
                     int removedCount = 0;
                     std::list<DotMapItem::SelectedImprovement>::iterator iter(bestImprovementSelections[i].begin()), iterEnd(bestImprovementSelections[i].end());
@@ -1770,14 +1777,17 @@ namespace AltAI
                         if (goodImprovements[worstYieldTypeindex].find(iter->coords) != goodImprovements[worstYieldTypeindex].end())
                         {
 #ifdef ALTAI_DEBUG
-                            /*os << "\nErasing improvement at: " << iter->coords << " with yield: " << iter->plotYield;
-
-                            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(iter->coords)));
-                            ImprovementTypes improvementType = plotIter->possibleImprovements[iter->improvementIndex].second;
-                            if (improvementType != NO_IMPROVEMENT)
+                            if (doDebug)
                             {
-                                os << " imp = " << gGlobals.getImprovementInfo(improvementType).getType();
-                            }*/
+                                os << "\nErasing improvement at: " << iter->coords << " with yield: " << iter->plotYield;
+
+                                DotMapItem::PlotDataIter plotIter(dotMapItem_.plotDataSet.find(DotMapItem::DotMapPlotData(iter->coords)));
+                                ImprovementTypes improvementType = plotIter->possibleImprovements[iter->improvementIndex].second;
+                                if (improvementType != NO_IMPROVEMENT)
+                                {
+                                    os << " imp = " << gGlobals.getImprovementInfo(improvementType).getType();
+                                }
+                            }
 #endif
                             bestImprovementSelections[i].erase(iter++);
                             ++removedCount;
@@ -1796,26 +1806,28 @@ namespace AltAI
             }
         }
 #ifdef ALTAI_DEBUG
-        //{   // debug
-        //    for (size_t i = 0, count = bestImprovementSelections.size(); i < count; ++i)
-        //    {
-        //        for (std::list<DotMapItem::SelectedImprovement>::const_iterator ci(bestImprovementSelections[i].begin()), ciEnd(bestImprovementSelections[i].end()); ci != ciEnd; ++ci)
-        //        {
-        //            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(ci->coords)));
-        //            os << "\n" << ci->coords << " " << ci->plotYield << " ";
-        //            ImprovementTypes improvementType = plotIter->getWorkedImprovement();
-        //            if (improvementType != NO_IMPROVEMENT)
-        //            {
-        //                os << gGlobals.getImprovementInfo(improvementType).getType();
-        //            }
-        //            else
-        //            {
-        //                os << " (no improvements)";
-        //            }
-        //        }
-        //        os << "\n";
-        //    }
-        //}
+        if (doDebug)
+        {
+            {   // debug
+                for (size_t i = 0, count = bestImprovementSelections.size(); i < count; ++i)
+                {
+                    for (std::list<DotMapItem::SelectedImprovement>::const_iterator ci(bestImprovementSelections[i].begin()), ciEnd(bestImprovementSelections[i].end()); ci != ciEnd; ++ci)
+                    {
+                        DotMapItem::PlotDataIter plotIter(dotMapItem_.plotDataSet.find(DotMapItem::DotMapPlotData(ci->coords)));
+                        os << "\n" << ci->coords << " " << ci->plotYield << " ";
+                        if (ci->improvementIndex != -1 && plotIter->possibleImprovements[ci->improvementIndex].second != NO_IMPROVEMENT)
+                        {
+                            os << gGlobals.getImprovementInfo(plotIter->possibleImprovements[ci->improvementIndex].second).getType();
+                        }
+                        else
+                        {
+                            os << " (no improvement)";
+                        }
+                    }
+                    os << "\n";
+                }
+            }
+        }
 #endif
         std::vector<std::pair<std::list<DotMapItem::SelectedImprovement>::iterator, std::list<DotMapItem::SelectedImprovement>::iterator> > iters;
         for (size_t i = 0, count = bestImprovementSelections.size(); i < count; ++i)
@@ -1837,7 +1849,7 @@ namespace AltAI
                 // loop over ordered plot iterators for this set of improvement selections to find first plot not yet done
                 while (iters[i].first != iters[i].second)
                 {
-                    plotIter = dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(iters[i].first->coords));
+                    plotIter = dotMapItem_.plotDataSet.find(DotMapItem::DotMapPlotData(iters[i].first->coords));
                     if (donePlots.find(iters[i].first->coords) == donePlots.end())
                     {
                         break;  // this plot not done yet
@@ -1868,44 +1880,45 @@ namespace AltAI
             }
         }
 #ifdef ALTAI_DEBUG
-        //{   // debug
-        //    for (size_t i = 0, count = bestImprovementSelections.size(); i < count; ++i)
-        //    {
-        //        for (std::list<DotMapItem::SelectedImprovement>::const_iterator ci(bestImprovementSelections[i].begin()), ciEnd(bestImprovementSelections[i].end()); ci != ciEnd; ++ci)
-        //        {
-        //            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(ci->coords)));
-        //            os << "\n" << ci->coords << " " << ci->plotYield << " ";
-        //            if (ci->improvementIndex != -1 && plotIter->possibleImprovements[ci->improvementIndex].second != NO_IMPROVEMENT)
-        //            {
-        //                os << gGlobals.getImprovementInfo(plotIter->possibleImprovements[ci->improvementIndex].second).getType();
-        //            }
-        //            else
-        //            {
-        //                os << " (no improvements)";
-        //            }
-        //            if (!plotIter->isSelected)
-        //            {
-        //                os << " (selected = false)";
-        //            }
-        //            if (plotIter->isPinned)
-        //            {
-        //                os << " (pinned = true)";
-        //            }
-        //        }
-        //        os << "\nGood improvement count = " << goodImprovements[i].size() << ": ";
-        //        for (std::set<XYCoords>::const_iterator ci(goodImprovements[i].begin()), ciEnd(goodImprovements[i].end()); ci != ciEnd; ++ci)
-        //        {
-        //            os << *ci << ", ";
-        //        }
-        //        os << "\n\n";
-        //    }
-        //}
+        if (doDebug)
+        {   // debug
+            for (size_t i = 0, count = bestImprovementSelections.size(); i < count; ++i)
+            {
+                for (std::list<DotMapItem::SelectedImprovement>::const_iterator ci(bestImprovementSelections[i].begin()), ciEnd(bestImprovementSelections[i].end()); ci != ciEnd; ++ci)
+                {
+                    DotMapItem::PlotDataIter plotIter(dotMapItem_.plotDataSet.find(DotMapItem::DotMapPlotData(ci->coords)));
+                    os << "\n" << ci->coords << " " << ci->plotYield << " ";
+                    if (ci->improvementIndex != -1 && plotIter->possibleImprovements[ci->improvementIndex].second != NO_IMPROVEMENT)
+                    {
+                        os << gGlobals.getImprovementInfo(plotIter->possibleImprovements[ci->improvementIndex].second).getType();
+                    }
+                    else
+                    {
+                        os << " (no improvements)";
+                    }
+                    if (!plotIter->isSelected)
+                    {
+                        os << " (selected = false)";
+                    }
+                    if (plotIter->isPinned)
+                    {
+                        os << " (pinned = true)";
+                    }
+                }
+                os << "\nGood improvement count = " << goodImprovements[i].size() << ": ";
+                for (std::set<XYCoords>::const_iterator ci(goodImprovements[i].begin()), ciEnd(goodImprovements[i].end()); ci != ciEnd; ++ci)
+                {
+                    os << *ci << ", ";
+                }
+                os << "\n\n";
+            }
+        }
 #endif
         const size_t foodIndex = bestImprovementSelections.size() - 1;
         // select while less than target, still got improvements to switch...
         while (plotYield[YIELD_FOOD] < targetYield && iters[foodIndex].first != iters[foodIndex].second)
         {
-            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotData.find(DotMapItem::DotMapPlotData(iters[foodIndex].first->coords)));
+            DotMapItem::PlotDataIter plotIter(dotMapItem_.plotDataSet.find(DotMapItem::DotMapPlotData(iters[foodIndex].first->coords)));
             if (!plotIter->isPinned && (plotIter->workedImprovement != iters[foodIndex].first->improvementIndex || !plotIter->isSelected))
             {
                 //  ...and improvement can at least break even (don't switch workshops to cottages on plains for example)
@@ -1919,10 +1932,10 @@ namespace AltAI
                 }
                 if (!plotIter->isSelected)  // need to unselect another plot -- choose worst food plot
                 {
-                    DotMapItem::PlotDataIter worstFoodIter = dotMapItem_.plotData.end();
+                    DotMapItem::PlotDataIter worstFoodIter = dotMapItem_.plotDataSet.end();
                     int worstFoodYield = MAX_INT;
 
-                    for (DotMapItem::PlotDataIter worstFoodPlotIter(dotMapItem_.plotData.begin()), worstFoodPlotEndIter(dotMapItem_.plotData.end()); worstFoodPlotIter != worstFoodPlotEndIter; ++worstFoodPlotIter)
+                    for (DotMapItem::PlotDataIter worstFoodPlotIter(dotMapItem_.plotDataSet.begin()), worstFoodPlotEndIter(dotMapItem_.plotDataSet.end()); worstFoodPlotIter != worstFoodPlotEndIter; ++worstFoodPlotIter)
                     {
                         if (worstFoodPlotIter->isSelected)
                         {
@@ -1935,12 +1948,13 @@ namespace AltAI
                         }
                     }
 
-                    if (worstFoodIter != dotMapItem_.plotData.end())
+                    if (worstFoodIter != dotMapItem_.plotDataSet.end())
                     {
 #ifdef ALTAI_DEBUG
-                        //{
-                        //    os << "\nUnselecting plot: " << worstFoodIter->coords << " with yield: " << worstFoodIter->getPlotYield();
-                        //}
+                        if (doDebug)
+                        {
+                            os << "\nUnselecting plot: " << worstFoodIter->coords << " with yield: " << worstFoodIter->getPlotYield();
+                        }
 #endif
                         worstFoodIter->isSelected = false;
                         plotYield -= worstFoodIter->getPlotYield();
@@ -1949,9 +1963,10 @@ namespace AltAI
                         plotYield += plotIter->getPlotYield();
                         plotIter->isSelected = true;
 #ifdef ALTAI_DEBUG
-                        //{
-                        //    os << "\nSelected plot: " << plotIter->coords << " with yield: " << plotIter->getPlotYield();
-                        //}
+                        if (doDebug)
+                        {
+                            os << "\nSelected plot: " << plotIter->coords << " with yield: " << plotIter->getPlotYield();
+                        }
 #endif
                     }
                     else
@@ -1962,10 +1977,11 @@ namespace AltAI
                 else
                 {
 #ifdef ALTAI_DEBUG
-                    /*{
+                    if (doDebug)
+                    {
                         os << "\nSwapping selected improvement for plot: " << plotIter->coords << " from yield: " << plotIter->getPlotYield()
                            << " to yield: " << plotIter->getPlotYield(iters[foodIndex].first->improvementIndex);
-                    }*/
+                    }
 #endif
                     plotYield -= plotIter->getPlotYield();
                     plotIter->workedImprovement = iters[foodIndex].first->improvementIndex;

@@ -441,6 +441,8 @@ namespace AltAI
             // includes settlers (0 xml cost), but excludes great people (-1 xml cost)
             node.cost = unitInfo.getProductionCost() > -1 ? CvPlayerAI::getPlayer(requestData.playerType).getProductionNeeded(requestData.unitType) : 0;
 
+            node.minAreaSize = unitInfo.getMinAreaSize();
+            node.requireAreaBonuses = unitInfo.isPrereqBonuses();
             node.domainType = (DomainTypes)unitInfo.getDomainType();
 
             BonusTypes bonusType = (BonusTypes)unitInfo.getPrereqAndBonus();

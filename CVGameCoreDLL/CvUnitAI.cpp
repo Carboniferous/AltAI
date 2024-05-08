@@ -108,7 +108,7 @@ bool CvUnitAI::AI_update()
 	{
 		if (plot()->isWater() && !canMoveAllTerrain())
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return false;
 		}
 		else
@@ -119,7 +119,7 @@ bool CvUnitAI::AI_update()
 			{
 				if (pTransportUnit->getGroup()->hasMoved() || (pTransportUnit->getGroup()->headMissionQueueNode() != NULL))
 				{
-					getGroup()->pushMission(MISSION_SKIP);
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return false;
 				}
 			}
@@ -174,7 +174,7 @@ bool CvUnitAI::AI_update()
 				{
 					if (pTransportUnit->isAutomated() && pTransportUnit->canMove() && pTransportUnit->getGroup()->getActivityType() != ACTIVITY_HOLD)
 					{
-						getGroup()->pushMission(MISSION_SKIP);
+						getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 						break;
 					}
 				}
@@ -229,7 +229,7 @@ bool CvUnitAI::AI_update()
 		switch (AI_getUnitAIType())
 		{
 		case UNITAI_UNKNOWN:
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			break;
 
 		case UNITAI_ANIMAL:
@@ -430,7 +430,7 @@ bool CvUnitAI::AI_follow()
 	{
 		if (canPillage(plot()))
 		{
-			getGroup()->pushMission(MISSION_PILLAGE);
+			getGroup()->pushMission(MISSION_PILLAGE, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -518,19 +518,28 @@ void CvUnitAI::AI_promote()
 	iBestValue = 0;
 	eBestPromotion = NO_PROMOTION;
 
-	for (iI = 0; iI < GC.getNumPromotionInfos(); iI++)
-	{
-		if (canPromote((PromotionTypes)iI, -1))
-		{
-			iValue = AI_promotionValue((PromotionTypes)iI);
+    const bool usingAltAI = GET_PLAYER(getOwnerINLINE()).isUsingAltAI();
 
-			if (iValue > iBestValue)
-			{
-				iBestValue = iValue;
-				eBestPromotion = ((PromotionTypes)iI);
-			}
-		}
-	}
+    if (usingAltAI && isPromotionReady())
+    {
+        eBestPromotion = GC.getGame().getAltAI()->getPlayer(getOwner())->promoteUnit(this);
+    }
+    else
+    {
+	    for (iI = 0; iI < GC.getNumPromotionInfos(); iI++)
+	    {
+		    if (canPromote((PromotionTypes)iI, -1))
+		    {
+			    iValue = AI_promotionValue((PromotionTypes)iI);
+
+			    if (iValue > iBestValue)
+			    {
+				    iBestValue = iValue;
+				    eBestPromotion = ((PromotionTypes)iI);
+			    }
+		    }
+	    }
+    }
 
 	if (eBestPromotion != NO_PROMOTION)
 	{
@@ -1114,7 +1123,7 @@ void CvUnitAI::AI_animalMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -1128,13 +1137,18 @@ void CvUnitAI::AI_settleMove()
     if (usingAltAI)
     {
         GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->updatePlotValues();
+
+        if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+        {
+            return;
+        }
     }
 
 	if (!usingAltAI && GET_PLAYER(getOwnerINLINE()).getNumCities() == 0)  // AltAI - todo: consider initial move?
 	{
 		if (canFound(plot()))
 		{
-			getGroup()->pushMission(MISSION_FOUND);
+			getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 	}
@@ -1154,7 +1168,7 @@ void CvUnitAI::AI_settleMove()
 			{
 				return;
 			}
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		}
 	}
 
@@ -1167,7 +1181,7 @@ void CvUnitAI::AI_settleMove()
             if (atPlot(pDestPlot))
 		    {
                 GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->logSettlerMission(NULL, pDestPlot, pDestPlot->getFoundValue(getOwnerINLINE()), 0, true);
-			    getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, MISSIONAI_FOUND, pDestPlot);
+			    getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, MISSIONAI_FOUND, pDestPlot, 0, __FUNCTION__);
                 return;
             }
 
@@ -1178,7 +1192,7 @@ void CvUnitAI::AI_settleMove()
                 // wait in city
                 if (pPlot->getOwner() == getOwnerINLINE() && pPlot->isCity())
                 {
-                    getGroup()->pushMission(MISSION_SKIP);
+                    getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
                     return;
                 }
 
@@ -1191,7 +1205,7 @@ void CvUnitAI::AI_settleMove()
                     {
                         pDestPlot = getPathEndTurnPlot();
                         GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->logSettlerMission(NULL, pDestPlot, pDestPlot->getFoundValue(getOwnerINLINE()), iPathTurns, true);
-	        		    getGroup()->pushMission(MISSION_MOVE_TO, pDestPlot->getX_INLINE(), pDestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_FOUND, pDestPlot);
+	        		    getGroup()->pushMission(MISSION_MOVE_TO, pDestPlot->getX_INLINE(), pDestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_FOUND, pDestPlot, 0, __FUNCTION__);
                         return;
                     }
                 }
@@ -1203,7 +1217,7 @@ void CvUnitAI::AI_settleMove()
             {
                 pDestPlot = getPathEndTurnPlot();
                 GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->logSettlerMission(NULL, pDestPlot, pDestPlot->getFoundValue(getOwnerINLINE()), iPathTurns, true);
-	        	getGroup()->pushMission(MISSION_MOVE_TO, pDestPlot->getX_INLINE(), pDestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_FOUND, pDestPlot);
+	        	getGroup()->pushMission(MISSION_MOVE_TO, pDestPlot->getX_INLINE(), pDestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_FOUND, pDestPlot, 0, __FUNCTION__);
                 return;
             }
         }
@@ -1221,7 +1235,7 @@ void CvUnitAI::AI_settleMove()
 			{
 				if (canFound(plot()))
 				{
-					getGroup()->pushMission(MISSION_FOUND);
+					getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return;					
 				}
 			}
@@ -1269,7 +1283,7 @@ void CvUnitAI::AI_settleMove()
 	    {
 		    if (canFound(plot()))
 		    {
-			    getGroup()->pushMission(MISSION_FOUND);
+			    getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			    return;
 		    }
 	    }
@@ -1290,7 +1304,7 @@ void CvUnitAI::AI_settleMove()
 		{
 			if (getGroup()->getNumUnits() < 3)
 			{
-				getGroup()->pushMission(MISSION_SKIP);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return;
 			}
 		}
@@ -1322,7 +1336,7 @@ void CvUnitAI::AI_settleMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -1342,7 +1356,7 @@ void CvUnitAI::AI_workerMove()
     if (usingAltAI)
     {
         //GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->clearWorkerMission(this);
-        return (void)(AltAI::doWorkerAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this));
+        return (void)(AltAI::doWorkerMove(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this));
 		//return (void)AltAI::doLandUnitWorker(this);
     }
 
@@ -1783,7 +1797,7 @@ void CvUnitAI::AI_workerMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -1801,7 +1815,7 @@ void CvUnitAI::AI_barbAttackMove()
 	{
 		if (plot()->plotCount(PUF_isUnitAIType, UNITAI_ATTACK, -1, getOwnerINLINE()) == 1)
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 	}
@@ -1907,7 +1921,7 @@ void CvUnitAI::AI_barbAttackMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -2030,7 +2044,7 @@ void CvUnitAI::AI_attackMove()
 
 				if (GET_PLAYER(getOwnerINLINE()).AI_unitTargetMissionAIs(this, MISSIONAI_GROUP) > 0)
 				{
-					getGroup()->pushMission(MISSION_SKIP);
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return;
 				}
 			}
@@ -2204,7 +2218,7 @@ void CvUnitAI::AI_attackMove()
 		}
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -2330,7 +2344,7 @@ void CvUnitAI::AI_paratrooperMove()
 		}
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -2361,7 +2375,7 @@ void CvUnitAI::AI_attackCityMove()
 	if ((getGroup()->getNumUnits() == 1) && (getDamage() > 0) &&
         plot()->getOwnerINLINE() == getOwnerINLINE() && plot()->isCity())
     {
-        getGroup()->pushMission(MISSION_HEAL);
+        getGroup()->pushMission(MISSION_HEAL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
     }
 
@@ -2600,7 +2614,7 @@ void CvUnitAI::AI_attackCityMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -2637,7 +2651,7 @@ void CvUnitAI::AI_attackCityLemmingMove()
 		return; 
 	} 
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 }
 
 
@@ -2746,7 +2760,7 @@ void CvUnitAI::AI_collateralMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -2876,7 +2890,7 @@ void CvUnitAI::AI_pillageMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3026,7 +3040,7 @@ void CvUnitAI::AI_reserveMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3152,7 +3166,7 @@ void CvUnitAI::AI_counterMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3321,7 +3335,7 @@ void CvUnitAI::AI_cityDefenseMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3368,7 +3382,7 @@ void CvUnitAI::AI_cityDefenseExtraMove()
 	{
 		if (plot()->plotCount(PUF_canDefendGroupHead, -1, -1, getOwnerINLINE(), NO_TEAM, PUF_isUnitAIType, AI_getUnitAIType()) == 1)
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 	}
@@ -3406,7 +3420,7 @@ void CvUnitAI::AI_cityDefenseExtraMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3445,7 +3459,7 @@ void CvUnitAI::AI_exploreMove()
 	{
 		if ((plot()->getFeatureType() == NO_FEATURE) || (GC.getFeatureInfo(plot()->getFeatureType()).getTurnDamage() == 0))
 		{
-			getGroup()->pushMission(MISSION_HEAL);
+			getGroup()->pushMission(MISSION_HEAL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 	}
@@ -3529,7 +3543,7 @@ void CvUnitAI::AI_exploreMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3586,7 +3600,7 @@ void CvUnitAI::AI_missionaryMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3675,7 +3689,7 @@ void CvUnitAI::AI_prophetMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3769,7 +3783,7 @@ void CvUnitAI::AI_artistMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3868,7 +3882,7 @@ void CvUnitAI::AI_scientistMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -3959,7 +3973,7 @@ void CvUnitAI::AI_generalMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4053,7 +4067,7 @@ void CvUnitAI::AI_merchantMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4147,7 +4161,7 @@ void CvUnitAI::AI_engineerMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4209,7 +4223,7 @@ void CvUnitAI::AI_spyMove()
 			}
 			if (GC.getGame().getSorenRandNum(100, "AI Spy Skip Turn") > 5)
 			{
-				getGroup()->pushMission(MISSION_SKIP);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return;
 			}
 		}
@@ -4253,7 +4267,7 @@ void CvUnitAI::AI_spyMove()
 	{
 		if (GC.getGame().getSorenRandNum(7, "AI Spy Skip Turn") > 0)
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 	}
@@ -4303,7 +4317,7 @@ void CvUnitAI::AI_spyMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4340,7 +4354,7 @@ void CvUnitAI::AI_ICBMMove()
 
 	if (isCargo())
 	{
-		getGroup()->pushMission(MISSION_SKIP);
+		getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
 	}
 	
@@ -4370,7 +4384,7 @@ void CvUnitAI::AI_ICBMMove()
 		}
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 }
 
 
@@ -4395,7 +4409,7 @@ void CvUnitAI::AI_workerSeaMove()
 
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
-        return (void)(AltAI::doWorkerAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this));
+        return (void)(AltAI::doWorkerMove(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this));
     }
 
 	if (AI_improveBonus(20))
@@ -4424,7 +4438,7 @@ void CvUnitAI::AI_workerSeaMove()
 		{
 			if ((plot()->getOwnerINLINE() == getOwnerINLINE()) || (!plot()->isOwned()))
 			{
-				getGroup()->pushMission(MISSION_SKIP);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return;
 			}
 		}
@@ -4438,7 +4452,7 @@ void CvUnitAI::AI_workerSeaMove()
 				{
 					if (pLoopPlot->isValidDomainForLocation(*this))
 					{
-						getGroup()->pushMission(MISSION_SKIP);
+						getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 						return;						
 					}					
 				}
@@ -4485,7 +4499,7 @@ void CvUnitAI::AI_workerSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4532,7 +4546,7 @@ void CvUnitAI::AI_barbAttackSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4622,7 +4636,7 @@ void CvUnitAI::AI_pirateSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4736,7 +4750,7 @@ void CvUnitAI::AI_attackSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4836,7 +4850,7 @@ void CvUnitAI::AI_reserveSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4951,7 +4965,7 @@ void CvUnitAI::AI_escortSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -4966,7 +4980,7 @@ void CvUnitAI::AI_exploreSeaMove()
     {
         if (m_pUnitInfo->getDefaultUnitAIType() == UNITAI_WORKER_SEA)
         {
-            if (AltAI::doWorkerAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+            if (AltAI::doWorkerMove(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
             {
                 return;
             }
@@ -5039,7 +5053,7 @@ void CvUnitAI::AI_exploreSeaMove()
 	{
 		if ((plot()->getFeatureType() == NO_FEATURE) || (GC.getFeatureInfo(plot()->getFeatureType()).getTurnDamage() == 0))
 		{
-			getGroup()->pushMission(MISSION_HEAL);
+			getGroup()->pushMission(MISSION_HEAL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 	}
@@ -5118,7 +5132,7 @@ void CvUnitAI::AI_exploreSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -5190,7 +5204,7 @@ void CvUnitAI::AI_assaultSeaMove()
 				if (getGroup()->hasCargo())
 				{
 					getGroup()->unloadAll();
-					getGroup()->pushMission(MISSION_SKIP);
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return;
 				}
 			}
@@ -5206,7 +5220,7 @@ void CvUnitAI::AI_assaultSeaMove()
 				else if (iCargo > 0)
 				{
 					getGroup()->unloadAll();
-					getGroup()->pushMission(MISSION_SKIP);
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return;
 				}
 			}
@@ -5214,7 +5228,7 @@ void CvUnitAI::AI_assaultSeaMove()
 			{
 				if (!bFull)
 				{
-					getGroup()->pushMission(MISSION_SKIP);
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return;
 				}
 			}
@@ -5353,7 +5367,7 @@ void CvUnitAI::AI_assaultSeaMove()
 	if (bIsCity && bLandWar && getGroup()->hasCargo())
 	{
 		getGroup()->unloadAll();
-		getGroup()->pushMission(MISSION_SKIP);
+		getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
 	}
 
@@ -5372,7 +5386,7 @@ void CvUnitAI::AI_assaultSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -5494,7 +5508,7 @@ void CvUnitAI::AI_settlerSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -5543,7 +5557,7 @@ void CvUnitAI::AI_missionarySeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -5567,7 +5581,7 @@ void CvUnitAI::AI_spySeaMove()
 		{
 			if (pCity->getOwnerINLINE() == getOwnerINLINE())
 			{
-				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_ATTACK_SPY, pCity->plot());
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_ATTACK_SPY, pCity->plot(), 0, __FUNCTION__);
 				return;
 			}
 		}
@@ -5600,7 +5614,7 @@ void CvUnitAI::AI_spySeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -5621,7 +5635,7 @@ void CvUnitAI::AI_carrierSeaMove()
 	{
 		if (GET_PLAYER(getOwnerINLINE()).AI_unitTargetMissionAIs(this, MISSIONAI_GROUP) > 0)
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 	}
@@ -5642,7 +5656,7 @@ void CvUnitAI::AI_carrierSeaMove()
 	{
 		if (plot()->isCity() && plot()->getOwnerINLINE() == getOwnerINLINE())
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 		if (AI_retreatToCity())
@@ -5689,7 +5703,7 @@ void CvUnitAI::AI_carrierSeaMove()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -5747,7 +5761,7 @@ void CvUnitAI::AI_missileCarrierSeaMove()
 		return;
 	}
 	
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 }
 
 
@@ -5792,7 +5806,7 @@ void CvUnitAI::AI_attackAirMove()
 				if (kPlayer.AI_totalUnitAIs(UNITAI_CARRIER_AIR) < iCarrierAirNeeded)
 				{
 					AI_setUnitAIType(UNITAI_CARRIER_AIR);
-					getGroup()->pushMission(MISSION_SKIP);
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return;		
 				}
 			}
@@ -5805,7 +5819,7 @@ void CvUnitAI::AI_attackAirMove()
 		if (kPlayer.AI_bestAreaUnitAIValue(UNITAI_ATTACK_AIR, pArea) > iAttackValue)
 		{
 			AI_setUnitAIType(UNITAI_DEFENSE_AIR);
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;	
 		}
 	}
@@ -5847,11 +5861,11 @@ void CvUnitAI::AI_attackAirMove()
 
 	if (canAirDefend())
 	{
-		getGroup()->pushMission(MISSION_AIRPATROL);
+		getGroup()->pushMission(MISSION_AIRPATROL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -5926,11 +5940,11 @@ void CvUnitAI::AI_defenseAirMove()
 
 	if (canAirDefend())
 	{
-		getGroup()->pushMission(MISSION_AIRPATROL);
+		getGroup()->pushMission(MISSION_AIRPATROL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -5941,7 +5955,7 @@ void CvUnitAI::AI_carrierAirMove()
 
 	if (getDamage() > 0)
 	{
-		getGroup()->pushMission(MISSION_SKIP);
+		getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
 	}
 
@@ -5951,7 +5965,7 @@ void CvUnitAI::AI_carrierAirMove()
 		
 		if (iRand == 2 && canAirDefend())
 		{
-			getGroup()->pushMission(MISSION_AIRPATROL);
+			getGroup()->pushMission(MISSION_AIRPATROL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
 		else if (AI_airBombDefenses())
@@ -5990,10 +6004,10 @@ void CvUnitAI::AI_carrierAirMove()
 
 		if (canAirDefend())
 		{
-			getGroup()->pushMission(MISSION_AIRPATROL);
+			getGroup()->pushMission(MISSION_AIRPATROL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return;
 		}
-		getGroup()->pushMission(MISSION_SKIP);
+		getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
 	}
 
@@ -6009,11 +6023,11 @@ void CvUnitAI::AI_carrierAirMove()
 
 	if (canAirDefend())
 	{
-		getGroup()->pushMission(MISSION_AIRPATROL);
+		getGroup()->pushMission(MISSION_AIRPATROL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -6078,7 +6092,7 @@ void CvUnitAI::AI_missileAirMove()
 			return;
 		}
 		
-		getGroup()->pushMission(MISSION_SKIP);
+		getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return;
 	}
 	
@@ -6115,7 +6129,7 @@ void CvUnitAI::AI_missileAirMove()
 		}
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -6190,7 +6204,7 @@ void CvUnitAI::AI_networkAutomated()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -6240,7 +6254,7 @@ void CvUnitAI::AI_cityAutomated()
 		return;
 	}
 
-	getGroup()->pushMission(MISSION_SKIP);
+	getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 	return;
 }
 
@@ -7056,12 +7070,12 @@ bool CvUnitAI::AI_shadow(UnitAITypes eUnitAI, int iMax, int iMaxRatio, bool bWit
 	{
 		if (atPlot(pBestUnit->plot()))
 		{
-			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_SHADOW, NULL, pBestUnit);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_SHADOW, NULL, pBestUnit, __FUNCTION__);
 			return true;
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO_UNIT, pBestUnit->getOwnerINLINE(), pBestUnit->getID(), 0, false, false, MISSIONAI_SHADOW, NULL, pBestUnit);
+			getGroup()->pushMission(MISSION_MOVE_TO_UNIT, pBestUnit->getOwnerINLINE(), pBestUnit->getID(), 0, false, false, MISSIONAI_SHADOW, NULL, pBestUnit, __FUNCTION__);
 			return true;
 		}
 	}
@@ -7173,7 +7187,7 @@ bool CvUnitAI::AI_group(UnitAITypes eUnitAI, int iMaxGroup, int iMaxOwnUnitAI, i
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO_UNIT, pBestUnit->getOwnerINLINE(), pBestUnit->getID(), 0, false, false, MISSIONAI_GROUP, NULL, pBestUnit);
+			getGroup()->pushMission(MISSION_MOVE_TO_UNIT, pBestUnit->getOwnerINLINE(), pBestUnit->getID(), 0, false, false, MISSIONAI_GROUP, NULL, pBestUnit, __FUNCTION__);
 			return true;
 		}
 	}
@@ -7275,7 +7289,7 @@ bool CvUnitAI::AI_groupMergeRange(UnitAITypes eUnitAI, int iMaxRange, bool bBigg
 		}
 		else
 		{
-			pGroup->pushMission(MISSION_MOVE_TO_UNIT, pBestUnit->getOwnerINLINE(), pBestUnit->getID(), 0, false, false, MISSIONAI_GROUP, NULL, pBestUnit);
+			pGroup->pushMission(MISSION_MOVE_TO_UNIT, pBestUnit->getOwnerINLINE(), pBestUnit->getID(), 0, false, false, MISSIONAI_GROUP, NULL, pBestUnit, __FUNCTION__);
 			return true;
 		}
 	}
@@ -7308,7 +7322,7 @@ bool CvUnitAI::AI_load(UnitAITypes eUnitAI, MissionAITypes eMissionAI, UnitAITyp
 
 	if (isCargo())
 	{
-		getGroup()->pushMission(MISSION_SKIP);
+		getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 	
@@ -7420,7 +7434,7 @@ bool CvUnitAI::AI_load(UnitAITypes eUnitAI, MissionAITypes eMissionAI, UnitAITyp
 			if (pSplitGroup != NULL)
 			{
 				CvPlot* pOldPlot = pSplitGroup->plot();
-				pSplitGroup->pushMission(MISSION_MOVE_TO_UNIT, pBestUnit->getOwnerINLINE(), pBestUnit->getID(), iFlags, false, false, eMissionAI, NULL, pBestUnit);
+				pSplitGroup->pushMission(MISSION_MOVE_TO_UNIT, pBestUnit->getOwnerINLINE(), pBestUnit->getID(), iFlags, false, false, eMissionAI, NULL, pBestUnit, __FUNCTION__);
 				bool bMoved = (pSplitGroup->plot() != pOldPlot);
 				if (!bMoved && pOtherGroup != NULL)
 				{
@@ -7450,7 +7464,7 @@ bool CvUnitAI::AI_guardCityBestDefender()
 		{
 			if (pPlot->getBestDefender(getOwnerINLINE()) == this)
 			{
-				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, NULL);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, NULL, 0, __FUNCTION__);
 				return true;
 			}
 		}
@@ -7471,7 +7485,7 @@ bool CvUnitAI::AI_guardCityMinDefender(bool bSearch)
 		{
 			if ((iCityDefenderCount <= 2) || (GC.getGame().getSorenRandNum(5, "AI shuffle defender") != 0))
 			{
-				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, NULL);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, NULL, 0, __FUNCTION__);
 				return true;
 			}
 		}
@@ -7531,11 +7545,11 @@ bool CvUnitAI::AI_guardCityMinDefender(bool bSearch)
 			if (atPlot(pBestGuardPlot))
 			{
 				FAssert(pBestGuardPlot == pBestPlot);
-				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, NULL);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, NULL, 0, __FUNCTION__);
 				return true;
 			}
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_CITY, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_CITY, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -7562,6 +7576,12 @@ bool CvUnitAI::AI_guardCity(bool bLeave, bool bSearch, int iMaxPath)
 	int iValue;
 	int iBestValue;
 	int iLoop;
+
+    const bool usingAltAI = GET_PLAYER(getOwner()).isUsingAltAI();
+    if (usingAltAI)
+    {
+        iLoop = 0;
+    }
 
 	FAssert(getDomainType() == DOMAIN_LAND);
 	FAssert(canDefend());
@@ -7656,7 +7676,7 @@ bool CvUnitAI::AI_guardCity(bool bLeave, bool bSearch, int iMaxPath)
 						pEjectedUnit->AI_setUnitAIType(UNITAI_CITY_DEFENSE);
 					}
 				}
-				pEjectedUnit->getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, NULL);
+				pEjectedUnit->getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, NULL, 0, __FUNCTION__);
 				if (pEjectedUnit->getGroup() == pOldGroup || pEjectedUnit == this)
 				{
 					return true;
@@ -7670,7 +7690,7 @@ bool CvUnitAI::AI_guardCity(bool bLeave, bool bSearch, int iMaxPath)
 			{
 				//This unit is not suited for defense, skip the mission
 				//to protect this city but encourage others to defend instead.
-				getGroup()->pushMission(MISSION_SKIP);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				if (!isHurt())
 				{
 					finishMoves();
@@ -7739,7 +7759,7 @@ bool CvUnitAI::AI_guardCity(bool bLeave, bool bSearch, int iMaxPath)
 			
 			if (pEjectedUnit != NULL)
 			{
-				pEjectedUnit->getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_CITY, NULL);
+				pEjectedUnit->getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_CITY, NULL, 0, __FUNCTION__);
 				if (pEjectedUnit->getGroup() == pOldGroup || pEjectedUnit == this)
 				{
 					return true;
@@ -7755,11 +7775,11 @@ bool CvUnitAI::AI_guardCity(bool bLeave, bool bSearch, int iMaxPath)
 				//to protect this city but encourage others to defend instead.
 				if (atPlot(pBestGuardPlot))
 				{
-					getGroup()->pushMission(MISSION_SKIP);
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				}
 				else
 				{
-					getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_CITY, NULL);
+					getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_CITY, NULL, 0, __FUNCTION__);
 				}
 				return true;				
 			}
@@ -7830,7 +7850,7 @@ bool CvUnitAI::AI_guardCityAirlift()
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -7914,13 +7934,13 @@ bool CvUnitAI::AI_guardBonus(int iMinValue)
 	{
 		if (atPlot(pBestGuardPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_BONUS, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_BONUS, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_BONUS, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_BONUS, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -8000,7 +8020,7 @@ bool CvUnitAI::AI_guardFort(bool bSearch)
 			{
 				if (plot()->plotCount(PUF_isCityAIType, -1, -1, getOwnerINLINE()) <= AI_getPlotDefendersNeeded(plot(), 0))
 				{
-					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_BONUS, plot());
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_BONUS, plot(), 0, __FUNCTION__);
 					return true;
 				}
 			}
@@ -8064,13 +8084,13 @@ bool CvUnitAI::AI_guardFort(bool bSearch)
 	{
 		if (atPlot(pBestGuardPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_BONUS, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_BONUS, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_BONUS, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_BONUS, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -8116,13 +8136,13 @@ bool CvUnitAI::AI_guardCitySite()
 	{
 		if (atPlot(pBestGuardPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_CITY, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_CITY, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_CITY, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -8204,13 +8224,13 @@ bool CvUnitAI::AI_guardSpy(int iRandomPercent)
 	{
 		if (atPlot(pBestGuardPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_SPY, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_GUARD_SPY, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_SPY, pBestGuardPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GUARD_SPY, pBestGuardPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -8289,7 +8309,7 @@ bool CvUnitAI::AI_destroySpy()
 					{
 						if (isLimitedUnitClass((UnitClassTypes)(GC.getUnitInfo(pBestCity->getProductionUnit()).getUnitClassType())))
 						{
-							getGroup()->pushMission(MISSION_DESTROY);
+							getGroup()->pushMission(MISSION_DESTROY, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 							return true;
 						}
 					}
@@ -8297,7 +8317,7 @@ bool CvUnitAI::AI_destroySpy()
 					{
 						if (isLimitedWonderClass((BuildingClassTypes)(GC.getBuildingInfo(pBestCity->getProductionBuilding()).getBuildingClassType())))
 						{
-							getGroup()->pushMission(MISSION_DESTROY);
+							getGroup()->pushMission(MISSION_DESTROY, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 							return true;
 						}
 					}
@@ -8305,20 +8325,20 @@ bool CvUnitAI::AI_destroySpy()
 					{
 						if (isLimitedProject(pBestCity->getProductionProject()))
 						{
-							getGroup()->pushMission(MISSION_DESTROY);
+							getGroup()->pushMission(MISSION_DESTROY, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 							return true;
 						}
 					}
 				}
 			}
 
-			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_ATTACK_SPY, pBestCity->plot());
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_ATTACK_SPY, pBestCity->plot(), 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestCity->plot());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestCity->plot(), 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -8419,13 +8439,13 @@ bool CvUnitAI::AI_sabotageSpy()
 	{
 		if (atPlot(pBestSabotagePlot))
 		{
-			getGroup()->pushMission(MISSION_SABOTAGE);
+			getGroup()->pushMission(MISSION_SABOTAGE, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestSabotagePlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestSabotagePlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -8455,7 +8475,7 @@ bool CvUnitAI::AI_pickupTargetSpy()
 		{
 			if (pCity->isCoastal(GC.getMIN_WATER_SIZE_FOR_OCEAN()))
 			{
-				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_ATTACK_SPY, pCity->plot());
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_ATTACK_SPY, pCity->plot(), 0, __FUNCTION__);
 				return true;
 			}
 		}
@@ -8493,7 +8513,7 @@ bool CvUnitAI::AI_pickupTargetSpy()
 	if ((pBestPlot != NULL) && (pBestPickupPlot != NULL))
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestPickupPlot);
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestPickupPlot, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -8581,7 +8601,7 @@ bool CvUnitAI::AI_heal(int iDamagePercent, int iMaxPath)
             {
                 if (!(isAlwaysHeal()))
                 {
-                    getGroup()->pushMission(MISSION_HEAL);
+                    getGroup()->pushMission(MISSION_HEAL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
                     return true;
                 }
             }
@@ -8647,7 +8667,7 @@ bool CvUnitAI::AI_heal(int iDamagePercent, int iMaxPath)
 		{
 			CvUnit* pUnitToHeal = aeDamagedUnits[iI];
 			pUnitToHeal->joinGroup(NULL);
-			pUnitToHeal->getGroup()->pushMission(MISSION_HEAL);
+			pUnitToHeal->getGroup()->pushMission(MISSION_HEAL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 
 			// note, removing the head unit from a group will force the group to be completely split if non-human
 			if (pUnitToHeal == this)
@@ -8669,7 +8689,7 @@ bool CvUnitAI::AI_heal(int iDamagePercent, int iMaxPath)
 		}
 		else if (healRate(plot()) > 10)
 	    {
-            pGroup->pushMission(MISSION_HEAL);
+            pGroup->pushMission(MISSION_HEAL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
             return true;
 	    }
 	}
@@ -8695,6 +8715,11 @@ bool CvUnitAI::AI_afterAttack()
 	{
 		return false;
 	}
+
+    if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        return AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this);
+    }
 
 	if (getDomainType() == DOMAIN_LAND)
 	{
@@ -8748,7 +8773,7 @@ bool CvUnitAI::AI_goldenAge()
 {
 	if (canGoldenAge(plot()))
 	{
-		getGroup()->pushMission(MISSION_GOLDEN_AGE);
+		getGroup()->pushMission(MISSION_GOLDEN_AGE, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -8991,13 +9016,13 @@ bool CvUnitAI::AI_spreadReligion()
 	{
 		if (atPlot(pBestSpreadPlot))
 		{
-			getGroup()->pushMission(MISSION_SPREAD, eReligion);
+			getGroup()->pushMission(MISSION_SPREAD, eReligion, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_SPREAD, pBestSpreadPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_SPREAD, pBestSpreadPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -9128,18 +9153,18 @@ bool CvUnitAI::AI_spreadCorporation()
 		{
 			if (canSpreadCorporation(pBestSpreadPlot, eCorporation))
 			{
-				getGroup()->pushMission(MISSION_SPREAD_CORPORATION, eCorporation);
+				getGroup()->pushMission(MISSION_SPREAD_CORPORATION, eCorporation, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_SPREAD_CORPORATION, pBestSpreadPlot);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_SPREAD_CORPORATION, pBestSpreadPlot, 0, __FUNCTION__);
 			}
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_SPREAD_CORPORATION, pBestSpreadPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_SPREAD_CORPORATION, pBestSpreadPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -9256,7 +9281,7 @@ bool CvUnitAI::AI_spreadReligionAirlift()
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_SPREAD, pBestPlot);
+		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_SPREAD, pBestPlot, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -9342,7 +9367,7 @@ bool CvUnitAI::AI_spreadCorporationAirlift()
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_SPREAD, pBestPlot);
+		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_SPREAD, pBestPlot, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -9374,7 +9399,7 @@ bool CvUnitAI::AI_discover(bool bThisTurnOnly, bool bFirstResearchOnly)
         {
             if ((iPercentWasted < 51) && bFirstResearchOnly && bIsFirstTech)
             {
-                getGroup()->pushMission(MISSION_DISCOVER);
+                getGroup()->pushMission(MISSION_DISCOVER, -1, 0, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
                 return true;
             }
 
@@ -9382,7 +9407,7 @@ bool CvUnitAI::AI_discover(bool bThisTurnOnly, bool bFirstResearchOnly)
             {
                 //I need a good way to assess if the tech is actually valuable...
                 //but don't have one.
-                getGroup()->pushMission(MISSION_DISCOVER);
+                getGroup()->pushMission(MISSION_DISCOVER, -1, 0, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
                 return true;
             }
         }
@@ -9395,7 +9420,7 @@ bool CvUnitAI::AI_discover(bool bThisTurnOnly, bool bFirstResearchOnly)
         {
             if (GET_PLAYER(getOwnerINLINE()).getCurrentResearch() == eDiscoverTech)
             {
-                getGroup()->pushMission(MISSION_DISCOVER);
+                getGroup()->pushMission(MISSION_DISCOVER, -1, 0, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
                 return true;
             }
         }
@@ -9499,13 +9524,13 @@ bool CvUnitAI::AI_lead(std::vector<UnitAITypes>& aeUnitAITypes)
 	{
 		if (atPlot(pBestPlot) && pBestUnit)
 		{
-			getGroup()->pushMission(MISSION_LEAD, pBestUnit->getID());
+			getGroup()->pushMission(MISSION_LEAD, pBestUnit->getID(), -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -9581,13 +9606,13 @@ bool CvUnitAI::AI_join(int iMaxCount)
 	{
 		if (atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_JOIN, eBestSpecialist);
+			getGroup()->pushMission(MISSION_JOIN, eBestSpecialist, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -9677,13 +9702,13 @@ bool CvUnitAI::AI_construct(int iMaxCount, int iMaxSingleBuildingCount, int iThr
 	{
 		if (atPlot(pBestConstructPlot))
 		{
-			getGroup()->pushMission(MISSION_CONSTRUCT, eBestBuilding);
+			getGroup()->pushMission(MISSION_CONSTRUCT, eBestBuilding, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_CONSTRUCT, pBestConstructPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_CONSTRUCT, pBestConstructPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -9747,7 +9772,7 @@ bool CvUnitAI::AI_switchHurry()
 		{
 			if (canHurry(plot()))
 			{
-				getGroup()->pushMission(MISSION_HURRY);
+				getGroup()->pushMission(MISSION_HURRY, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return true;
 			}
 		}
@@ -9829,13 +9854,13 @@ bool CvUnitAI::AI_hurry()
 	{
 		if (atPlot(pBestHurryPlot))
 		{
-			getGroup()->pushMission(MISSION_HURRY);
+			getGroup()->pushMission(MISSION_HURRY, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_HURRY, pBestHurryPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_HURRY, pBestHurryPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -9894,13 +9919,13 @@ bool CvUnitAI::AI_greatWork()
 	{
 		if (atPlot(pBestGreatWorkPlot))
 		{
-			getGroup()->pushMission(MISSION_GREAT_WORK);
+			getGroup()->pushMission(MISSION_GREAT_WORK, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GREAT_WORK, pBestGreatWorkPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_GREAT_WORK, pBestGreatWorkPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -9996,7 +10021,7 @@ bool CvUnitAI::AI_offensiveAirlift()
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -10104,7 +10129,7 @@ bool CvUnitAI::AI_paradrop(int iRange)
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_PARADROP, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_PARADROP, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -10158,7 +10183,7 @@ bool CvUnitAI::AI_protect(int iOddsThreshold)
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -10234,7 +10259,7 @@ bool CvUnitAI::AI_patrol()
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -10257,7 +10282,7 @@ bool CvUnitAI::AI_defend()
 
 	if (AI_defendPlot(plot()))
 	{
-		getGroup()->pushMission(MISSION_SKIP);
+		getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -10303,7 +10328,7 @@ bool CvUnitAI::AI_defend()
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -10413,12 +10438,12 @@ bool CvUnitAI::AI_safety()
 	{
 		if (atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((iPass > 0) ? MOVE_IGNORE_DANGER : 0));
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((iPass > 0) ? MOVE_IGNORE_DANGER : 0), false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -10549,12 +10574,12 @@ bool CvUnitAI::AI_hide()
 	{
 		if (atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -10627,7 +10652,7 @@ bool CvUnitAI::AI_goody(int iRange)
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -10738,7 +10763,7 @@ bool CvUnitAI::AI_explore()
 	if ((pBestPlot != NULL) && (pBestExplorePlot != NULL))
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_EXPLORE, pBestExplorePlot);
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_EXPLORE, pBestExplorePlot, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -10900,7 +10925,7 @@ bool CvUnitAI::AI_exploreRange(int iRange)
 		PROFILE("AI_exploreRange 5");
 
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_EXPLORE, pBestExplorePlot);
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_EXPLORE, pBestExplorePlot, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -11046,7 +11071,7 @@ bool CvUnitAI::AI_targetCity(int iFlags)
 			FAssert(!(pBestCity->at(pBestPlot)) || 0 != (iFlags & MOVE_THROUGH_ENEMY)); // no suicide missions...
 			if (!atPlot(pBestPlot))
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), iFlags);
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), iFlags, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return true;
 			}
 		}
@@ -11152,12 +11177,12 @@ bool CvUnitAI::AI_targetBarbCity()
 			FAssert(!(pBestCity->at(pBestPlot))); // no suicide missions...
 			if (atPlot(pBestPlot))
 			{
-				getGroup()->pushMission(MISSION_SKIP);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return true;
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return true;
 			}
 		}
@@ -11198,7 +11223,7 @@ bool CvUnitAI::AI_bombardCity()
 		
 		if (pBombardCity->getDefenseDamage() < ((GC.getMAX_CITY_DEFENSE_DAMAGE() * 3) / 4))
 		{
-			getGroup()->pushMission(MISSION_BOMBARD);
+			getGroup()->pushMission(MISSION_BOMBARD, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -11272,7 +11297,7 @@ bool CvUnitAI::AI_cityAttack(int iRange, int iOddsThreshold, bool bFollow)
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((bFollow) ? MOVE_DIRECT_ATTACK : 0));
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((bFollow) ? MOVE_DIRECT_ATTACK : 0), false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -11350,7 +11375,7 @@ bool CvUnitAI::AI_anyAttack(int iRange, int iOddsThreshold, int iMinStack, bool 
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((bFollow) ? MOVE_DIRECT_ATTACK : 0));
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((bFollow) ? MOVE_DIRECT_ATTACK : 0), false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -11402,7 +11427,7 @@ bool CvUnitAI::AI_rangeAttack(int iRange)
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_RANGE_ATTACK, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0);
+		getGroup()->pushMission(MISSION_RANGE_ATTACK, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -11485,7 +11510,7 @@ bool CvUnitAI::AI_leaveAttack(int iRange, int iOddsThreshold, int iStrengthThres
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0);
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -11593,17 +11618,17 @@ bool CvUnitAI::AI_blockade()
 		{
 			if (canBombard(plot()))
 			{
-				getGroup()->pushMission(MISSION_BOMBARD, -1, -1, 0, false, false, MISSIONAI_BLOCKADE, pBestBlockadePlot);
+				getGroup()->pushMission(MISSION_BOMBARD, -1, -1, 0, false, false, MISSIONAI_BLOCKADE, pBestBlockadePlot, 0, __FUNCTION__);
 			}
 
-			getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BLOCKADE, pBestBlockadePlot);
+			getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BLOCKADE, pBestBlockadePlot, 0, __FUNCTION__);
 			
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BLOCKADE, pBestBlockadePlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BLOCKADE, pBestBlockadePlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -11680,7 +11705,7 @@ bool CvUnitAI::AI_pirateBlockade()
 				{
 					return true;
 				}
-				getGroup()->pushMission(MISSION_SKIP);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return true;
 			}
 		}
@@ -11810,7 +11835,7 @@ bool CvUnitAI::AI_pirateBlockade()
 
 		if (atPlot(pBestBlockadePlot))
 		{
-			getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BLOCKADE, pBestBlockadePlot);
+			getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BLOCKADE, pBestBlockadePlot, 0, __FUNCTION__);
 			return true;
 		}
 		else
@@ -11818,15 +11843,15 @@ bool CvUnitAI::AI_pirateBlockade()
 			FAssert(!atPlot(pBestPlot));
 			if (bBestIsForceMove)
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return true;
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BLOCKADE, pBestBlockadePlot);
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BLOCKADE, pBestBlockadePlot, 0, __FUNCTION__);
 				if (bBestIsMove)
 				{
-					getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BLOCKADE, pBestBlockadePlot);
+					getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BLOCKADE, pBestBlockadePlot, 0, __FUNCTION__);
 				}
 				return true;
 			}
@@ -11929,7 +11954,7 @@ bool CvUnitAI::AI_seaBombardRange(int iMaxRange)
 			// if we are at the plot from which to bombard, and we have a unit that can bombard this turn, do it
 			if (bBombardUnitCanBombardNow && pGroup->canBombard(pBestBombardPlot))
 			{
-				getGroup()->pushMission(MISSION_BOMBARD, -1, -1, 0, false, false, MISSIONAI_BLOCKADE, pBestBombardPlot);
+				getGroup()->pushMission(MISSION_BOMBARD, -1, -1, 0, false, false, MISSIONAI_BLOCKADE, pBestBombardPlot, 0, __FUNCTION__);
 
 				// if city bombarded enough, wake up any units that were waiting to bombard this city
 				CvCity* pBombardCity = bombardTarget(pBestBombardPlot); // is NULL if city cannot be bombarded any more
@@ -11941,11 +11966,11 @@ bool CvUnitAI::AI_seaBombardRange(int iMaxRange)
 			// otherwise, skip until next turn, when we will surely bombard
 			else if (canPlunder(pBestBombardPlot))
 			{
-				getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, false, false, MISSIONAI_BLOCKADE, pBestBombardPlot);
+				getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, false, false, MISSIONAI_BLOCKADE, pBestBombardPlot, 0, __FUNCTION__);
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_SKIP);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			}
 
 			return true;
@@ -11953,7 +11978,7 @@ bool CvUnitAI::AI_seaBombardRange(int iMaxRange)
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BLOCKADE, pBestBombardPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BLOCKADE, pBestBombardPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -12041,14 +12066,14 @@ bool CvUnitAI::AI_pillage(int iBonusValueThreshold)
 		{
 			if (isEnemy(pBestPillagePlot->getTeam()))
 			{
-				getGroup()->pushMission(MISSION_PILLAGE, -1, -1, 0, false, false, MISSIONAI_PILLAGE, pBestPillagePlot);
+				getGroup()->pushMission(MISSION_PILLAGE, -1, -1, 0, false, false, MISSIONAI_PILLAGE, pBestPillagePlot, 0, __FUNCTION__);
 				return true;
 			}
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_PILLAGE, pBestPillagePlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_PILLAGE, pBestPillagePlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -12190,14 +12215,14 @@ bool CvUnitAI::AI_pillageRange(int iRange, int iBonusValueThreshold)
 		{
 			if (isEnemy(pBestPillagePlot->getTeam()))
 			{
-				getGroup()->pushMission(MISSION_PILLAGE, -1, -1, 0, false, false, MISSIONAI_PILLAGE, pBestPillagePlot);
+				getGroup()->pushMission(MISSION_PILLAGE, -1, -1, 0, false, false, MISSIONAI_PILLAGE, pBestPillagePlot, 0, __FUNCTION__);
 				return true;
 			}
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_PILLAGE, pBestPillagePlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_PILLAGE, pBestPillagePlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -12301,7 +12326,7 @@ bool CvUnitAI::AI_found()
 	{
 		if (atPlot(pBestFoundPlot))
 		{
-			getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, MISSIONAI_FOUND, pBestFoundPlot);
+			getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, MISSIONAI_FOUND, pBestFoundPlot, 0, __FUNCTION__);
 
             // AltAI
             //if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
@@ -12314,7 +12339,7 @@ bool CvUnitAI::AI_found()
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_FOUND, pBestFoundPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_FOUND, pBestFoundPlot, 0, __FUNCTION__);
 
             // AltAI
             //if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
@@ -12398,13 +12423,13 @@ bool CvUnitAI::AI_foundRange(int iRange, bool bFollow)
 	{
 		if (atPlot(pBestFoundPlot))
 		{
-			getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, MISSIONAI_FOUND, pBestFoundPlot);
+			getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, MISSIONAI_FOUND, pBestFoundPlot, 0, __FUNCTION__);
 			return true;
 		}
 		else if (!bFollow)
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_FOUND, pBestFoundPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_FOUND, pBestFoundPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -12633,14 +12658,14 @@ bool CvUnitAI::AI_assaultSeaTransport(bool bBarbarian)
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestAssaultPlot->getX_INLINE(), pBestAssaultPlot->getY_INLINE(), 0, false, false, MISSIONAI_ASSAULT, pBestAssaultPlot);
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestAssaultPlot->getX_INLINE(), pBestAssaultPlot->getY_INLINE(), 0, false, false, MISSIONAI_ASSAULT, pBestAssaultPlot, 0, __FUNCTION__);
 				return true;
 			}
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ASSAULT, pBestAssaultPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ASSAULT, pBestAssaultPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -12787,14 +12812,14 @@ bool CvUnitAI::AI_settlerSeaTransport()
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestFoundPlot->getX_INLINE(), pBestFoundPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestFoundPlot);
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestFoundPlot->getX_INLINE(), pBestFoundPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestFoundPlot, 0, __FUNCTION__);
 				return true;
 			}
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestFoundPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestFoundPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -12870,14 +12895,14 @@ bool CvUnitAI::AI_settlerSeaTransport()
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestFoundPlot->getX_INLINE(), pBestFoundPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestFoundPlot);
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestFoundPlot->getX_INLINE(), pBestFoundPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestFoundPlot, 0, __FUNCTION__);
 				return true;
 			}
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestFoundPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestFoundPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -12947,7 +12972,7 @@ bool CvUnitAI::AI_settlerSeaFerry()
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_FOUND, pBestPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -13152,14 +13177,14 @@ bool CvUnitAI::AI_specialSeaTransportMissionary()
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestSpreadPlot->getX_INLINE(), pBestSpreadPlot->getY_INLINE(), 0, false, false, bExecutive ? MISSIONAI_SPREAD_CORPORATION : MISSIONAI_SPREAD, pBestSpreadPlot);
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestSpreadPlot->getX_INLINE(), pBestSpreadPlot->getY_INLINE(), 0, false, false, bExecutive ? MISSIONAI_SPREAD_CORPORATION : MISSIONAI_SPREAD, pBestSpreadPlot, 0, __FUNCTION__);
 				return true;
 			}
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, bExecutive ? MISSIONAI_SPREAD_CORPORATION : MISSIONAI_SPREAD, pBestSpreadPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, bExecutive ? MISSIONAI_SPREAD_CORPORATION : MISSIONAI_SPREAD, pBestSpreadPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -13267,14 +13292,14 @@ bool CvUnitAI::AI_specialSeaTransportSpy()
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_MOVE_TO, pBestSpyPlot->getX_INLINE(), pBestSpyPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestSpyPlot);
+				getGroup()->pushMission(MISSION_MOVE_TO, pBestSpyPlot->getX_INLINE(), pBestSpyPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestSpyPlot, 0, __FUNCTION__);
 				return true;
 			}
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestSpyPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_ATTACK_SPY, pBestSpyPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -13447,18 +13472,18 @@ bool CvUnitAI::AI_carrierSeaTransport()
 
 			if (canPlunder(pBestCarrierPlot))
 			{
-				getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, false, false, MISSIONAI_CARRIER, pBestCarrierPlot);
+				getGroup()->pushMission(MISSION_PLUNDER, -1, -1, 0, false, false, MISSIONAI_CARRIER, pBestCarrierPlot, 0, __FUNCTION__);
 			}
 			else
 			{
-				getGroup()->pushMission(MISSION_SKIP);
+				getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			}
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_CARRIER, pBestCarrierPlot);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_CARRIER, pBestCarrierPlot, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -13491,7 +13516,7 @@ bool CvUnitAI::AI_connectPlot(CvPlot* pPlot, int iRange)
 
 						if (plot()->getPlotGroup(getOwnerINLINE()) == pLoopCity->plot()->getPlotGroup(getOwnerINLINE()))
 						{
-							getGroup()->pushMission(MISSION_ROUTE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pPlot);
+							getGroup()->pushMission(MISSION_ROUTE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pPlot, 0, __FUNCTION__);
 							return true;
 						}
 					}
@@ -13509,12 +13534,12 @@ bool CvUnitAI::AI_connectPlot(CvPlot* pPlot, int iRange)
 							{
 								if (atPlot(pPlot)) // need to test before moving...
 								{
-									getGroup()->pushMission(MISSION_ROUTE_TO, pLoopCity->getX_INLINE(), pLoopCity->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pPlot);
+									getGroup()->pushMission(MISSION_ROUTE_TO, pLoopCity->getX_INLINE(), pLoopCity->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pPlot, 0, __FUNCTION__);
 								}
 								else
 								{
-									getGroup()->pushMission(MISSION_ROUTE_TO, pLoopCity->getX_INLINE(), pLoopCity->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pPlot);
-									getGroup()->pushMission(MISSION_ROUTE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot);
+									getGroup()->pushMission(MISSION_ROUTE_TO, pLoopCity->getX_INLINE(), pLoopCity->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pPlot, 0, __FUNCTION__);
+									getGroup()->pushMission(MISSION_ROUTE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot, 0, __FUNCTION__);
 								}
 
 								return true;
@@ -13554,13 +13579,13 @@ bool CvUnitAI::AI_improveCity(CvCity* pCity)
         {
             if (!atPlot(pBestPlot))
             {
-                getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+                getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
             }
 
             std::vector<BuildTypes> additionalBuilds = GC.getGame().getAltAI()->getPlayer(getOwner())->addAdditionalPlotBuilds(pBestPlot, eBestBuild);
             for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
             {
-                getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+                getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
             }
             return true;
         }
@@ -13610,17 +13635,17 @@ bool CvUnitAI::AI_improveCity(CvCity* pCity)
             {
 		        eBestBuild = AI_betterPlotBuild(pBestPlot, eBestBuild);
 
-       		    getGroup()->pushMission(eMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
-		        getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+       		    getGroup()->pushMission(eMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
+		        getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
             }
             else
             {
-                getGroup()->pushMission(eMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+                getGroup()->pushMission(eMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
 
                 std::vector<BuildTypes> additionalBuilds = GC.getGame().getAltAI()->getPlayer(pCity->getOwner())->addAdditionalPlotBuilds(pBestPlot, eBestBuild);
                 for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
                 {
-                    getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+                    getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
                 }
             }
 
@@ -13784,17 +13809,17 @@ bool CvUnitAI::AI_improveLocalPlot(int iRange, CvCity* pIgnoreCity)
         {
 		    eBestBuild = AI_betterPlotBuild(pBestPlot, eBestBuild);
 
-       		getGroup()->pushMission(eMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
-		    getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+       		getGroup()->pushMission(eMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
+		    getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
         }
         else
         {
-            getGroup()->pushMission(eMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+            getGroup()->pushMission(eMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
 
             std::vector<BuildTypes> additionalBuilds = GC.getGame().getAltAI()->getPlayer(getOwner())->addAdditionalPlotBuilds(pBestPlot, eBestBuild);
             for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
             {
-                getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+                getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
             }
             
         }
@@ -13899,19 +13924,19 @@ bool CvUnitAI::AI_nextCityToImprove(CvCity* pCity)
         {
 		    eBestBuild = AI_betterPlotBuild(pBestPlot, eBestBuild);
 
-            getGroup()->pushMission(MISSION_ROUTE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
-		    getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+            getGroup()->pushMission(MISSION_ROUTE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot), 0, __FUNCTION__;
+		    getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
         }
         else
         {
-            //getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
-            GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pBestCity, pBestPlot, MISSION_MOVE_TO, NO_BUILD, 0, false, "CvUnitAI::AI_nextCityToImprove");
+            getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
+            //GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pBestCity, pBestPlot, MISSION_MOVE_TO, NO_BUILD, 0, "CvUnitAI::AI_nextCityToImprove");
 
             std::vector<BuildTypes> additionalBuilds = GC.getGame().getAltAI()->getPlayer(getOwner())->addAdditionalPlotBuilds(pBestPlot, eBestBuild);
             for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
             {
-                //getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
-                GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pBestCity, pBestPlot, MISSION_BUILD, additionalBuilds[i], 0, getGroup()->getLengthMissionQueue() > 0, "CvUnitAI::AI_nextCityToImprove");
+                getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
+                //GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pBestCity, pBestPlot, MISSION_BUILD, additionalBuilds[i], 0, getGroup()->getLengthMissionQueue() > 0, "CvUnitAI::AI_nextCityToImprove");
             }
         }
 		return true;
@@ -13973,7 +13998,7 @@ bool CvUnitAI::AI_nextCityToImproveAirlift()
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_AIRLIFT, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -14113,13 +14138,13 @@ bool CvUnitAI::AI_irrigateTerritory()
 
         if (GET_PLAYER(getOwner()).isUsingAltAI())
         {
-            getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+            getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
         }
         else
         {
-		    getGroup()->pushMission(MISSION_ROUTE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
+		    getGroup()->pushMission(MISSION_ROUTE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
         }
-		getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+		getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
 
 		return true;
 	}
@@ -14233,8 +14258,8 @@ bool CvUnitAI::AI_fortTerritory(bool bCanal, bool bAirbase)
 		FAssertMsg(eBestBuild != NO_BUILD, "BestBuild is not assigned a valid value");
 		FAssertMsg(eBestBuild < GC.getNumBuildInfos(), "BestBuild is assigned a corrupt value");
 
-		getGroup()->pushMission(MISSION_ROUTE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
-		getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+		getGroup()->pushMission(MISSION_ROUTE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
+		getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
 
 		return true;
 	}
@@ -14538,20 +14563,20 @@ bool CvUnitAI::AI_improveBonus(int iMinValue, CvPlot** ppBestPlot, BuildTypes* p
             {
 		        eBestBuild = AI_betterPlotBuild(pBestPlot, eBestBuild);
 
-       		    getGroup()->pushMission(eBestMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
-		        getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
+       		    getGroup()->pushMission(eBestMission, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
+		        getGroup()->pushMission(MISSION_BUILD, eBestBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
             }
             else
             {
-                //getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot);
-                GC.getGame().getAltAI()->getPlayer(getOwner())->clearWorkerMission(this);
-                GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pTargetCity, pBestPlot, MISSION_MOVE_TO, NO_BUILD, 0, false, "CvUnitAI::AI_improveBonus");
+                getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
+                //GC.getGame().getAltAI()->getPlayer(getOwner())->clearWorkerMission(this);
+                //GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pTargetCity, pBestPlot, MISSION_MOVE_TO, NO_BUILD, 0, false, "CvUnitAI::AI_improveBonus");
 
                 std::vector<BuildTypes> additionalBuilds = GC.getGame().getAltAI()->getPlayer(getOwner())->addAdditionalPlotBuilds(pBestPlot, eBestBuild);
                 for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
                 {
-                    //getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot);
-                    GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pTargetCity, pBestPlot, MISSION_BUILD, additionalBuilds[i], 0, getGroup()->getLengthMissionQueue() > 0, "CvUnitAI::AI_improveBonus");
+                    getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
+                    //GC.getGame().getAltAI()->getPlayer(getOwner())->pushWorkerMission(this, pTargetCity, pBestPlot, MISSION_BUILD, additionalBuilds[i], 0, getGroup()->getLengthMissionQueue() > 0, "CvUnitAI::AI_improveBonus");
                 }
             }
 
@@ -14594,22 +14619,22 @@ bool CvUnitAI::AI_improvePlot(CvPlot* pPlot, BuildTypes eBuild)
 
        		if (!atPlot(pPlot))
 	    	{
-                getGroup()->pushMission(MISSION_MOVE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pPlot);
+                getGroup()->pushMission(MISSION_MOVE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pPlot, 0, __FUNCTION__);
 		    }
-		    getGroup()->pushMission(MISSION_BUILD, eBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot);
+		    getGroup()->pushMission(MISSION_BUILD, eBuild, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot, 0, __FUNCTION__);
         }
         else
         {
             if (!atPlot(pPlot))
 	    	{
-                getGroup()->pushMission(MISSION_MOVE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pPlot);
+                getGroup()->pushMission(MISSION_MOVE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), 0, false, false, MISSIONAI_BUILD, pPlot, 0, __FUNCTION__);
 		    }
 
             std::vector<BuildTypes> additionalBuilds = GC.getGame().getAltAI()->getPlayer(getOwner())->addAdditionalPlotBuilds(pPlot, eBuild);
 
             for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
             {
-                getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot);
+                getGroup()->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot, 0, __FUNCTION__);
             }
         }
 
@@ -14889,8 +14914,8 @@ bool CvUnitAI::AI_routeCity()
 							{
 								if (generatePath(pRouteToCity->plot(), MOVE_SAFE_TERRITORY, true))
 								{
-									getGroup()->pushMission(MISSION_ROUTE_TO, pLoopCity->getX_INLINE(), pLoopCity->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pRouteToCity->plot());
-									getGroup()->pushMission(MISSION_ROUTE_TO, pRouteToCity->getX_INLINE(), pRouteToCity->getY_INLINE(), MOVE_SAFE_TERRITORY, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pRouteToCity->plot());
+									getGroup()->pushMission(MISSION_ROUTE_TO, pLoopCity->getX_INLINE(), pLoopCity->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pRouteToCity->plot(), 0, __FUNCTION__);
+									getGroup()->pushMission(MISSION_ROUTE_TO, pRouteToCity->getX_INLINE(), pRouteToCity->getY_INLINE(), MOVE_SAFE_TERRITORY, (getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pRouteToCity->plot(), 0, __FUNCTION__);
 
 									return true;
 								}
@@ -14994,7 +15019,7 @@ bool CvUnitAI::AI_routeTerritory(bool bImprovementOnly)
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_ROUTE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pBestPlot);
+		getGroup()->pushMission(MISSION_ROUTE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pBestPlot, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -15023,14 +15048,14 @@ bool CvUnitAI::AI_travelToUpgradeCity()
 				return false;
 			}
 			
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 
 		if (DOMAIN_AIR == getDomainType())
 		{
 			FAssert(!atPlot(pUpgradeCity->plot()));
-			getGroup()->pushMission(MISSION_MOVE_TO, pUpgradeCity->getX_INLINE(), pUpgradeCity->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pUpgradeCity->getX_INLINE(), pUpgradeCity->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 
@@ -15059,7 +15084,7 @@ bool CvUnitAI::AI_travelToUpgradeCity()
 		if (NULL != pThisTurnPlot && NULL != pClosestCity && (pClosestCity == pUpgradeCity || iUpgradeCityPathTurns < 4))
 		{
 			FAssert(!atPlot(pThisTurnPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pThisTurnPlot->getX_INLINE(), pThisTurnPlot->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pThisTurnPlot->getX_INLINE(), pThisTurnPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		
@@ -15072,13 +15097,13 @@ bool CvUnitAI::AI_travelToUpgradeCity()
 				// can we do the airlift this turn?
 				if (canAirliftAt(pClosestCity->plot(), pUpgradeCity->getX_INLINE(), pUpgradeCity->getY_INLINE()))
 				{
-					getGroup()->pushMission(MISSION_AIRLIFT, pUpgradeCity->getX_INLINE(), pUpgradeCity->getY_INLINE());
+					getGroup()->pushMission(MISSION_AIRLIFT, pUpgradeCity->getX_INLINE(), pUpgradeCity->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return true;
 				}
 				// wait to do it next turn
 				else
 				{
-					getGroup()->pushMission(MISSION_SKIP);
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return true;
 				}
 			}
@@ -15095,7 +15120,7 @@ bool CvUnitAI::AI_travelToUpgradeCity()
 			if (NULL != pThisTurnPlotForAirlift && (!bCanPathToUpgradeCity || iClosestCityPathTurns < iUpgradeCityPathTurns))
 			{
 				FAssert(!atPlot(pThisTurnPlotForAirlift));
-				getGroup()->pushMission(MISSION_MOVE_TO, pThisTurnPlotForAirlift->getX_INLINE(), pThisTurnPlotForAirlift->getY_INLINE());
+				getGroup()->pushMission(MISSION_MOVE_TO, pThisTurnPlotForAirlift->getX_INLINE(), pThisTurnPlotForAirlift->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				return true;
 			}
 		}
@@ -15104,7 +15129,7 @@ bool CvUnitAI::AI_travelToUpgradeCity()
 		if (NULL != pThisTurnPlot)
 		{
 			FAssert(!atPlot(pThisTurnPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pThisTurnPlot->getX_INLINE(), pThisTurnPlot->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pThisTurnPlot->getX_INLINE(), pThisTurnPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -15142,7 +15167,7 @@ bool CvUnitAI::AI_retreatToCity(bool bPrimary, bool bAirlift, int iMaxPath)
 					{
 						if (!(pCity->plot()->isVisibleEnemyUnit(this)))
 						{
-							getGroup()->pushMission(MISSION_SKIP);
+							getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 							return true;
 						}
 					}
@@ -15207,7 +15232,7 @@ bool CvUnitAI::AI_retreatToCity(bool bPrimary, bool bAirlift, int iMaxPath)
 						{
 							if (!(pCity->plot()->isVisibleEnemyUnit(this)))
 							{
-								getGroup()->pushMission(MISSION_SKIP);
+								getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 								return true;
 							}
 						}
@@ -15225,7 +15250,7 @@ bool CvUnitAI::AI_retreatToCity(bool bPrimary, bool bAirlift, int iMaxPath)
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((iPass > 0) ? MOVE_IGNORE_DANGER : 0));
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((iPass > 0) ? MOVE_IGNORE_DANGER : 0), false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -15233,7 +15258,7 @@ bool CvUnitAI::AI_retreatToCity(bool bPrimary, bool bAirlift, int iMaxPath)
 	{
 		if (pCity->getTeam() == getTeam())
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -15272,7 +15297,7 @@ bool CvUnitAI::AI_pickup(UnitAITypes eUnitAI)
 			{
 				if ((AI_getUnitAIType() != UNITAI_ASSAULT_SEA) || pCity->AI_isDefended(-1))
 				{
-					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_PICKUP, pCity->plot());
+					getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, MISSIONAI_PICKUP, pCity->plot(), 0, __FUNCTION__);
 					return true;
 				}
 			}
@@ -15334,7 +15359,7 @@ bool CvUnitAI::AI_pickup(UnitAITypes eUnitAI)
 	if ((pBestPlot != NULL) && (pBestPickupPlot != NULL))
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_PICKUP, pBestPickupPlot);
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, MISSIONAI_PICKUP, pBestPickupPlot, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -15454,7 +15479,7 @@ bool CvUnitAI::AI_airOffensiveCity()
 	{
 		if (!atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -15488,7 +15513,7 @@ bool CvUnitAI::AI_airDefensiveCity()
 			{
 				if (!(pCity->AI_isAirDefended(-1)))
 				{
-					getGroup()->pushMission(MISSION_AIRPATROL);
+					getGroup()->pushMission(MISSION_AIRPATROL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 					return true;
 				}
 			}
@@ -15521,7 +15546,7 @@ bool CvUnitAI::AI_airDefensiveCity()
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -15549,12 +15574,12 @@ bool CvUnitAI::AI_airCarrier()
 	{
 		if (canAirDefend())
 		{
-			getGroup()->pushMission(MISSION_AIRPATROL);
+			getGroup()->pushMission(MISSION_AIRPATROL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -15604,7 +15629,7 @@ bool CvUnitAI::AI_airCarrier()
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestUnit->getX_INLINE(), pBestUnit->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestUnit->getX_INLINE(), pBestUnit->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -15656,7 +15681,7 @@ bool CvUnitAI::AI_missileLoad(UnitAITypes eTargetUnitAI, int iMaxOwnUnitAI, bool
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestUnit->getX_INLINE(), pBestUnit->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestUnit->getX_INLINE(), pBestUnit->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			setTransportUnit(pBestUnit);
 			return true;
 		}
@@ -15756,7 +15781,7 @@ bool CvUnitAI::AI_airStrike()
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -15844,7 +15869,7 @@ bool CvUnitAI::AI_airBombPlots()
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_AIRBOMB, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_AIRBOMB, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -15937,7 +15962,7 @@ bool CvUnitAI::AI_airBombDefenses()
 
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_AIRBOMB, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_AIRBOMB, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -15991,7 +16016,7 @@ bool CvUnitAI::AI_exploreAir()
 	
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_RECON, pBestPlot->getX(), pBestPlot->getY());
+		getGroup()->pushMission(MISSION_RECON, pBestPlot->getX(), pBestPlot->getY(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 	
@@ -16044,7 +16069,7 @@ bool CvUnitAI::AI_nuke()
 
 	if (pBestCity != NULL)
 	{
-		getGroup()->pushMission(MISSION_NUKE, pBestCity->getX_INLINE(), pBestCity->getY_INLINE());
+		getGroup()->pushMission(MISSION_NUKE, pBestCity->getX_INLINE(), pBestCity->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -16165,7 +16190,7 @@ bool CvUnitAI::AI_nukeRange(int iRange)
 	
 	if (pBestPlot != NULL)
 	{
-		getGroup()->pushMission(MISSION_NUKE, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_NUKE, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 	
@@ -16231,13 +16256,13 @@ bool CvUnitAI::AI_trade(int iValueThreshold)
 	{
 		if (atPlot(pBestTradePlot))
 		{
-			getGroup()->pushMission(MISSION_TRADE);
+			getGroup()->pushMission(MISSION_TRADE, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -16261,7 +16286,7 @@ bool CvUnitAI::AI_infiltrate()
 	
 	if (canInfiltrate(plot()))
 	{
-		getGroup()->pushMission(MISSION_INFILTRATE);
+		getGroup()->pushMission(MISSION_INFILTRATE, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 	
@@ -16304,14 +16329,14 @@ bool CvUnitAI::AI_infiltrate()
 	{
 		if (atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_INFILTRATE);
+			getGroup()->pushMission(MISSION_INFILTRATE, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
 			FAssert(!atPlot(pBestPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
-			getGroup()->pushMission(MISSION_INFILTRATE, -1, -1, 0, (getGroup()->getLengthMissionQueue() > 0));
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
+			getGroup()->pushMission(MISSION_INFILTRATE, -1, -1, 0, (getGroup()->getLengthMissionQueue() > 0), false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -16407,13 +16432,13 @@ bool CvUnitAI::AI_reconSpy(int iRange)
 	{
 		if (atPlot(pBestTargetPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestTargetPlot->getX_INLINE(), pBestTargetPlot->getY_INLINE());			
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestTargetPlot->getX_INLINE(), pBestTargetPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);			
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -16505,12 +16530,12 @@ bool CvUnitAI::AI_cityOffenseSpy(int iMaxPath)
 	{
 		if (atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());			
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);			
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		}
 		return true;
 	}
@@ -16547,13 +16572,13 @@ bool CvUnitAI::AI_bonusOffenseSpy(int iRange)
 	{
 		if (atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());			
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);			
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -16656,12 +16681,12 @@ bool CvUnitAI::AI_moveToStagingCity()
 	{
 		if (atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 	}
@@ -16749,7 +16774,7 @@ bool CvUnitAI::AI_airAttackDamagedSkip()
 
 	if (bSkip)
 	{
-		getGroup()->pushMission(MISSION_SKIP);
+		getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -16768,7 +16793,7 @@ bool CvUnitAI::AI_followBombard()
 
 	if (canBombard(plot()))
 	{
-		getGroup()->pushMission(MISSION_BOMBARD);
+		getGroup()->pushMission(MISSION_BOMBARD, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -17250,7 +17275,7 @@ bool CvUnitAI::AI_stackAttackCity(int iRange, int iPowerThreshold, bool bFollow)
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((bFollow) ? MOVE_DIRECT_ATTACK : 0));
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), ((bFollow) ? MOVE_DIRECT_ATTACK : 0), false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -17317,7 +17342,7 @@ bool CvUnitAI::AI_moveIntoCity(int iRange)
 	if (pBestPlot != NULL)
 	{
 		FAssert(!atPlot(pBestPlot));
-		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+		getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		return true;
 	}
 
@@ -17437,12 +17462,12 @@ bool CvUnitAI::AI_artistCultureVictoryMove()
     {
         if (bGreatWork)
         {
-            getGroup()->pushMission(MISSION_GREAT_WORK);
+            getGroup()->pushMission(MISSION_GREAT_WORK, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
             return true;
         }
         if (bJoin)
         {
-            getGroup()->pushMission(MISSION_JOIN, eBestSpecialist);
+            getGroup()->pushMission(MISSION_JOIN, eBestSpecialist, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
             return true;
         }
         FAssert(false);
@@ -17451,7 +17476,7 @@ bool CvUnitAI::AI_artistCultureVictoryMove()
     else
     {
         FAssert(!atPlot(pBestPlot));
-        getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+        getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
         return true;
     }
 }    
@@ -17557,7 +17582,7 @@ bool CvUnitAI::AI_poach()
 			GET_TEAM(getTeam()).declareWar(eBestPoachTeam, true, WARPLAN_LIMITED);
 			
 			FAssert(!atPlot(pBestPoachPlot));
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPoachPlot->getX_INLINE(), pBestPoachPlot->getY_INLINE(), MOVE_DIRECT_ATTACK);
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPoachPlot->getX_INLINE(), pBestPoachPlot->getY_INLINE(), MOVE_DIRECT_ATTACK, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		
@@ -17622,17 +17647,15 @@ bool CvUnitAI::AI_choke(int iRange)
 	{
 		if (atPlot(pBestPlot))
 		{
-			getGroup()->pushMission(MISSION_SKIP);
+			getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
 		else
 		{
-			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX(), pBestPlot->getY());
+			getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX(), pBestPlot->getY(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			return true;
 		}
-	}
-	
-		
+	}	
 	
 	return false;
 }
@@ -17702,7 +17725,7 @@ bool CvUnitAI::AI_solveBlockageProblem(CvPlot* pDestPlot, bool bDeclareWar)
 						}
 
 						FAssert(!atPlot(pBestPlot));
-						getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_DIRECT_ATTACK);
+						getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_DIRECT_ATTACK, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 						return true;						
 					}
 				}
@@ -17886,8 +17909,8 @@ void CvUnitAI::read(FDataStreamBase* pStream)
 
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->addUnit(this, true);
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getUnit(this).read(pStream);
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->addOurUnit(this, NULL, true);
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getOurUnit(this).read(pStream);
     }
 }
 
@@ -17906,7 +17929,7 @@ void CvUnitAI::write(FDataStreamBase* pStream)
     
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getUnit(this).write(pStream);
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getOurUnit(this).write(pStream);
     }
 }
 

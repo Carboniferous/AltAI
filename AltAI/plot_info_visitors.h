@@ -40,7 +40,7 @@ namespace AltAI
     PlotYield getYield(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType, RouteTypes routeType, bool isGoldenAge = false);
 
     // list of improvements and yields
-    std::vector<std::pair<PlotYield, ImprovementTypes> > getYields(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, int lookaheadDepth = 0);
+    std::vector<std::pair<PlotYield, ImprovementTypes> > getYields(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, bool includeUpgrades, int lookaheadDepth = 0);
 
     // list of routetypes and yield changes
     std::vector<std::pair<RouteTypes, PlotYield> > getRouteYieldChanges(const PlotInfo::PlotInfoNode& node, PlayerTypes playerType, ImprovementTypes improvementType, FeatureTypes featureType);

@@ -14,8 +14,8 @@ namespace AltAI
 
         void addTactic(const ICivicTacticPtr& pCivicTactic);
         void setTechDependency(const ResearchTechDependencyPtr& pTechDependency);
-        void update(const Player& player);
-        void updateDependencies(const Player& player);
+        void update(Player& player);
+        void updateDependencies(Player& player);
         void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
         void apply(TacticSelectionData& selectionData);
 
@@ -45,7 +45,7 @@ namespace AltAI
     {
     public:
         virtual void debug(std::ostream&) const;
-        virtual void update(const CivicTacticsPtr&, const Player&);
+        virtual void update(const CivicTacticsPtr&, Player&);
         virtual void apply(const CivicTacticsPtr&, TacticSelectionData&);
 
         virtual void write(FDataStreamBase*) const;
@@ -59,17 +59,20 @@ namespace AltAI
     class HurryCivicTactic : public ICivicTactic
     {
     public:
-        HurryCivicTactic() : hurryType_(NO_HURRY) {}
-        explicit HurryCivicTactic(HurryTypes hurryType) : hurryType_(hurryType) {}
+        HurryCivicTactic() : hurryType_(NO_HURRY), productionPerPopulation_(0), goldPerProduction_(0) {}
+        explicit HurryCivicTactic(HurryTypes hurryType);
 
         virtual void debug(std::ostream&) const;
-        virtual void update(const CivicTacticsPtr&, const Player&);
+        virtual void update(const CivicTacticsPtr&, Player&);
         virtual void apply(const CivicTacticsPtr&, TacticSelectionData&);
 
         virtual void write(FDataStreamBase*) const;
         virtual void read(FDataStreamBase*);
 
         static const int ID = 1;
+
         HurryTypes hurryType_;
+        int productionPerPopulation_, goldPerProduction_;
+        std::map<IDInfo, std::pair<ProjectionLadder, ProjectionLadder> > cityProjections_;
     };
 }

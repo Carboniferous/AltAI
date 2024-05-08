@@ -4,10 +4,11 @@
 #include "./player_analysis.h"
 #include "./unit_info_visitors.h"
 #include "./player.h"
-#include "./city.h"
 #include "./helper_fns.h"
+#include "./save_utils.h"
 #include "./civ_log.h"
 #include "./unit_info.h"
+#include "./iters.h"
 
 namespace AltAI
 {
@@ -20,7 +21,7 @@ namespace AltAI
             const int attMaxHP = attacker.maxhp;
             const int defMaxHP = defender.maxhp;
 
-            const int maxAttackerStrength = attacker.calculateStrength(combatDetails);
+            const int maxAttackerStrength = attacker.calculateStrength();
             const int maxDefenderStrength = defender.calculateStrength(attacker, combatDetails);
 
             const int attackerStrength = maxAttackerStrength * attHP / attMaxHP;
@@ -65,6 +66,20 @@ namespace AltAI
             const bool attImmuneToFirstStrikes, defImmuneToFirstStrikes;
         };
 
+        bool canAttack(const UnitData& attacker, const UnitData& defender, const UnitData::CombatDetails& combatDetails = UnitData::CombatDetails())
+        {
+            if (attacker.pUnitInfo->isOnlyDefensive() || (attacker.hasAttacked && !attacker.isBlitz))
+            {
+                return false;
+            }
+            if (defender.maxhp - defender.hp > attacker.combatLimit)
+            {
+                return false;
+            }
+            // todo - add check for amphibious collateral units
+            return true;
+        }
+
         UnitOddsData getCombatOddsDetail_(const UnitData& attacker, const UnitData& defender, const UnitData::CombatDetails& combatDetails = UnitData::CombatDetails())
         {
             static const int COMBAT_DIE_SIDES = gGlobals.getDefineINT("COMBAT_DIE_SIDES");  // 1000
@@ -77,7 +92,7 @@ namespace AltAI
             const int attMaxHP = attacker.maxhp;
             const int defMaxHP = defender.maxhp;
 
-            const int maxAttackerStrength = attacker.calculateStrength(combatDetails);
+            const int maxAttackerStrength = attacker.calculateStrength();
             const int maxDefenderStrength = defender.calculateStrength(attacker, combatDetails);
 
             const int attackerStrength = maxAttackerStrength * attHP / attMaxHP;
@@ -117,7 +132,7 @@ namespace AltAI
 
             if (attacker.combatLimit < defMaxHP)
             {
-                odds.E_HP_Att_Retreat = attHP - (iNeededRoundsDefender - 1) * iDamageToAttacker;
+                odds.E_HP_Att_Retreat = (float)(attHP - (iNeededRoundsDefender - 1) * iDamageToAttacker);
             }
 
             for (int n_D = 0; n_D < iNeededRoundsAttacker; n_D++)
@@ -292,30 +307,106 @@ namespace AltAI
     }
 
     UnitData::CombatDetails::CombatDetails(const CvPlot* pPlot) : 
-        flags(None), plotIsHills(pPlot->isHills()), plotTerrain(pPlot->getTerrainType()), plotFeature(pPlot->getFeatureType()), cultureDefence(0), buildingDefence(0)
+        flags(None), plotIsHills(pPlot->isHills()), plotTerrain(pPlot->getTerrainType()), plotFeature(pPlot->getFeatureType()),
+        cultureDefence(0), buildingDefence(0), plotDefence(0), attackDirection(NO_DIRECTION)
     {
         if (pPlot->isCity())  // assumes we can see the city for real if we're checking combat odds
         {
+            flags |= CombatDetails::CityAttack;
+            flags |= CombatDetails::FortifyDefender;  // todo - make this more dynamic from our view of the plot, and unit states
             cultureDefence = pPlot->getPlotCity()->getDefenseModifier(true);
             buildingDefence = pPlot->getPlotCity()->getDefenseModifier(false);
+        }
+
+        plotDefence = plotFeature == NO_FEATURE ? 
+            gGlobals.getTerrainInfo(plotTerrain).getDefenseModifier() : gGlobals.getFeatureInfo(plotFeature).getDefenseModifier();
+        /*if (plotIsHills)  // added in calculateStrength (need flag as can affect attacker too)
+        {
+            plotDefence += gGlobals.getHILLS_EXTRA_DEFENSE();
+        }*/
+        NeighbourPlotIter plotIter(pPlot);
+        const bool isWater = pPlot->isWater();
+        while (IterPlot pLoopPlot = plotIter())
+        {
+            DirectionTypes d = directionXY(pLoopPlot, pPlot);
+            isRiverCrossing[d] = pLoopPlot->isRiverCrossing(d);
+            if (!isWater)
+            {
+                isAmphibious[d] = pLoopPlot->isWater();
+            }
+        }
+    }
+
+    void UnitData::CombatDetails::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(flags);
+        pStream->Write(plotIsHills);
+        pStream->Write(plotTerrain);
+        pStream->Write(plotFeature);
+        pStream->Write(cultureDefence);
+        pStream->Write(buildingDefence);
+        pStream->Write(plotDefence);
+        // todo - isRiverCrossing, isAmphibious, unitAttackDirectionsMap, attackDirection
+    }
+
+    void UnitData::CombatDetails::read(FDataStreamBase* pStream)
+    {
+        pStream->Read(&flags);
+        pStream->Read(&plotIsHills);
+        pStream->Read((int*)&plotTerrain);
+        pStream->Read((int*)&plotFeature);
+        pStream->Read(&cultureDefence);
+        pStream->Read(&buildingDefence);
+        pStream->Read(&plotDefence);
+        // todo - isRiverCrossing, isAmphibious, unitAttackDirectionsMap, attackDirection
+    }
+
+    void UnitData::CombatDetails::debug(std::ostream& os) const
+    {
+        os << (flags & CityAttack ? " city attack " : "") << (flags & FortifyDefender ? " fortity def " : "");
+        if (plotIsHills) os << " is hills ";
+        os << " terrain = " << (plotTerrain != NO_TERRAIN ? gGlobals.getTerrainInfo(plotTerrain).getType() : " none? ");
+        if (plotFeature != NO_FEATURE) os << " plot feature = " << gGlobals.getFeatureInfo(plotFeature).getType();
+        if (cultureDefence != 0) os << " culture def = " << cultureDefence;
+        if (buildingDefence != 0) os << " building def = " << buildingDefence;
+        os << " plot def = " << plotDefence;
+    }
+
+    DirectionTypes UnitData::CombatDetails::getAttackDirection(const IDInfo& unit) const
+    {
+        if (unit == IDInfo())
+        {
+            return attackDirection;
+        }
+        else
+        {
+            std::map<IDInfo, DirectionTypes>::const_iterator attackDirIter = unitAttackDirectionsMap.find(unit);
+            return attackDirIter != unitAttackDirectionsMap.end() ? attackDirIter->second : attackDirection;
         }
     }
 
     UnitData::UnitData() :
         pUnitInfo(NULL),
         unitType(NO_UNIT),
+        moves(0),
         hp(0), maxhp(0),
         baseCombat(0), extraCombat(0), firstStrikes(0), chanceFirstStrikes(0), firePower(0), combatLimit(0), withdrawalProb(0),
         cityAttackPercent(0), cityDefencePercent(0), fortifyPercent(0),
         hillsAttackPercent(0), hillsDefencePercent(0),
         extraCollateralDamage(0), collateralDamageProtection(0),
-        immuneToFirstStrikes(false)
+        immuneToFirstStrikes(false), isBlitz(false), isRiver(false), isAmphib(false), isBarbarian(false), isAnimal(false),
+        hasAttacked(false),
+        animalModifier(gGlobals.getHandicapInfo(gGlobals.getGame().getHandicapType()).getAIAnimalCombatModifier()),
+        barbModifier(gGlobals.getHandicapInfo(gGlobals.getGame().getHandicapType()).getAIBarbarianCombatModifier()),
+        featureDoubleMoves(gGlobals.getNumFeatureInfos(), 0), terrainDoubleMoves(gGlobals.getNumTerrainInfos(), 0)
     {
     }
 
     UnitData::UnitData(const CvUnit* pUnit) :
         pUnitInfo(&pUnit->getUnitInfo()),
         unitType(pUnit->getUnitType()),
+        unitId(pUnit->getIDInfo()),
+        moves(pUnitInfo->getMoves()),
         hp(pUnit->currHitPoints()),
         maxhp(pUnit->maxHitPoints()),
         baseCombat(pUnitInfo->getCombat()), 
@@ -327,7 +418,12 @@ namespace AltAI
         cityAttackPercent(pUnit->cityAttackModifier()), cityDefencePercent(pUnit->cityDefenseModifier()), fortifyPercent(pUnit->fortifyModifier()),
         hillsAttackPercent(pUnit->hillsAttackModifier()), hillsDefencePercent(pUnit->hillsDefenseModifier()),
         extraCollateralDamage(pUnit->getExtraCollateralDamage()), collateralDamageProtection(pUnit->getCollateralDamageProtection()),
-        immuneToFirstStrikes(pUnit->immuneToFirstStrikes())
+        immuneToFirstStrikes(pUnit->immuneToFirstStrikes()), isBlitz(pUnit->isBlitz()),
+        isRiver(pUnit->isRiver()), isAmphib(pUnit->isAmphib()),
+        isBarbarian(pUnit->isBarbarian()), isAnimal(pUnit->isAnimal()),
+        hasAttacked(false),
+        animalModifier(gGlobals.getHandicapInfo(gGlobals.getGame().getHandicapType()).getAIAnimalCombatModifier()),
+        barbModifier(gGlobals.getHandicapInfo(gGlobals.getGame().getHandicapType()).getAIBarbarianCombatModifier())
     {
         for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
         {
@@ -368,11 +464,21 @@ namespace AltAI
                 promotions.push_back((PromotionTypes)i);
             }
         }
+
+        for (int i = 0, infoCount = gGlobals.getNumFeatureInfos(); i < infoCount; ++i)
+        {
+            featureDoubleMoves.push_back(pUnit->isFeatureDoubleMove((FeatureTypes)i));
+        }
+        for (int i = 0, infoCount = gGlobals.getNumTerrainInfos(); i < infoCount; ++i)
+        {
+            terrainDoubleMoves.push_back(pUnit->isTerrainDoubleMove((TerrainTypes)i));
+        }
     }
 
     UnitData::UnitData(UnitTypes unitType_, const Promotions& promotions_) :
         pUnitInfo(&gGlobals.getUnitInfo(unitType_)),
         unitType(unitType_),
+        moves(pUnitInfo->getMoves()),
         hp(gGlobals.getMAX_HIT_POINTS()),
         maxhp(gGlobals.getMAX_HIT_POINTS()),
         baseCombat(pUnitInfo->getCombat()), 
@@ -384,7 +490,11 @@ namespace AltAI
         cityAttackPercent(pUnitInfo->getCityAttackModifier()), cityDefencePercent(pUnitInfo->getCityDefenseModifier()), fortifyPercent(0),
         hillsAttackPercent(pUnitInfo->getHillsAttackModifier()), hillsDefencePercent(pUnitInfo->getHillsDefenseModifier()),
         extraCollateralDamage(0), collateralDamageProtection(0),
-        immuneToFirstStrikes(pUnitInfo->isFirstStrikeImmune())
+        immuneToFirstStrikes(pUnitInfo->isFirstStrikeImmune()), isBlitz(false), isBarbarian(false), isAnimal(pUnitInfo->isAnimal()),
+        hasAttacked(false),
+        animalModifier(gGlobals.getHandicapInfo(gGlobals.getGame().getHandicapType()).getAIAnimalCombatModifier()),
+        barbModifier(gGlobals.getHandicapInfo(gGlobals.getGame().getHandicapType()).getAIBarbarianCombatModifier()),
+        featureDoubleMoves(gGlobals.getNumFeatureInfos(), 0), terrainDoubleMoves(gGlobals.getNumTerrainInfos(), 0)
     {
         for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
         {
@@ -441,6 +551,21 @@ namespace AltAI
             immuneToFirstStrikes = true;
         }
 
+        if (!isBlitz)
+        {
+            isBlitz = promotion.isBlitz();
+        }
+
+        if (!isRiver)
+        {
+            isRiver = promotion.isRiver();
+        }
+
+        if (!isAmphib)
+        {
+            isAmphib = promotion.isAmphib();
+        }
+
         withdrawalProb += promotion.getWithdrawalChange();
 
         cityAttackPercent += promotion.getCityAttackPercent();
@@ -468,9 +593,14 @@ namespace AltAI
                 unitCombatModifiers[(UnitCombatTypes)i] += promotion.getUnitCombatModifierPercent(i);
             }
         }
+
+        if (hp < maxhp)
+        {
+            hp += (maxhp - hp) / 2;
+        }
     }
 
-    void UnitData::debug(std::ostream& os) const
+    void UnitData::debugPromotions(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
         for (size_t i = 0, count = promotions.size(); i < count; ++i)
@@ -479,7 +609,7 @@ namespace AltAI
             else os << ", ";
             os << gGlobals.getPromotionInfo(promotions[i]).getType();
         }
-        if (!promotions.empty()) os << ") ";
+        if (!promotions.empty()) os << ")";
 #endif  
     }
 
@@ -494,6 +624,33 @@ namespace AltAI
         modifier += extraCombat;
 
         modifier += fortifyPercent;
+
+        if (other.isAnimal)
+        {
+            modifier += pUnitInfo->getAnimalCombatModifier();
+            modifier -= animalModifier;
+        }
+
+        if (isAnimal)
+        {
+            modifier -= other.pUnitInfo->getAnimalCombatModifier();
+            modifier += other.animalModifier;
+        }
+
+        if (other.isBarbarian)
+        {
+            modifier -= barbModifier;
+        }
+
+        if (isBarbarian)
+        {
+            modifier += other.barbModifier;
+        }
+
+        if (!noDefensiveBonus)
+        {
+            modifier += combatDetails.plotDefence;
+        }
 
         // unit type modifiers - add defence, subtract other's attack bonus
         std::map<UnitCombatTypes, int>::const_iterator ci = unitCombatModifiers.find((UnitCombatTypes)other.pUnitInfo->getUnitCombatType());
@@ -515,6 +672,21 @@ namespace AltAI
                 modifier += hillsDefencePercent;
             }
             modifier -= other.hillsAttackPercent;
+        }
+
+        DirectionTypes attackDirection = combatDetails.getAttackDirection(other.unitId);
+
+        if (attackDirection != NO_DIRECTION)
+        {
+            if (!other.isRiver && combatDetails.isRiverCrossing[attackDirection])
+            {
+                modifier -= gGlobals.getRIVER_ATTACK_MODIFIER();  // -(-25)
+            }
+
+            if (!other.isAmphib && combatDetails.isAmphibious[attackDirection])
+            {
+                modifier -= gGlobals.getAMPHIB_ATTACK_MODIFIER();  // -(-50)
+            }
         }
 
         if (combatDetails.plotTerrain != NO_TERRAIN)
@@ -581,7 +753,7 @@ namespace AltAI
     }
 
     // calculate our strength as attacker
-    int UnitData::calculateStrength(const CombatDetails&) const
+    int UnitData::calculateStrength() const
     {
         int modifier = extraCombat;
         int strength = baseCombat;
@@ -597,12 +769,189 @@ namespace AltAI
         return strength;
     }
 
+    void UnitData::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(unitType);        
+        unitId.write(pStream);
+        pStream->Write(moves);
+        pStream->Write(hp);
+        pStream->Write(maxhp);
+        pStream->Write(baseCombat);
+        pStream->Write(extraCombat);
+        pStream->Write(firstStrikes);
+        pStream->Write(chanceFirstStrikes);
+        pStream->Write(firePower);
+        pStream->Write(combatLimit);
+        pStream->Write(withdrawalProb);
+        pStream->Write(cityAttackPercent);
+        pStream->Write(cityDefencePercent);
+        pStream->Write(fortifyPercent);
+        pStream->Write(hillsAttackPercent);
+        pStream->Write(hillsDefencePercent);
+        pStream->Write(immuneToFirstStrikes);
+        pStream->Write(isBlitz);
+        pStream->Write(isRiver);
+        pStream->Write(isAmphib);
+        pStream->Write(isBarbarian);
+        pStream->Write(isAnimal);
+        pStream->Write(extraCollateralDamage);
+        pStream->Write(collateralDamageProtection);
+        writeMap(pStream, unitFeatureAttackModifiers);
+        writeMap(pStream, unitFeatureDefenceModifiers);
+        writeMap(pStream, unitTerrainAttackModifiers);
+        writeMap(pStream, unitTerrainDefenceModifiers);
+        writeMap(pStream, unitCombatModifiers);
+        pStream->Write(hasAttacked);
+        writeVector(pStream, promotions);
+        pStream->Write(animalModifier);
+        pStream->Write(barbModifier);
+    }
+
+    void UnitData::read(FDataStreamBase* pStream)
+    {
+        pStream->Read((int*)&unitType);
+		if (unitType != NO_UNIT)
+        {
+            pUnitInfo = &gGlobals.getUnitInfo(unitType);
+        }
+        unitId.read(pStream);
+        pStream->Read(&moves);
+        pStream->Read(&hp);
+        pStream->Read(&maxhp);
+        pStream->Read(&baseCombat);
+        pStream->Read(&extraCombat);
+        pStream->Read(&firstStrikes);
+        pStream->Read(&chanceFirstStrikes);
+        pStream->Read(&firePower);
+        pStream->Read(&combatLimit);
+        pStream->Read(&withdrawalProb);
+        pStream->Read(&cityAttackPercent);
+        pStream->Read(&cityDefencePercent);
+        pStream->Read(&fortifyPercent);
+        pStream->Read(&hillsAttackPercent);
+        pStream->Read(&hillsDefencePercent);
+        pStream->Read(&immuneToFirstStrikes);
+        pStream->Read(&isBlitz);
+        pStream->Read(&isRiver);
+        pStream->Read(&isAmphib);
+        pStream->Read(&isBarbarian);
+        pStream->Read(&isAnimal);
+        pStream->Read(&extraCollateralDamage);
+        pStream->Read(&collateralDamageProtection);
+        readMap<FeatureTypes, int, int, int>(pStream, unitFeatureAttackModifiers);
+        readMap<FeatureTypes, int, int, int>(pStream, unitFeatureDefenceModifiers);
+        readMap<TerrainTypes, int, int, int>(pStream, unitTerrainAttackModifiers);
+        readMap<TerrainTypes, int, int, int>(pStream, unitTerrainDefenceModifiers);
+        readMap<UnitCombatTypes, int, int, int>(pStream, unitCombatModifiers);
+        pStream->Read(&hasAttacked);
+        readVector<PromotionTypes, int>(pStream, promotions);
+        pStream->Read(&animalModifier);
+        pStream->Read(&barbModifier);
+    }
+
+    CombatData::CombatData(const CvPlot* pPlot) : combatDetails(pPlot)
+    {
+    }
+
+    void CombatData::write(FDataStreamBase* pStream) const
+    {
+        combatDetails.write(pStream);
+        writeComplexVector(pStream, attackers);
+        writeComplexVector(pStream, defenders);
+    }
+
+    void CombatData::read(FDataStreamBase* pStream)
+    {
+        combatDetails.read(pStream);
+        readComplexVector(pStream, attackers);
+        readComplexVector(pStream, defenders);
+    }
+
+    std::vector<UnitData> makeUnitData(const std::set<IDInfo>& units)
+    {
+        std::vector<UnitData> unitData;
+        for (std::set<IDInfo>::const_iterator ci(units.begin()), ciEnd(units.end()); ci != ciEnd; ++ci)
+        {
+            const CvUnit* pUnit = ::getUnit(*ci);
+            if (pUnit)
+            {
+                unitData.push_back(UnitData(pUnit));
+            }
+        }
+        return unitData;
+    }
+
+    void debugUnitDataVector(std::ostream& os, const std::vector<UnitData>& units)
+    {
+        for (size_t i = 0, count = units.size(); i < count; ++i)
+        {
+            // todo - align with list version below
+            units[i].debugPromotions(os);
+        }
+    }
+
+    void debugUnitDataLists(std::ostream& os, const std::vector<std::list<UnitData> >& unitLists)
+    {
+        for (size_t i = 0, count = unitLists.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            os << "{";
+            for (std::list<UnitData>::const_iterator choiceIter(unitLists[i].begin()), choiceEndIter(unitLists[i].end());
+                choiceIter != choiceEndIter; ++choiceIter)
+            {
+                os << " " << choiceIter->pUnitInfo->getType();
+                choiceIter->debugPromotions(os); 
+            }
+            os << " }";
+        }
+    }
+
+    bool eraseUnitById(std::vector<UnitData>& units, IDInfo unitId)
+    {
+        std::vector<UnitData>::iterator iter = std::remove_if(units.begin(), units.end(), UnitDataIDInfoP(unitId));
+        bool found = iter != units.end();
+        units.erase(iter, units.end());
+        return found;
+    }
+
+    void updateUnitData(std::vector<UnitData>& units)
+    {
+        std::vector<UnitData> newUnitData;
+        newUnitData.reserve(units.size());
+
+        for (size_t i = 0, count = units.size(); i < count; ++i)
+        {
+            const CvUnit* pUnit = ::getUnit(units[i].unitId);
+            if (pUnit)
+            {
+                newUnitData.push_back(units[i]);
+                newUnitData.rbegin()->hp = pUnit->currHitPoints();
+            }
+        }
+        units = newUnitData;
+    }
+
+    std::vector<PromotionTypes> getAvailablePromotions(const CvUnit* pUnit)
+    {
+        std::vector<PromotionTypes> availablePromotions;
+
+        for (int i = 0, count = gGlobals.getNumPromotionInfos(); i < count; ++i)
+        {
+            if (pUnit->canAcquirePromotion((PromotionTypes)i) && ::isPromotionValid((PromotionTypes)i, pUnit->getUnitType(), false))
+            {
+                availablePromotions.push_back((PromotionTypes)i);
+            }
+        }
+        return availablePromotions;
+    }
+
     UnitAnalysis::UnitAnalysis(const Player& player) : player_(player)
     {
     }
 
     void UnitAnalysis::init()
     {
+        calculatePromotionDepths_();
         analysePromotions_();
         analyseUnits_();
 
@@ -657,7 +1006,7 @@ namespace AltAI
                             bool defImmuneToFS = otherUnitInfo.isFirstStrikeImmune();
                             int defFirePower = otherUnitInfo.getCombat();
 
-                            CombatData combatData;
+                            CombatDataOdds combatData;
 
                             // attack odds
                             {
@@ -849,30 +1198,30 @@ namespace AltAI
 
         for (size_t i = 0, count = units.size(); i < count; ++i)
         {
-            bool otherUnitIsDefensiveOnly = units[i].pUnitInfo->isOnlyDefensive();
             // units[i] are defending v. unit (isAttacker true), or units[i] are attacking and therefore they can't be defensive only
-            if ((isAttacker && !defensiveOnly) || (!isAttacker && !otherUnitIsDefensiveOnly))
+            // or attacker has combat limit which exceeds defender's current hp
+            if ((isAttacker ? canAttack(unit, units[i], combatDetails) : canAttack(units[i], unit, combatDetails))
+                && units[i].pUnitInfo->getCombat() > 0 && unit.pUnitInfo->getDomainType() == units[i].pUnitInfo->getDomainType())
             {
-                if (units[i].pUnitInfo->getCombat() > 0 && unit.pUnitInfo->getDomainType() == units[i].pUnitInfo->getDomainType())
+                int ourOdds;
+                if (isAttacker)
                 {
-                    int ourOdds;
-                    if (isAttacker)
-                    {
-                        ourOdds = getCombatOdds(unit, units[i], combatDetails);
-                    }
-                    else
-                    {
-                        ourOdds = 1000 - getCombatOdds(units[i], unit, combatDetails);
-                    }
-                    odds.push_back(ourOdds);
-                    continue;
+                    ourOdds = getCombatOdds(unit, units[i], combatDetails);
                 }
+                else
+                {
+                    ourOdds = 1000 - getCombatOdds(units[i], unit, combatDetails);
+                }
+                odds.push_back(ourOdds);
             }
-            // add zero for case of both attacker and defender being defensive only units
-            // for case of defender being defensive only, above check will only skip odds calc
-            // if attacker also happens to be defensive only, and then we don't want to add 1000 odds for a battle which can't occur
-            odds.push_back(isAttacker ? 0 : (defensiveOnly ? 0 : 1000));  // add entry for each unit regardless of whether they could actually fight
-            //odds.push_back(0);  // add entry for each unit regardless of whether they could actually fight
+            else
+            {
+                // add zero for case of both attacker and defender being defensive only units
+                // for case of defender being defensive only, above check will only skip odds calc
+                // if attacker also happens to be defensive only, and then we don't want to add 1000 odds for a battle which can't occur
+                //odds.push_back(isAttacker ? 0 : (defensiveOnly ? 0 : 1000));  // add entry for each unit regardless of whether they could actually fight
+                odds.push_back(isAttacker ? 0 : 1000); // keep symmetry - need to be sure this doesn't break in the case of defendensive only units (and collateral edge cases)
+            }
         }
 
         return odds;
@@ -1252,6 +1601,90 @@ namespace AltAI
                 }
             }
         }
+    }
+
+    void UnitAnalysis::calculatePromotionDepths_()
+    {
+        std::stack<PromotionTypes> openList;
+        promotionDepths_.resize(gGlobals.getNumPromotionInfos(), -1);
+
+        for (int i = 0, count = gGlobals.getNumPromotionInfos(); i < count; ++i)
+        {   
+            openList.push((PromotionTypes)i);
+
+            while (!openList.empty())
+            {
+                const CvPromotionInfo& promotionInfo = gGlobals.getPromotionInfo(openList.top());
+
+                PromotionTypes andPrereq = (PromotionTypes)promotionInfo.getPrereqPromotion(), 
+                    orPrereq1 = (PromotionTypes)promotionInfo.getPrereqOrPromotion1(),
+                    orPrereq2 = (PromotionTypes)promotionInfo.getPrereqOrPromotion2();
+                
+                int depth = 0;
+                int andDepth = -1, orDepth1 = -1, orDepth2 = -1;
+                bool haveDepth = true;
+                if (andPrereq != NO_PROMOTION)
+                {
+                    andDepth = promotionDepths_[andPrereq];
+                    if (andDepth == -1)
+                    {
+                        haveDepth = false;
+                        openList.push(andPrereq);
+                    }
+                }
+                if (orPrereq1 != NO_PROMOTION)
+                {
+                    orDepth1 = promotionDepths_[orPrereq1];
+                    if (orDepth1 == -1)
+                    {
+                        haveDepth = false;
+                        openList.push(orPrereq1);
+                    }
+                }
+                if (orPrereq2 != NO_PROMOTION)
+                {
+                    orDepth2 = promotionDepths_[orPrereq2];
+                    if (orDepth2 == -1)
+                    {
+                        haveDepth = false;
+                        openList.push(orPrereq2);
+                    }
+                }
+
+                if (haveDepth)
+                {
+                    if (orPrereq1 != NO_PROMOTION)
+                    {
+                        if (orPrereq2 != NO_PROMOTION)
+                        {
+                            depth = 1 + std::max<int>(andDepth, std::min<int>(orDepth1, orDepth2));
+                        }
+                        else
+                        {
+                            // even if only an or prereq (no and one) - this will still work
+                            depth = 1 + std::max<int>(andDepth, orDepth1);
+                        }
+                    }
+                    else if (andPrereq != NO_PROMOTION)
+                    {
+                        depth = 1 + andDepth;
+                    }
+                    
+                    promotionDepths_[(PromotionTypes)openList.top()] = depth;
+                    openList.pop();
+                }
+            }
+        }
+    }
+
+    int UnitAnalysis::getPromotionDepth(PromotionTypes promotionType) const
+    {
+        int depth = -1;
+        if (promotionType != NO_PROMOTION)
+        {
+            depth = promotionDepths_[promotionType];
+        }
+        return depth;
     }
 
     template <typename ValueF>
@@ -1931,6 +2364,12 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+
+        os << "\nPromotion depths: ";
+        for (size_t i = 0, count = promotionDepths_.size(); i < count; ++i)
+        {
+            os << "\n\t" << gGlobals.getPromotionInfo((PromotionTypes)i).getType() << " = " << promotionDepths_[i];
+        }
 
         for (CombatDataMap::const_iterator ci(combatDataMap_.begin()), ciEnd(combatDataMap_.end()); ci != ciEnd; ++ci)
         {

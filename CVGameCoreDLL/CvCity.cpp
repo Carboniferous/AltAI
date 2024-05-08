@@ -201,7 +201,8 @@ void CvCity::init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits, 
 	pPlot->setPlotCity(this);
 
     // AltAI - call after plot has had city set on it
-    GC.getGame().getAltAI()->getPlayer(m_eOwner)->addCity(this);
+    // now called in found and acquireCity so done after setup here
+    //GC.getGame().getAltAI()->getPlayer(m_eOwner)->addCity(this);
 
 	for (iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
 	{
@@ -332,10 +333,10 @@ void CvCity::init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits, 
 	}
 
     // AltAI
-    if (GET_PLAYER((PlayerTypes)m_eOwner).isUsingAltAI())
+    /*if (GET_PLAYER((PlayerTypes)m_eOwner).isUsingAltAI())
     {
         GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).init();
-    }
+    }*/
 
 	AI_init();
 }
@@ -999,6 +1000,11 @@ void CvCity::doTurn()
 	// ONEVENT - Do turn
 	CvEventReporter::getInstance().cityDoTurn(this, getOwnerINLINE());
 
+    // AltAI
+    if (GET_PLAYER(m_eOwner).isUsingAltAI())
+    {
+		GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).setFlag(AltAI::City::NeedsProjectionCalcs | AltAI::City::NeedsCityDataCalc);
+    }
 	// XXX
 #ifdef _DEBUG
 	{
@@ -10006,7 +10012,12 @@ void CvCity::setNumRealBuilding(BuildingTypes eIndex, int iNewValue)
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
         // AltAI
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).updateBuildings(eIndex, iNewValue);
+        AltAI::PlayerPtr pPlayer = GC.getGame().getAltAI()->getPlayer(m_eOwner);
+        // might be called during city initialisation
+        if (pPlayer->isCity(m_iID))
+        {
+            pPlayer->getCity(m_iID).updateBuildings(eIndex, iNewValue);
+        }
     }
 }
 
@@ -10261,7 +10272,12 @@ void CvCity::setNumFreeBuilding(BuildingTypes eIndex, int iNewValue)
             if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
             {
                 // AltAI
-                GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).updateBuildings(eIndex, iNewValue - iOldNumBuilding);
+                AltAI::PlayerPtr pPlayer = GC.getGame().getAltAI()->getPlayer(m_eOwner);
+                // might be called during city initialisation
+                if (pPlayer->isCity(m_iID))
+                {
+                    pPlayer->getCity(m_iID).updateBuildings(eIndex, iNewValue - iOldNumBuilding);
+                }
             }
 		}
 	}
@@ -10915,7 +10931,7 @@ void CvCity::popOrder(int iNum, bool bFinish, bool bChoose)
 
 			if (pRallyPlot != NULL)
 			{
-				pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pRallyPlot->getX_INLINE(), pRallyPlot->getY_INLINE());
+				pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pRallyPlot->getX_INLINE(), pRallyPlot->getY_INLINE(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			}
 
 			if (isHuman())

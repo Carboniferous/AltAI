@@ -73,9 +73,17 @@ namespace AltAI
                 output[OUTPUT_FOOD] -= pCityData->getLostFood();
 
                 ladder.entries.push_back(ProjectionLadder::Entry(pCityData->getPopulation(), std::min<int>(nTurns, turnsToFirstEvent),
-                    pCityData->getFoodKeptPercent(), pCityData->getCurrentProduction() * std::min<int>(nTurns, turnsToFirstEvent),
+                    pCityData->getStoredFood(), pCityData->getCurrentProduction() * std::min<int>(nTurns, turnsToFirstEvent),
                     output, processOutput, 
                     pCityData->getMaintenanceHelper()->getMaintenance(), pCityData->getGPP()));
+
+                // add in production from hurrying - if not building anything
+                if (constructItem.isEmpty() && pCityData->getAccumulatedProduction() > 0)
+                {
+                    // 100 is from dummy hammer to allow hurry calc to not think hurrying on first turn
+                    ladder.entries.rbegin()->accumulatedProduction += (pCityData->getAccumulatedProduction() - 100);
+                    pCityData->setAccumulatedProduction(0);
+                }
 
                 const PlotDataList& plots = pCityData->getPlotOutputs();
                 for (PlotDataList::const_iterator plotIter(plots.begin()), plotEndIter(plots.end()); plotIter != plotEndIter; ++plotIter)
@@ -86,7 +94,7 @@ namespace AltAI
                     }
                 }
 
-                for (size_t hurryIndex = 0, hurryCount = gGlobals.getNumHurryInfos(); hurryIndex < hurryCount; ++hurryIndex)
+                /*for (size_t hurryIndex = 0, hurryCount = gGlobals.getNumHurryInfos(); hurryIndex < hurryCount; ++hurryIndex)
                 {
                     if (player.getCvPlayer()->canHurry((HurryTypes)hurryIndex))
                     {
@@ -98,7 +106,7 @@ namespace AltAI
                             ladder.entries.rbegin()->hurryData.push_back(hurryData);
                         }
                     }
-                }
+                }*/
 
                 std::vector<IProjectionEventPtr> newEvents;
 
@@ -634,8 +642,8 @@ namespace AltAI
     }
 
 
-    ProjectionChangeCivicEvent::ProjectionChangeCivicEvent(const boost::shared_ptr<CivicInfo>& pCivicInfo, int turnsToChange)
-        : pCivicInfo_(pCivicInfo), turnsToChange_(turnsToChange)
+    ProjectionChangeCivicEvent::ProjectionChangeCivicEvent(CivicOptionTypes civicOptionType, CivicTypes civicType, int turnsToChange)
+        : civicOptionType_(civicOptionType), civicType_(civicType), turnsToChange_(turnsToChange)
     {
     }
 
@@ -646,7 +654,7 @@ namespace AltAI
 
     IProjectionEventPtr ProjectionChangeCivicEvent::clone(const CityDataPtr& pCityData) const
     {
-        IProjectionEventPtr pCopy(new ProjectionChangeCivicEvent(pCivicInfo_, turnsToChange_));
+        IProjectionEventPtr pCopy(new ProjectionChangeCivicEvent(civicOptionType_, civicType_, turnsToChange_));
         pCopy->init(pCityData);
         return pCopy;
     }
@@ -654,9 +662,9 @@ namespace AltAI
     void ProjectionChangeCivicEvent::debug(std::ostream& os) const
     {
         os << "\n\tProjectionChangeCivicEvent event: " << " remaining turns = " << turnsToChange_ << " for civic: "
-           << gGlobals.getCivicInfo(pCivicInfo_->getCivicType()).getType()
+           << gGlobals.getCivicInfo(civicType_).getType()
            << " compare civic = "
-           << gGlobals.getCivicInfo(pCityData_->getCivHelper()->currentCivic((CivicOptionTypes)gGlobals.getCivicInfo(pCivicInfo_->getCivicType()).getCivicOptionType())).getType();
+           << gGlobals.getCivicInfo(pCityData_->getCivHelper()->currentCivic(civicOptionType_)).getType();
     }
 
     int ProjectionChangeCivicEvent::getTurnsToEvent() const
@@ -679,7 +687,7 @@ namespace AltAI
         if (turnsToChange_ <= nTurns)
         {
             boost::shared_ptr<PlayerAnalysis> pAnalysis = gGlobals.getGame().getAltAI()->getPlayer(pCityData_->getCity()->getOwner())->getAnalysis();            
-            updateRequestData(pCityData_->getCity(), *pCityData_, pAnalysis, pCivicInfo_->getCivicType());
+            updateRequestData(pCityData_->getCity(), *pCityData_, pAnalysis, civicType_);
         }
     }
 
@@ -750,6 +758,90 @@ namespace AltAI
         return shared_from_this();
     }
 
+    void ProjectionHurryEvent::init(const CityDataPtr& pCityData)
+    {
+        pCityData_ = pCityData;
+    }
+
+    IProjectionEventPtr ProjectionHurryEvent::clone(const CityDataPtr& pCityData) const
+    {
+        IProjectionEventPtr pCopy(new ProjectionHurryEvent(hurryData_));
+        pCopy->init(pCityData);
+        return pCopy;
+    }
+
+    void ProjectionHurryEvent::debug(std::ostream& os) const
+    {
+        os << "\n\tProjectionHurryEvent event - "
+            << " turns left = " << getTurnsToEvent();
+    }
+
+    int ProjectionHurryEvent::getTurnsToEvent() const
+    {
+        if (!havePopulation_())
+        {
+            return pCityData_->getTurnsToPopChange().second;
+        }
+        else  // have enough pop to hurry something - is timer expired?
+        {            
+            if (!angryTimerExpired_())
+            {
+                const int hurryAngerTimer = pCityData_->getHurryHelper()->getAngryTimer();
+                const int flatHurryAngerLength = pCityData_->getHurryHelper()->getFlatHurryAngryLength();
+                return hurryAngerTimer / flatHurryAngerLength + hurryAngerTimer % flatHurryAngerLength;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+    }
+    
+    bool ProjectionHurryEvent::targetsCity(IDInfo city) const
+    {
+        return pCityData_->getCity()->getIDInfo() == city;
+    }
+
+    bool ProjectionHurryEvent::generateComparison() const
+    {
+        return false;
+    }
+
+    void ProjectionHurryEvent::updateCityData(int nTurns)
+    {
+        if (havePopulation_() && angryTimerExpired_())
+        {
+            if (getTurnsToEvent() <= nTurns)
+            {            
+                // create dummy build to hurry (todo - pick based on possible small unit builds)
+                pCityData_->setRequiredProduction(6000);
+                pCityData_->setAccumulatedProduction(100);
+
+                bool canHurry;
+                boost::tie(canHurry, hurryData_) = pCityData_->getHurryHelper()->canHurry(*pCityData_, hurryData_.hurryType, true);
+                if (canHurry)
+                {
+                    pCityData_->hurry(hurryData_);
+                }
+            }
+        }
+    }
+
+    IProjectionEventPtr ProjectionHurryEvent::updateEvent(int nTurns, ProjectionLadder& ladder)
+    {        
+        return shared_from_this();
+    }
+
+    bool ProjectionHurryEvent::havePopulation_() const
+    {
+        return pCityData_->getPopulation() / 2 >= hurryData_.hurryPopulation;
+    }
+
+    bool ProjectionHurryEvent::angryTimerExpired_() const
+    {
+        return pCityData_->getHurryHelper()->getAngryTimer() == 0;
+    }
+
     ProjectionLadder getProjectedOutput(const Player& player, const CityDataPtr& pCityData, int nTurns, std::vector<IProjectionEventPtr>& events, 
         const ConstructItem& constructItem, const std::string& sourceFunc, bool doComparison, bool debug)
     {
@@ -776,18 +868,20 @@ namespace AltAI
         updateProjections(player, pCityData, nTurns, events, constructItem, doComparison, debug, ladder);
 
 #ifdef ALTAI_DEBUG
-        if (debug)
+        // don't bother to log if we didn't finish the item - unless we have no item to start with
+        // - to avoid cluttering up the log with small cities not building expensive items
+        if (debug && (constructItem.isEmpty() || !ladder.buildings.empty() || !ladder.units.empty()))
         {
             std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData->getOwner()))->getStream();
-            os << "\ngetProjectedOutput: caller = " << sourceFunc << " " << narrow(pCityData->getCity()->getName()) << " item: ";
+            os << "\n\ngetProjectedOutput: caller = " << sourceFunc << " city: " << narrow(pCityData->getCity()->getName());
             constructItem.debug(os);
             if (!ladder.buildings.empty())
             {
-                os << " " << ladder.buildings[0].first << " turns ";
+                os << " building: " << ladder.buildings[0].first << " turns ";
             }
             else if (!ladder.units.empty())
             {
-                os << " " << ladder.units[0].turns << " turns ";
+                os << " unit: " << ladder.units[0].turns << " turns ";
             }
 
             /*if (doComparison && !ladder.comparisons.empty())

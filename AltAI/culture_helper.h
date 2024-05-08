@@ -20,6 +20,8 @@ namespace AltAI
         CultureLevelTypes getCultureLevel() const;
         int getTurnsToNextLevel(CityData& data) const;
 
+        void setCultureLevel(CultureLevelTypes cultureLevel);
+
     private:
         bool checkCulturalLevel_();
         bool updatePlot_(PlotData& plotData, bool culturalLevelChange, const CvCity* pCity, int cultureOutput, int nTurns);

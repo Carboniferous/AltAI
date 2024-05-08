@@ -12,13 +12,14 @@ namespace AltAI
         CityBuildingTactic(BuildingTypes buildingType, int buildingCost, IDInfo city, ComparisonFlags compFlag);
 
         virtual IDInfo getCity() const;
+        virtual CityDataPtr getCityData() const;
         virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
         virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
         virtual void addTechDependency(const ResearchTechDependencyPtr& pDependentTactic);
         virtual const std::vector<IDependentTacticPtr>& getDependencies() const;
         virtual const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const;
-        virtual void update(const Player& player, const CityDataPtr& pCityData);
-        virtual void updateDependencies(const Player& player, const CvCity* pCity);
+        virtual void update(Player& player, const CityDataPtr& pCityData);
+        virtual void updateDependencies(Player& player, const CvCity* pCity);
         virtual bool areDependenciesSatisfied(int ignoreFlags) const;
         virtual void apply(TacticSelectionDataMap& selectionDataMap, int ignoreFlags);
         virtual void apply(TacticSelectionData& selectionData);
@@ -46,6 +47,7 @@ namespace AltAI
         BuildingTypes buildingType_;
         int buildingCost_;
         IDInfo city_;
+        CityDataPtr pCityData_;
         ComparisonFlags compFlag_;
     };
 
@@ -83,9 +85,9 @@ namespace AltAI
 
         virtual void addTactic(const ICityBuildingTacticPtr& pBuildingTactic);
         virtual void addDependency(const IDependentTacticPtr& pDependentTactic);
-        virtual void update(const Player& player);
-        virtual void update(const Player&, const CityDataPtr&);
-        virtual void updateDependencies(const Player& player);
+        virtual void update(Player& player);
+        virtual void update(Player&, const CityDataPtr&);
+        virtual void updateDependencies(Player& player);
         virtual bool areDependenciesSatisfied(IDInfo city, int ignoreFlags) const;
         virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
         virtual ICityBuildingTacticsPtr getCityTactics(IDInfo city) const;

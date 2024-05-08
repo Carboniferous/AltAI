@@ -61,7 +61,7 @@ namespace AltAI
     {
     public:
         ~WorkerBuildEvent();
-        WorkerBuildEvent(const std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > >& missions);
+        WorkerBuildEvent(const std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > >& missions);
 
         virtual void init(const CityDataPtr& pCityData);
         virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
@@ -75,15 +75,15 @@ namespace AltAI
     private:
         WorkerBuildEvent(const CityImprovementManagerPtr& pCityImprovementManager,
             TotalOutputWeights outputWeights,
-            const std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > >& missions,
+            const std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > >& missions,
             size_t processedBuiltUnitsCount);
-        void updateMissions_(std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > >& missions);
-        void checkForNewMissions_(std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > >& missions, const size_t index);
+        void updateMissions_(std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > >& missions);
+        void checkForNewMissions_(std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > >& missions, const size_t index);
 
         CityDataPtr pCityData_;
         CityImprovementManagerPtr pCityImprovementManager_;
         TotalOutputWeights outputWeights_;
-        std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > missions_;
+        std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > > missions_;
         size_t processedBuiltUnitsCount_;
     };
 }

@@ -40,16 +40,20 @@ namespace AltAI
 
     void CivHelper::addTech(TechTypes techType)
     {
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nCivHelper adding tech: " << gGlobals.getTechInfo(techType).getType();
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+//        os << "\nCivHelper adding tech: " << gGlobals.getTechInfo(techType).getType();
+//#endif
         techs_.insert(techType);
     }
 
     // only removes techs we added
     void CivHelper::removeTech(TechTypes techType)
     {
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nCivHelper removing tech: " << gGlobals.getTechInfo(techType).getType();
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+//        os << "\nCivHelper removing tech: " << gGlobals.getTechInfo(techType).getType();
+//#endif
 
         std::set<TechTypes>::iterator iter = techs_.find(techType);
         if (iter != techs_.end())

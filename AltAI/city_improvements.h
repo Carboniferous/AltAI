@@ -126,6 +126,22 @@ namespace AltAI
         ImprovementTypes improvement;
         FeatureTypes removedFeature;        
         RouteTypes routeType;
+
+        void write(FDataStreamBase* pStream) const
+        {
+            coords.write(pStream);
+            pStream->Write(improvement);
+            pStream->Write(removedFeature);
+            pStream->Write(routeType);
+        }
+
+        void read(FDataStreamBase* pStream)
+        {
+            coords.read(pStream);
+            pStream->Read((int*)&improvement);
+            pStream->Read((int*)&removedFeature);
+            pStream->Read((int*)&routeType);
+        }
     };
 
     struct PlotImprovementData
@@ -169,6 +185,26 @@ namespace AltAI
         bool isSelectedAndNotBuilt() const
         {
             return state == PlotImprovementData::Not_Built && simulationData.firstTurnWorked > -1;
+        }
+
+        void write(FDataStreamBase* pStream) const
+        {
+            coords.write(pStream);
+            pStream->Write(removedFeature);
+            pStream->Write(improvement);
+            yield.write(pStream);
+            pStream->Write(state);
+            pStream->Write(flags);
+        }
+
+        void read(FDataStreamBase* pStream)
+        {
+            coords.read(pStream);
+            pStream->Read((int*)&removedFeature);
+            pStream->Read((int*)&improvement);
+            yield.read(pStream);
+            pStream->Read((int*)&state);
+            pStream->Read(&flags);
         }
     };
 

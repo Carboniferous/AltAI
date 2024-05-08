@@ -173,14 +173,14 @@ namespace AltAI
         //ErrorLog::getLog(CvPlayerAI::getPlayer(pCityData_->getOwner()))->getStream() << "\ndelete WorkerBuildEvent at: " << this;
     }
 
-    WorkerBuildEvent::WorkerBuildEvent(const std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > >& missions) :
+    WorkerBuildEvent::WorkerBuildEvent(const std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > >& missions) :
         missions_(missions), outputWeights_(makeOutputW(3, 4, 3, 3, 1, 1)), processedBuiltUnitsCount_(0)
     {        
     }
 
     WorkerBuildEvent::WorkerBuildEvent(const CityImprovementManagerPtr& pCityImprovementManager,
         TotalOutputWeights outputWeights,
-        const std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > >& missions,
+        const std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > >& missions,
         size_t processedBuiltUnitsCount)
         : pCityImprovementManager_(pCityImprovementManager),
           outputWeights_(outputWeights), missions_(missions), processedBuiltUnitsCount_(processedBuiltUnitsCount)
@@ -252,12 +252,12 @@ namespace AltAI
 
     void WorkerBuildEvent::updateCityData(int nTurns)
     {
-        std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > missions;
+        std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > > missions;
         bool recalcOutputs = false;
 
         for (size_t i = 0, count = missions_.size(); i < count; ++i)
         {
-            std::vector<Unit::Mission> unitMissions;
+            std::vector<Unit::WorkerMission> unitMissions;
             int remainingTurns = nTurns;
             bool consumed = false;
 
@@ -342,14 +342,14 @@ namespace AltAI
     {
         if (ladder.units.size() > processedBuiltUnitsCount_)
         {
-            std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > missions;
+            std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > > missions;
             for (size_t i = processedBuiltUnitsCount_; i < ladder.units.size(); ++i)
             {
                 // did we build a worker unit?
                 if (gGlobals.getUnitInfo(ladder.units[i].unitType).getDefaultUnitAIType() == UNITAI_WORKER)
                 {
                     // will update new missions in updateCityData call
-                    missions_.push_back(std::make_pair(ladder.units[i].unitType, std::vector<Unit::Mission>()));
+                    missions_.push_back(std::make_pair(ladder.units[i].unitType, std::vector<Unit::WorkerMission>()));
                 }
             }
 
@@ -366,9 +366,9 @@ namespace AltAI
         }
     }
 
-    void WorkerBuildEvent::updateMissions_(std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > >& missions)
+    void WorkerBuildEvent::updateMissions_(std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > >& missions)
     {
-        std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > finalMissions;
+        std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > > finalMissions;
 
         for (size_t i = 0, count = missions.size(); i < count; ++i)
         {
@@ -386,7 +386,7 @@ namespace AltAI
         missions_ = finalMissions;
     }
 
-    void WorkerBuildEvent::checkForNewMissions_(std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > >& missions, const size_t index)
+    void WorkerBuildEvent::checkForNewMissions_(std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > >& missions, const size_t index)
     {
         std::vector<PlotCondPtr > conditions;
 
@@ -432,7 +432,7 @@ namespace AltAI
                     return;
                 }
 
-                missions[index].second.push_back(Unit::Mission(NULL, pCityData_->getCity(), pTargetPlot, MISSION_MOVE_TO, NO_BUILD, stepDistance, currentLocation));
+                missions[index].second.push_back(Unit::WorkerMission(missions_[index].second.begin()->unit, pCityData_->getCity()->getIDInfo(), newTargetCoords, MISSION_MOVE_TO, NO_BUILD, 0, stepDistance, currentLocation));
             }
 
             bool buildRemovesFeature = featureType != NO_FEATURE ? GameDataAnalysis::doesBuildTypeRemoveFeature(buildType, featureType) : false;
@@ -440,10 +440,11 @@ namespace AltAI
             if (buildRemovesFeature)
             {
                 missions[index].second.push_back(
-					Unit::Mission(NULL, pCityData_->getCity(), pTargetPlot, MISSION_BUILD, GameDataAnalysis::getBuildTypeToRemoveFeature(featureType), 3, newTargetCoords));
+					Unit::WorkerMission(missions_[index].second.begin()->unit, pCityData_->getCity()->getIDInfo(), newTargetCoords, MISSION_BUILD,
+                        GameDataAnalysis::getBuildTypeToRemoveFeature(featureType), 0, 3, newTargetCoords));
             }
 
-            missions[index].second.push_back(Unit::Mission((CvUnitAI*)NULL, pCityData_->getCity(), pTargetPlot, MISSION_BUILD, buildType, 5, newTargetCoords));
+            missions[index].second.push_back(Unit::WorkerMission(missions_[index].second.begin()->unit, pCityData_->getCity()->getIDInfo(), newTargetCoords, MISSION_BUILD, buildType, 0, 5, newTargetCoords));
 
 #ifdef ALTAI_DEBUG
             std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCityData_->getOwner()))->getStream();

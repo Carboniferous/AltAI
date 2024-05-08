@@ -2,6 +2,7 @@
 
 #include "./sub_area.h"
 #include "./utils.h"
+#include "./save_utils.h"
 #include "./iters.h"
 
 namespace AltAI
@@ -96,10 +97,36 @@ namespace AltAI
         }
     }
 
+    void SubAreaGraph::write(FDataStreamBase* pStream) const
+    {
+        writeComplexSet(pStream, nodes_);
+    }
+
+    void SubAreaGraph::read(FDataStreamBase* pStream)
+    {
+        readComplexSet(pStream, nodes_);
+    }
+
     SubAreaGraphNode SubAreaGraph::getNode(int ID) const
     {
         NodeSetConstIter iter(nodes_.find(SubAreaGraphNode(ID)));
 
         return iter == nodes_.end() ? SubAreaGraphNode(FFreeList::INVALID_INDEX) : *iter;
+    }
+
+    void SubAreaGraphNode::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+        writeSet(pStream, enclosedSubAreas);
+        writeSet(pStream, borderingSubAreas);
+        pStream->Write(bordersMapEdge);
+    }
+
+    void SubAreaGraphNode::read(FDataStreamBase* pStream)
+    {
+        pStream->Read(&ID);
+        readSet<int, int>(pStream, enclosedSubAreas);
+        readSet<int, int>(pStream, borderingSubAreas);
+        pStream->Read(&bordersMapEdge);
     }
 }

@@ -119,10 +119,10 @@ namespace AltAI
         {
 #ifdef ALTAI_DEBUG
             // debug
-            {
+            /*{
                 boost::shared_ptr<CityLog> pLog = CityLog::getLog(data.getCity());
                 pLog->logPlotControlChange(changedPlotsData);   
-            }
+            }*/
 #endif
             data.pushEvent(CitySimulationEventPtr(new PlotControlChange(changedPlotsData)));
         }
@@ -148,6 +148,14 @@ namespace AltAI
     CultureLevelTypes CultureHelper::getCultureLevel() const
     {
         return cultureLevel_;
+    }
+
+    void CultureHelper::setCultureLevel(CultureLevelTypes cultureLevel)
+    {
+        if (cultureLevel_ < (int)cultureLevel)
+        {
+            // todo - needed for Great Artist logic
+        }
     }
 
     bool CultureHelper::checkCulturalLevel_()

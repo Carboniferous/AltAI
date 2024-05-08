@@ -15,28 +15,49 @@ namespace AltAI
         void update();
 
         UnitTypes getUnitRequestBuild(const CvCity* pCity, const TacticSelectionData& tacticSelectionData);
+        std::pair<IDInfo, UnitTypes> getPriorityUnitBuild(IDInfo city);
 
-        void addUnit(CvUnitAI* pUnit);
-        void deleteUnit(CvUnit* pUnit);
+        void addOurUnit(CvUnitAI* pUnit, const CvUnit* pUpgradingUnit = (const CvUnit*)0);
+        void deleteOurUnit(CvUnit* pUnit, const CvPlot* pPlot);
+        void withdrawOurUnit(CvUnitAI* pUnit, const CvPlot* pAttackPlot);
+
         void movePlayerUnit(CvUnitAI* pUnit, const CvPlot* pFromPlot, const CvPlot* pToPlot);
-        void hidePlayerUnit(CvUnitAI* pUnit, const CvPlot* pOldPlot);
+        void hidePlayerUnit(CvUnitAI* pUnit, const CvPlot* pOldPlot, bool moved);
         void addPlayerUnit(CvUnitAI* pUnit, const CvPlot* pPlot);
         void deletePlayerUnit(CvUnitAI* pUnit, const CvPlot* pPlot);
+        void withdrawPlayerUnit(CvUnitAI* pUnit, const CvPlot* pAttackPlot);
 
-        bool updateUnit(CvUnitAI* pUnit);
+        void addCity(const CvCity* pCity);
+        void deleteCity(const CvCity* pCity);
+
+        void addNewSubArea(int subArea);
+
+        bool updateOurUnit(CvUnitAI* pUnit);
+        PromotionTypes promoteUnit(CvUnitAI* pUnit);
+
+        MilitaryMissionDataPtr getMissionData(CvUnitAI* pUnit);
 
         boost::shared_ptr<MilitaryAnalysisImpl> getImpl() const;
 
-        std::set<const CvPlot*> getThreatenedPlots() const;
+        PlotSet getThreatenedPlots() const;
+        std::set<IDInfo> getUnitsThreateningPlots(const PlotSet& plots) const;
+        PlotUnitsMap getPlotsThreatenedByUnits(const PlotSet& plots) const;
+        const std::map<XYCoords, CombatData>& getAttackableUnitsMap() const;
+        CvUnit* getNextAttackUnit();
+
         std::map<int /* sub area */, std::set<XYCoords> > getLandScoutMissionRefPlots() const;
+
+        size_t getUnitCount(MissionAITypes missionType, UnitTypes unitType = NO_UNIT, int subArea = -1) const;
+
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
 
     private:
         boost::shared_ptr<MilitaryAnalysisImpl> pImpl_;
     };
 
-    std::set<const CvPlot*> getReachablePlots(const Player& player, const CvPlot* pStackPlot, const std::vector<const CvUnit*>& unitStack);
-    std::map<const CvPlot*, std::vector<const CvUnit*> > getNearbyHostileStacks(Player& player, const CvPlot* pPlot, int range);
-    std::set<XYCoords> getUnitHistory(Player& player, IDInfo unit);
+    PlotUnitsMap getNearbyHostileStacks(const Player& player, const CvPlot* pPlot, int range);
+    std::set<XYCoords> getUnitHistory(const Player& player, IDInfo unit);
 
     void updateMilitaryAnalysis(Player& player);
     bool doUnitAnalysis(Player& player, CvUnitAI* pUnit);

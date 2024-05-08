@@ -8,7 +8,6 @@
 #include "./happy_helper.h"
 #include "./building_helper.h"
 #include "./player.h"
-#include "./city.h"
 #include "./player_analysis.h"
 #include "./iters.h"
 
@@ -83,6 +82,26 @@ namespace AltAI
             CityData& data_;
             int multiplier_;
         };
+    }
+
+    void ResourceHappyInfo::debug(std::ostream& os) const
+    {
+        os << "(ResourceHappyInfo): rawHappy = " << rawHappy << ", actualHappy = " << actualHappy 
+           << ", potentialHappy = " << potentialHappy << ", unusedHappy = " << unusedHappy << " ";
+        for (size_t i = 0, count = buildingHappy.size(); i < count; ++i)
+        {
+            os << gGlobals.getBuildingInfo(buildingHappy[i].first).getType() << " = " << buildingHappy[i].second << ", ";
+        }
+    }
+
+    void ResourceHealthInfo::debug(std::ostream& os) const
+    {
+        os << "(ResourceHealthInfo): rawHealth = " << rawHealth << ", actualHealth = " << actualHealth 
+           << ", potentialHealth = " << potentialHealth << ", unusedHealth = " << unusedHealth << " ";
+        for (size_t i = 0, count = buildingHealth.size(); i < count; ++i)
+        {
+            os << gGlobals.getBuildingInfo(buildingHealth[i].first).getType() << " = " << buildingHealth[i].second << ", ";
+        }
     }
 
     boost::shared_ptr<ResourceInfo> makeResourceInfo(BonusTypes bonusType, PlayerTypes playerType)
@@ -180,8 +199,8 @@ namespace AltAI
 
                 int unhappyCitizens = std::max<int>(0, pLoopCity->unhappyLevel() - pLoopCity->happyLevel());
 
-                int baseHappy = std::min<int>(node.baseHappy, unhappyCitizens);
-                info.actualHappy = baseHappy;
+                const int baseHappy = std::min<int>(node.baseHappy, unhappyCitizens);
+                actualHappy += baseHappy;
 
                 // have we got any left?
                 unhappyCitizens = std::max<int>(0, unhappyCitizens - baseHappy);
@@ -193,17 +212,17 @@ namespace AltAI
 
                 for (size_t i = 0, count = info.buildingHappy.size(); i < count; ++i)
                 {
-                    int buildingCount = pLoopCity->getNumBuilding(info.buildingHappy[i].first);
+                    const int buildingCount = pLoopCity->getNumBuilding(info.buildingHappy[i].first);
                     if (buildingCount > 0)
                     {
-                        int thisBuildingCount = std::min<int>(buildingCount * info.buildingHappy[i].second, unhappyCitizens);
-                        actualHappy += thisBuildingCount;
+                        const int thisBuildingHappyCount = std::min<int>(buildingCount * info.buildingHappy[i].second, unhappyCitizens);
+                        actualHappy += thisBuildingHappyCount;
 
-                        unhappyCitizens = std::max<int>(0, unhappyCitizens - thisBuildingCount);
+                        unhappyCitizens = std::max<int>(0, unhappyCitizens - thisBuildingHappyCount);
 
                         if (unhappyCitizens == 0)
                         {
-                            unusedHappy += buildingCount * info.buildingHappy[i].second - thisBuildingCount;
+                            unusedHappy += buildingCount * info.buildingHappy[i].second - thisBuildingHappyCount;
                         }
                     }
                     else  // just assumes one building allowed (should use getCITY_MAX_NUM_BUILDINGS(), but this would be wrong if building is limited in some other way, e.g. wonders)
@@ -269,7 +288,7 @@ namespace AltAI
                 // todo - handle resources that create unhealthiness (e.g. coal/oil)
                 int unhealthyCitizens = pLoopCity->healthRate();
 
-                int baseHealth = std::min<int>(node.baseHealth, unhealthyCitizens);
+                const int baseHealth = std::min<int>(node.baseHealth, unhealthyCitizens);
                 // have we got any left?
                 unhealthyCitizens = std::max<int>(0, unhealthyCitizens - baseHealth);
 
@@ -281,18 +300,18 @@ namespace AltAI
 
                 for (size_t i = 0, count = info.buildingHealth.size(); i < count; ++i)
                 {
-                    int buildingCount = pLoopCity->getNumBuilding(info.buildingHealth[i].first);
+                    const int buildingCount = pLoopCity->getNumBuilding(info.buildingHealth[i].first);
                     if (buildingCount > 0)
                     {
-                        int thisBuildingCount = std::min<int>(buildingCount * info.buildingHealth[i].second, unhealthyCitizens);
-                        unhealthyCitizens = std::max<int>(0, unhealthyCitizens - thisBuildingCount);
+                        const int thisBuildingHealthCount = std::min<int>(buildingCount * info.buildingHealth[i].second, unhealthyCitizens);
+                        unhealthyCitizens = std::max<int>(0, unhealthyCitizens - thisBuildingHealthCount);
 
                         if (unhealthyCitizens == 0)
                         {
-                            unusedHealth += buildingCount * info.buildingHealth[i].second - thisBuildingCount;
+                            unusedHealth += buildingCount * info.buildingHealth[i].second - thisBuildingHealthCount;
                         }
 
-                        actualHealth += thisBuildingCount;
+                        actualHealth += thisBuildingHealthCount;
                     }
                     else  // just assumes one building allowed
                     {
@@ -327,9 +346,10 @@ namespace AltAI
         return visitor.getInfo();
     }
 
-    void updateCityData(CityData& data, const boost::shared_ptr<ResourceInfo>& pResourceInfo, bool isAdding)
+    void updateRequestData(CityData& data, const boost::shared_ptr<ResourceInfo>& pResourceInfo, bool isAdding)
     {
         boost::apply_visitor(CityResourcesUpdater(data, isAdding), pResourceInfo->getInfo());
+        data.checkHappyCap();
         data.recalcOutputs();
     }
 
@@ -358,12 +378,75 @@ namespace AltAI
 
     private:
         TechTypes revealTech_;
-    };
+    };    
 
     TechTypes getTechForResourceReveal(const boost::shared_ptr<ResourceInfo>& pResourceInfo)
     {
         ResourceRevealTechVisitor visitor;
         boost::apply_visitor(visitor, pResourceInfo->getInfo());
         return visitor.getRevealTech();
+    }
+
+    class BuildingInfoResourceVisitor : public boost::static_visitor<>
+    {
+    public:
+        explicit BuildingInfoResourceVisitor(PlayerTypes playerType) : player_(CvPlayerAI::getPlayer(playerType))
+        {
+        }
+
+        template <typename T>
+            void operator() (const T&) const
+        {
+        }
+
+        void operator() (const ResourceInfo::BaseNode& node)
+        {
+            for (size_t i = 0, count = node.buildingNodes.size(); i < count; ++i)
+            {
+                (*this)(node.buildingNodes[i]);
+            }
+        }
+
+        void operator() (const ResourceInfo::BuildingNode& node)
+        {
+            if (node.productionModifier > 0)
+            {
+                const BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(node.buildingType).getBuildingClassType();
+                if (player_.isBuildingClassMaxedOut(buildingClassType, gGlobals.getBuildingClassInfo(buildingClassType).getExtraPlayerInstances()))
+                {
+                    return;
+                }
+
+                const bool isWorldWonder = isWorldWonderClass(buildingClassType), isNationalWonder = !isWorldWonder && isNationalWonderClass(buildingClassType);
+                if (isWorldWonderClass(buildingClassType))
+                {
+                    info.globalBuildingModifiers.push_back(std::make_pair(node.buildingType, node.productionModifier));
+                }
+                else if (isNationalWonderClass(buildingClassType))
+                {
+                    info.nationalBuildingModifiers.push_back(std::make_pair(node.buildingType, node.productionModifier));
+                }
+                else
+                {
+                    info.buildingModifiers.push_back(std::make_pair(node.buildingType, node.productionModifier));
+                }
+            }
+        }
+
+        const ResourceBuildingInfo& getInfo() const
+        {
+            return info;
+        }
+
+    private:
+        const CvPlayerAI& player_;
+        ResourceBuildingInfo info;
+    };
+
+    ResourceBuildingInfo getResourceBuildingInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo)
+    {
+        BuildingInfoResourceVisitor visitor(pResourceInfo->getPlayerType());
+        boost::apply_visitor(visitor, pResourceInfo->getInfo());
+        return visitor.getInfo();
     }
 }

@@ -16,7 +16,7 @@ namespace AltAI
 
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -35,7 +35,7 @@ namespace AltAI
 
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -54,7 +54,7 @@ namespace AltAI
 
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -73,7 +73,7 @@ namespace AltAI
 
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -92,7 +92,7 @@ namespace AltAI
 
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -111,7 +111,7 @@ namespace AltAI
 
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -127,7 +127,7 @@ namespace AltAI
     public:
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -144,7 +144,7 @@ namespace AltAI
         explicit BuildImprovementsUnitTactic(const std::vector<BuildTypes>& buildTypes);
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -166,7 +166,7 @@ namespace AltAI
         explicit SeaAttackUnitTactic(const Promotions& promotions);
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
@@ -184,7 +184,7 @@ namespace AltAI
         explicit ScoutUnitTactic(const Promotions& promotions);
         virtual void debug(std::ostream& os) const;
         virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);

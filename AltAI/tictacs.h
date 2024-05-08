@@ -3,6 +3,7 @@
 #include "./utils.h"
 #include "./tactic_actions.h"
 #include "./tactics_interfaces.h"
+#include "./tactic_selection_data.h"
 #include "./unit.h"
 
 namespace AltAI
@@ -13,8 +14,10 @@ namespace AltAI
 
     struct PlayerTactics
     {
-        explicit PlayerTactics(Player& player_) : player(player_) {}
+        explicit PlayerTactics(Player& player_) : player(player_), initialised_(false) {}
         void init();
+        bool isInitialised() const { return initialised_; }
+
         ResearchTech getResearchTech(TechTypes ignoreTechType = NO_TECH);
         ResearchTech getResearchTechData(TechTypes techType) const;
 
@@ -23,6 +26,7 @@ namespace AltAI
         //void updateUnitTactics();
         //void updateProjectTactics();
 
+        void makeInitialUnitTactics();
         void makeSpecialistUnitTactics();
         void makeCivicTactics();
         void makeResourceTactics();
@@ -49,6 +53,7 @@ namespace AltAI
         //void updateCityGlobalBuildingTactics(IDInfo city, BuildingTypes buildingType, int buildingChangeCount);
         void updateGlobalBuildingTacticsDependencies();
         void eraseLimitedBuildingTactics(BuildingTypes buildingType);
+        bool hasBuildingTactic(BuildingTypes buildingType) const;
 
         void updateCityUnitTactics(TechTypes techType);
         void updateCityUnitTacticsExperience(IDInfo city);
@@ -56,16 +61,47 @@ namespace AltAI
 
         void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
 
+        TacticSelectionData& getBaseTacticSelectionData();
+        const TacticSelectionData& getBaseTacticSelectionData() const;
+
         std::map<int, ICityBuildingTacticsPtr> getCityBuildingTactics(BuildingTypes buildingType) const;
         std::map<int, ICityBuildingTacticsPtr> getCitySpecialBuildingTactics(BuildingTypes buildingType) const;
 
-        ConstructItem getBuildItem(const City& city);
+        ConstructItem getBuildItem(City& city);
         bool getSpecialistBuild(CvUnitAI* pUnit);
 
         std::map<BuildingTypes, std::vector<BuildingTypes> > getBuildingsCityCanAssistWith(IDInfo city) const;
         std::map<BuildingTypes, std::vector<BuildingTypes> > getPossibleDependentBuildings(IDInfo city) const;
 
         UnitAction getConstructedUnitAction(const CvUnit* pUnit) const;
+
+        template <typename DepType>
+            void getUnitsWithDep(std::map<DepType, std::vector<UnitTypes> >& depMap, int depID) const
+        {
+            for (PlayerTactics::UnitTacticsMap::const_iterator iter(unitTacticsMap_.begin()), endIter(unitTacticsMap_.end()); iter != endIter; ++iter)
+            {
+                CityIter cityIter(*player.getCvPlayer());
+                while (CvCity* pCity = cityIter())
+                {
+                    CityUnitTacticsPtr pCityTactics = iter->second->getCityTactics(pCity->getIDInfo());
+                    if (pCityTactics)
+                    {
+                        const std::vector<IDependentTacticPtr>& pDepItems = pCityTactics->getDependencies();
+                        for (size_t i = 0, count = pDepItems.size(); i < count; ++i)
+                        {
+                            const std::vector<DependencyItem>& thisDepItems = pDepItems[i]->getDependencyItems();
+                            for (size_t j = 0, depItemCount = thisDepItems.size(); j < depItemCount; ++j)
+                            {
+                                if (thisDepItems[j].first == depID)
+                                {
+                                    depMap[(DepType)thisDepItems[j].second].push_back(iter->first);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         void debugTactics();
 
@@ -105,6 +141,7 @@ namespace AltAI
         ResourceTacticsMap resourceTacticsMap_;
 
         Player& player;
+        TacticSelectionDataMap tacticSelectionDataMap;
 
         // save/load functions
         void write(FDataStreamBase* pStream) const;
@@ -114,5 +151,7 @@ namespace AltAI
         void addBuildingTactics_(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, CvCity* pCity);
         void addSpecialBuildingTactics_(const boost::shared_ptr<BuildingInfo>& pBuildingInfo, CvCity* pCity);
         void addUnitTactics_(const boost::shared_ptr<UnitInfo>& pUnitInfo, CvCity* pCity);
+
+        bool initialised_;
     };
 }

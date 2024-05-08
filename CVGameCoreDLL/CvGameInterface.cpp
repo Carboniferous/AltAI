@@ -33,6 +33,8 @@ void CvGame::updateColoredPlots()
 	int iRange;
 	int iDX, iDY;
 	int iI;
+    // AltAI
+    const bool isUsingAltAI = GET_PLAYER(getActivePlayer()).isUsingAltAI();
 
 	gDLL->getEngineIFace()->clearColoredPlots(PLOT_LANDSCAPE_LAYER_BASE);
 	gDLL->getEngineIFace()->clearAreaBorderPlots(AREA_BORDER_LAYER_CITY_RADIUS);
@@ -251,7 +253,8 @@ void CvGame::updateColoredPlots()
 				}
 			}
 
-			iRange = 4;
+            // AltAI
+			iRange = isUsingAltAI ? 8 : 4;
 
 			for (iDX = -(iRange); iDX <= iRange; iDX++)
 			{

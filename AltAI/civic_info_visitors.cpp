@@ -12,7 +12,6 @@
 #include "./building_helper.h"
 #include "./religion_helper.h"
 #include "./civ_helper.h"
-#include "./city.h"
 
 namespace AltAI
 {

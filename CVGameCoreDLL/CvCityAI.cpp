@@ -233,11 +233,18 @@ void CvCityAI::AI_assignWorkingPlots()
 	verifyWorkingPlots();
 
     // AltAI - (population is zero when city is being destroyed)
+    bool usedAltAI = false;
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI() && m_iPopulation > 0 && (!isHuman() || isCitizensAutomated()))
     {
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).assignPlots();
+        AltAI::PlayerPtr pPlayer = GC.getGame().getAltAI()->getPlayer(m_eOwner);
+        // might be called during city initialisation - in which case we set the AI_setAssignWorkDirty flag when init is called on the city post CvCity init
+        if (pPlayer->isCity(m_iID))
+        {
+            usedAltAI = true;
+            pPlayer->getCity(m_iID).assignPlots();
+        }
     }
-    else  // original code
+    if (!usedAltAI)  // original code
     {
 	    // if forcing specialists, try to make all future specialists of the same type
 	    bool bIsSpecialistForced = false;
@@ -635,9 +642,10 @@ void CvCityAI::AI_chooseProduction()
 
 	if (isProduction())
 	{
-		if (getProduction() > 0)
+        // skip checks to change production item if using AltAI
+		if (getProduction() > 0 && !GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
 		{
-
+            // if building a settler and in financial trouble - this check means we skip the other conditions and fall through to clear the build queue
 			if ((getProductionUnitAI() == UNITAI_SETTLE) && kPlayer.AI_isFinancialTrouble())
 			{
 				
@@ -4944,23 +4952,29 @@ void CvCityAI::AI_updateBestBuild()
 
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
-        // hack to indicate we are using AltAI
-        boost::tie(m_aeBestBuild[CITY_HOME_PLOT], m_aiBestBuildValue[CITY_HOME_PLOT]) = std::make_pair(NO_BUILD, getID());
+        // can be called from init before AltAI City object is setup
+        AltAI::PlayerPtr pPlayer = GC.getGame().getAltAI()->getPlayer(m_eOwner);
+        if (pPlayer->isCity(m_iID))
+        {
+            AltAI::City& city = pPlayer->getCity(m_iID);
+            // hack to indicate we are using AltAI
+            boost::tie(m_aeBestBuild[CITY_HOME_PLOT], m_aiBestBuildValue[CITY_HOME_PLOT]) = std::make_pair(NO_BUILD, getID());
 
-        for (int iI = 0; iI < NUM_CITY_PLOTS; iI++)
-	    {
-		    if (iI != CITY_HOME_PLOT)
-    		{
-			    const CvPlot* pLoopPlot = getCityIndexPlot(iI);
+            for (int iI = 0; iI < NUM_CITY_PLOTS; iI++)
+	        {
+		        if (iI != CITY_HOME_PLOT)
+    		    {
+			        const CvPlot* pLoopPlot = getCityIndexPlot(iI);
 
-			    if (pLoopPlot && pLoopPlot->getWorkingCity() == this)
-                {
-                    boost::tie(m_aeBestBuild[iI], m_aiBestBuildValue[iI]) = 
-                        GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).getBestImprovement(XYCoords(pLoopPlot->getX(), pLoopPlot->getY()), "AI_updateBestBuild");
+			        if (pLoopPlot && pLoopPlot->getWorkingCity() == this)
+                    {
+                        boost::tie(m_aeBestBuild[iI], m_aiBestBuildValue[iI]) = 
+                            city.getBestImprovement(XYCoords(pLoopPlot->getX(), pLoopPlot->getY()), "AI_updateBestBuild");
+                    }
                 }
             }
+            return;
         }
-        return;
     }
 	
 	CvPlot* pLoopPlot;
@@ -7468,8 +7482,13 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
-        boost::tie(*peBestBuild, *piBestValue) = GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).getBestImprovement(XYCoords(pPlot->getX(), pPlot->getY()), "AI_bestPlotBuild");
-        return;
+        AltAI::PlayerPtr pPlayer = GC.getGame().getAltAI()->getPlayer(m_eOwner);
+        // can be called during city init
+        if (pPlayer->isCity(m_iID))
+        {
+            boost::tie(*peBestBuild, *piBestValue) = pPlayer->getCity(m_iID).getBestImprovement(XYCoords(pPlot->getX(), pPlot->getY()), "AI_bestPlotBuild");
+            return;
+        }
     }
 
 	CvCity* pCity;
@@ -8244,48 +8263,68 @@ int CvCityAI::AI_cityValue() const
 
 bool CvCityAI::AI_doPanic()
 {
+	if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+    {
+        // get unit and city to hurry in
+        std::pair<IDInfo, UnitTypes> cityAndUnitToBuild = GC.getGame().getAltAI()->getPlayer(m_eOwner)->getPriorityUnitBuild(getIDInfo());
+        if (cityAndUnitToBuild.first == getIDInfo() && cityAndUnitToBuild.second != NO_UNIT)
+        {
+            UnitTypes eProductionUnit = getProductionUnit();
+            if (eProductionUnit != cityAndUnitToBuild.second)
+            {
+                pushOrder(ORDER_TRAIN, cityAndUnitToBuild.second, -1, false, false, false);
+            }
+            else if (getProduction() > 0)
+            {
+                AI_doHurry(true);  // not subtle - need to check time available
+            }
+        }
+        return false;  // return isn't used
+    }
+    else
+    {
+	    bool bLandWar = ((area()->getAreaAIType(getTeam()) == AREAAI_OFFENSIVE) || (area()->getAreaAIType(getTeam()) == AREAAI_DEFENSIVE) || (area()->getAreaAIType(getTeam()) == AREAAI_MASSING));
 	
-	bool bLandWar = ((area()->getAreaAIType(getTeam()) == AREAAI_OFFENSIVE) || (area()->getAreaAIType(getTeam()) == AREAAI_DEFENSIVE) || (area()->getAreaAIType(getTeam()) == AREAAI_MASSING));
-	
-	if (bLandWar)
-	{
-		int iOurDefense = GET_PLAYER(getOwnerINLINE()).AI_getOurPlotStrength(plot(), 0, true, false);
-		int iEnemyOffense = GET_PLAYER(getOwnerINLINE()).AI_getEnemyPlotStrength(plot(), 2, false, false);
-		int iRatio = (100 * iEnemyOffense) / (std::max(1, iOurDefense));
+	    if (bLandWar)
+	    {
+		    int iOurDefense = GET_PLAYER(getOwnerINLINE()).AI_getOurPlotStrength(plot(), 0, true, false);
+		    int iEnemyOffense = GET_PLAYER(getOwnerINLINE()).AI_getEnemyPlotStrength(plot(), 2, false, false);
+		    int iRatio = (100 * iEnemyOffense) / (std::max(1, iOurDefense));
 
-		if (iRatio > 100)
-		{
-			UnitTypes eProductionUnit = getProductionUnit();
+		    if (iRatio > 100)
+		    {
+			    UnitTypes eProductionUnit = getProductionUnit();
 
-			if (eProductionUnit != NO_UNIT)
-			{
-				if (getProduction() > 0)
-				{
-					if (GC.getUnitInfo(eProductionUnit).getCombat() > 0)
-					{
-						AI_doHurry(true);
-						return true;
-					}
-				}
-			}
-			else
-			{
-				if ((GC.getGame().getSorenRandNum(2, "AI choose panic unit") == 0) && AI_chooseUnit(UNITAI_CITY_COUNTER))
-				{
-					AI_doHurry((iRatio > 140));	
-				}
-				else if (AI_chooseUnit(UNITAI_CITY_DEFENSE))
-				{
-					AI_doHurry((iRatio > 140));
-				}
-				else if (AI_chooseUnit(UNITAI_ATTACK))
-				{
-					AI_doHurry((iRatio > 140));
-				}
-			}
-		}
-	}
-	return false;
+			    if (eProductionUnit != NO_UNIT)
+			    {
+				    if (getProduction() > 0)
+				    {
+					    if (GC.getUnitInfo(eProductionUnit).getCombat() > 0)
+					    {
+						    AI_doHurry(true);
+						    return true;
+					    }
+				    }
+			    }
+			    else
+			    {
+				    if ((GC.getGame().getSorenRandNum(2, "AI choose panic unit") == 0) && AI_chooseUnit(UNITAI_CITY_COUNTER))
+				    {
+					    AI_doHurry((iRatio > 140));	
+				    }
+				    else if (AI_chooseUnit(UNITAI_CITY_DEFENSE))
+				    {
+					    AI_doHurry((iRatio > 140));
+				    }
+				    else if (AI_chooseUnit(UNITAI_ATTACK))
+				    {
+					    AI_doHurry((iRatio > 140));
+				    }
+			    }
+		    }
+	    }
+	    return false;
+    }
 }
 
 int CvCityAI::AI_calculateCulturePressure(bool bGreatWork)
@@ -8796,6 +8835,9 @@ void CvCityAI::AI_stealPlots()
             {
                 if (pLoopPlot->getOwnerINLINE() == getOwnerINLINE())
                 {
+                    // ugly! why not do:
+                    //const CvCity* pWorkingCity = pLoopPlot->getWorkingCity();
+                    //if (pWorkingCity && pWorkingCity->getID() != getID()) ...
                     pWorkingCity = static_cast<CvCityAI*>(pLoopPlot->getWorkingCity());
                     if ((pWorkingCity != this) && (pWorkingCity != NULL))
                     {
@@ -9443,7 +9485,12 @@ void CvCityAI::AI_updateWorkersNeededHere()
     // AltAI
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
-        m_iWorkersNeeded = GC.getGame().getAltAI()->getPlayer(getOwnerINLINE())->getCity(getID()).getNumReqdWorkers();
+        // can be called from init before AltAI City object is setup
+        AltAI::PlayerPtr pPlayer = GC.getGame().getAltAI()->getPlayer(m_eOwner);
+        if (pPlayer->isCity(m_iID))
+        {
+            m_iWorkersNeeded = pPlayer->getCity(getID()).getNumReqdWorkers();
+        }
     }
 }
 

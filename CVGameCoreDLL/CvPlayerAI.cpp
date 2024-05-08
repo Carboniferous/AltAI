@@ -28,7 +28,6 @@
 // AltAI headers
 #include "game.h"
 #include "player.h"
-#include "city.h"
 
 #define DANGER_RANGE						(4)
 #define GREATER_FOUND_RANGE			(5)
@@ -487,7 +486,9 @@ void CvPlayerAI::AI_doTurnUnitsPost()
 			if (bValid)
 			{
 				bool bKilled = false;
-				if (!bNoDisband)
+				if (!bNoDisband && !isUsingAltAI())  // added AltAI check - don't want this code disbanding units
+                    // logic appears to be see if unit has less than approx half exp than now possible for that unit from this city
+                    // and no plot danger and we have at least one other military happiness unit and we're paying unit upkeep then can disband!
 				{
 					if (pLoopUnit->canFight())
 					{
@@ -507,15 +508,15 @@ void CvPlayerAI::AI_doTurnUnitsPost()
 									{
 										if ((pLoopUnit->getDomainType() != DOMAIN_LAND) || pLoopUnit->plot()->plotCount(PUF_isMilitaryHappiness, -1, -1, getID()) > 1)
 										{
-										pLoopUnit->kill(false);
-										bKilled = true;
-										pLastUpgradePlot = NULL;
-									}
-								}
-							}
-						}
-					}
-				}
+										    pLoopUnit->kill(false);
+										    bKilled = true;
+										    pLastUpgradePlot = NULL;
+									    }
+								    }
+							    }
+						    }
+					    }
+				    }
 				}
 				if (!bKilled)
 				{
@@ -1129,11 +1130,29 @@ void CvPlayerAI::AI_unitUpdate()
 		}
 		else
 		{
+            CvSelectionGroup* pFirstAttackGroup = NULL;
+            if (isUsingAltAI())
+            {
+                CvUnit* pFirstAttackUnit = gGlobals.getGame().getAltAI()->getPlayer(getID())->getNextAttackUnit();
+                if (pFirstAttackUnit)
+                {
+                    pFirstAttackGroup = pFirstAttackUnit->getGroup();
+                    if (pFirstAttackGroup->getNumUnits() > 1)
+                    {
+                        // split selected attack unit from its group so we can avoid going through with the rest of the group's units in attack
+                        // as the next attack unit may be from a different group or plot
+                        pFirstAttackUnit->joinGroup(NULL);  
+                        pFirstAttackGroup = pFirstAttackUnit->getGroup();
+                    }                    
+                }
+            }
+
 			tempGroupCycle.clear();
 			finalGroupCycle.clear();
 
 			pCurrUnitNode = headGroupCycleNode();
 
+            // make a copy of the current selection group cycle order
 			while (pCurrUnitNode != NULL)
 			{
 				tempGroupCycle.insertAtEnd(pCurrUnitNode->m_data);
@@ -1142,6 +1161,7 @@ void CvPlayerAI::AI_unitUpdate()
 
 			iValue = 0;
 
+            // sort temp cycle list in order of movement priority - highest priority goes to front of the list
 			while (tempGroupCycle.getLength() > 0)
 			{
 				pCurrUnitNode = tempGroupCycle.head();
@@ -1151,9 +1171,14 @@ void CvPlayerAI::AI_unitUpdate()
 					pLoopSelectionGroup = getSelectionGroup(pCurrUnitNode->m_data);
 					FAssertMsg(pLoopSelectionGroup != NULL, "selection group node with NULL selection group");
 
+                    // order from lowest value: cargo, air, workers, explore, units that can bombard, units with collateral, units with withdrawal chance, combat roughly in strength order
 					if (AI_movementPriority(pLoopSelectionGroup) <= iValue)
 					{
-						finalGroupCycle.insertAtEnd(pCurrUnitNode->m_data);
+                        // don't add selected attack group if it is set (pLoopSelectionGroup should never be null) as we add it at the cycle's beginning below
+                        if (pLoopSelectionGroup != pFirstAttackGroup)
+                        {
+						    finalGroupCycle.insertAtEnd(pCurrUnitNode->m_data);  // so cargo, air, workers, etc... are towards the end of the group cycle, with strongest combat units near the beginning
+                        }
 						pCurrUnitNode = tempGroupCycle.deleteNode(pCurrUnitNode);
 					}
 					else
@@ -1165,15 +1190,29 @@ void CvPlayerAI::AI_unitUpdate()
 				iValue++;
 			}
 
+            if (pFirstAttackGroup)  // AltAI - add selected attack group at beginning of the group cycle
+            {
+                finalGroupCycle.insertAtBeginning(pFirstAttackGroup->getID());
+            }
+
 			pCurrUnitNode = finalGroupCycle.head();
 
 			while (pCurrUnitNode != NULL)
 			{
+                /*if (isUsingAltAI())
+                {
+                    CvUnit* pFirstAttackUnit = gGlobals.getGame().getAltAI()->getPlayer(getID())->getNextAttackUnit();
+                    if (pFirstAttackUnit)
+                    {
+                        pFirstAttackGroup = pFirstAttackUnit->getGroup();
+                    }
+                }*/
+
 				pLoopSelectionGroup = getSelectionGroup(pCurrUnitNode->m_data);
 
 				if (NULL != pLoopSelectionGroup)  // group might have been killed by a previous group update
 				{
-					if (pLoopSelectionGroup->AI_update())
+					if (pLoopSelectionGroup->AI_update() || pFirstAttackGroup)
 					{
 						break; // pointers could become invalid...
 					}
@@ -3009,6 +3048,7 @@ bool CvPlayerAI::AI_avoidScience() const
 bool CvPlayerAI::AI_isFinancialTrouble() const
 {
 	//if (getCommercePercent(COMMERCE_GOLD) > 50)
+    if (!isUsingAltAI())  // turn off for AltAI players so we don't start disbanding units and similar - basically don't want adhoc actions this check generates
 	{
 		int iNetCommerce = 1 + getCommerceRate(COMMERCE_GOLD) + getCommerceRate(COMMERCE_RESEARCH) + std::max(0, getGoldPerTurn());
 		int iNetExpenses = calculateInflatedCosts() + std::min(0, getGoldPerTurn());
@@ -10610,8 +10650,8 @@ void CvPlayerAI::AI_doCommerce()
     // AltAI
     if (isUsingAltAI())
     {
-        //int maxResearchRate = gGlobals.getGame().getAltAI()->getPlayer(getID())->getMaxResearchRate();
-        int maxResearchRate = gGlobals.getGame().getAltAI()->getPlayer(getID())->getMaxResearchRateWithProcesses();
+        //int maxResearchRate = gGlobals.getGame().getAltAI()->getPlayer(getID())->getMaxResearchPercent();
+        int maxResearchRate = gGlobals.getGame().getAltAI()->getPlayer(getID())->getMaxResearchPercentWithProcesses();
 
         if (getGold() > 500)
         {
@@ -16256,7 +16296,7 @@ int CvPlayerAI::AI_getMinFoundValue() const
     // AltAI
     if (m_bUsingAltAI)
     {
-        const int iMaxResearchRate = GC.getGame().getAltAI()->getPlayer(m_eID)->getMaxResearchRate(std::make_pair(100 * std::max<int>(0, getGoldPerTurn()), 100 * iNetExpenses));
+        const int iMaxResearchRate = GC.getGame().getAltAI()->getPlayer(m_eID)->getMaxResearchPercent(std::make_pair(100 * std::max<int>(0, getGoldPerTurn()), 100 * iNetExpenses));
         iValue = 200 - 3 * iMaxResearchRate / 2;
     }
 	

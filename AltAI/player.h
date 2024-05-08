@@ -11,10 +11,12 @@ class CvPlot;
 namespace AltAI
 {
     class PlayerAnalysis;
+    class OpponentsAnalysis;
     class CivHelper;
     class AreaHelper;
     class IPlotEvent;
     class City;
+    typedef boost::shared_ptr<City> CityPtr;
     class SettlerManager;
     struct HurryData;
 
@@ -39,19 +41,26 @@ namespace AltAI
         City& getCity(const CvCity* pCity);
         const City& getCity(const CvCity* pCity) const;
 
+        bool isCity(const int ID) const;
         City& getCity(const int ID);
         const City& getCity(const int ID) const;
 
-        void addUnit(CvUnitAI* pUnit, bool loading = false);
-        void deleteUnit(CvUnit* pUnit);        
-        void moveUnit(CvUnitAI* pUnit, const CvPlot* pFromPlot, const CvPlot* pToPlot);
+        void addOurUnit(CvUnitAI* pUnit, const CvUnit* pUpgradingUnit = (const CvUnit*)0, bool loading = false);
+        void deleteOurUnit(CvUnit* pUnit, const CvPlot* pPlot);        
+        void moveOurUnit(CvUnitAI* pUnit, const CvPlot* pFromPlot, const CvPlot* pToPlot);
+        void withdrawOurUnit(CvUnitAI* pUnit, const CvPlot* pAttackPlot);
+        CvUnit* getNextAttackUnit();
+        std::pair<IDInfo, UnitTypes> getPriorityUnitBuild(IDInfo city);
+        Unit& getOurUnit(CvUnitAI* pUnit);
+        Unit& getOurUnit(IDInfo unit);
+
         void addPlayerUnit(CvUnitAI* pUnit, const CvPlot* pPlot);
         void deletePlayerUnit(CvUnitAI* pUnit, const CvPlot* pPlot);
         void movePlayerUnit(CvUnitAI* pUnit, const CvPlot* pFromPlot, const CvPlot* pToPlot);
-        void hidePlayerUnit(CvUnitAI* pUnit, const CvPlot* pOldPlot);
-        Unit getUnit(CvUnitAI* pUnit) const;
+        void hidePlayerUnit(CvUnitAI* pUnit, const CvPlot* pOldPlot, bool moved);
+        void withdrawPlayerUnit(CvUnitAI* pUnit, const CvPlot* pAttackPlot);
 
-        std::vector<IUnitEventGeneratorPtr> getCityUnitEvents(IDInfo city) const;
+        std::vector<IUnitEventGeneratorPtr> getCityUnitEvents(IDInfo city);
         
         const CvPlayer* getCvPlayer() const;
         CvPlayer* getCvPlayer();
@@ -67,19 +76,20 @@ namespace AltAI
         std::vector<BuildTypes> addAdditionalPlotBuilds(const CvPlot* pPlot, BuildTypes buildType) const;
         bool checkResourcesOutsideCities(CvUnitAI* pUnit, const std::multimap<int, const CvPlot*>& resourceHints);
         bool checkResourcesPlot(CvUnitAI* pUnit, const CvPlot* pPlot);
-        int getNumWorkersTargetingPlot(const CvPlot* pTargetPlot) const;
+        int getNumWorkersTargetingPlot(XYCoords targetCoords) const;
+
         int getNumWorkersTargetingCity(const CvCity* pCity) const;
         int getNumSettlersTargetingPlot(CvUnit* pIgnoreUnit, const CvPlot* pTargetPlot) const;
         int getNumActiveWorkers(UnitTypes unitType) const;
-        std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > getWorkerMissionsForCity(const CvCity* pCity) const;
-        std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::Mission> > > getWorkerMissions() const;
+        std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > > getWorkerMissionsForCity(const CvCity* pCity) const;
+        std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::WorkerMission> > > getWorkerMissions() const;
         void debugWorkerMissions(std::ostream& os) const;
 
         std::vector<IDInfo> getCitiesTargetingPlot(UnitTypes unitType, XYCoords buildTarget) const;
 
         bool doSpecialistMove(CvUnitAI* pUnit);
 
-        void logMission(CvSelectionGroup* pGroup, MissionData missionData, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit) const;
+        void logMission(CvSelectionGroup* pGroup, MissionData missionData, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit, const char* callingFunction) const;
         void logClearMissions(const CvSelectionGroup* pGroup, const std::string& caller) const;
         void logScrapUnit(const CvUnit* pUnit) const;
         void logFailedPath(const CvSelectionGroup* pGroup, const CvPlot* pFromPlot, const CvPlot* pToPlot, int iFlags) const;
@@ -89,13 +99,15 @@ namespace AltAI
         void updateWorkerAnalysis();
 
         void pushWorkerMission(CvUnitAI* pUnit, const CvCity* pCity, const CvPlot* pTargetPlot,
-            MissionTypes missionType, BuildTypes buildType, int iFlags = 0, bool bAppend = false, const std::string& caller = "");
-        void updateWorkerMission(CvUnitAI* pUnit, BuildTypes buildType);
-        void updateMission(CvUnitAI* pUnit, CvPlot* pOldPlot, CvPlot* pNewPlot);
+            MissionTypes missionType, BuildTypes buildType, int iFlags = 0, const std::string& caller = "");
+        //void updateWorkerMission(CvUnitAI* pUnit, BuildTypes buildType);
         void clearWorkerMission(CvUnitAI* pUnit);
+        
         bool hasMission(CvUnitAI* pUnit);
         void pushMission(CvUnitAI* pUnit, const UnitMissionPtr& pMission);
+        void updateMission(CvUnitAI* pUnit, CvPlot* pOldPlot, CvPlot* pNewPlot);
         bool executeMission(CvUnitAI* pUnit);
+        PromotionTypes promoteUnit(CvUnitAI* pUnit);
 
         template <typename P>
             std::vector<UnitMissionPtr> getMissions(P pred, const CvUnitAI* pIgnoreUnit = NULL) const
@@ -124,11 +136,13 @@ namespace AltAI
         void pushExploreMission(CvUnitAI* pUnit, const CvCity* pCity);
 
         void addTech(TechTypes techType, TechSources source);
-        void gaveTech(TechTypes techType, PlayerTypes toPlayer);
+        void gaveTech(TechTypes techType, PlayerTypes fromPlayer, PlayerTypes toPlayer);
+
+        void meetTeam(TeamTypes teamType);
 
         void updatePlotInfo(const CvPlot* pPlot, bool isNew, const std::string& caller);
         //void pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pPlotEvent);
-        void updatePlotRevealed(const CvPlot* pPlot, bool isNew);
+        void updatePlotRevealed(const CvPlot* pPlot, bool isNew, bool isRevealed);
         void updatePlotBonus(const CvPlot* pPlot, BonusTypes revealedBonusType);
         void updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType);
         void updatePlotCulture(const CvPlot* pPlot, PlayerTypes previousRevealedOwner, PlayerTypes newRevealedOwner);
@@ -140,7 +154,10 @@ namespace AltAI
         void eraseLimitedBuildingTactics(BuildingTypes buildingType);
 
         void notifyReligionFounded(ReligionTypes religionType, bool isOurs);
+        void notifyCommerceRateChanged(CommerceTypes commerceType);
 
+        bool isSharedPlot(const CvPlot* pPlot) const;
+        const CvCity* getSharedPlotAssignedCity(const CvPlot* pPlot) const;
         void setWorkingCityOverride(const CvPlot* pPlot, const CvCity* pOldCity, const CvCity* pNewCity);
 
         void setCityDirty(IDInfo city);
@@ -148,10 +165,10 @@ namespace AltAI
 
         void updatePlotValues();
         const boost::shared_ptr<SettlerManager>& getSettlerManager() const;
-        std::vector<int> getBestCitySites(int minValue, int count);
-        std::set<BonusTypes> getBonusesForSites(int siteCount) const;
+        std::vector<int /* plot num */> getBestCitySites(int minValue, int count);
+        //std::set<BonusTypes> getBonusesForSites(int siteCount) const;
 
-        CvPlot* getBestPlot(CvUnitAI* pUnit, int subAreaID) const;
+        CvPlot* getBestPlot(CvUnit* pUnit, int subAreaID) const;
 
         void logCitySites() const;
 
@@ -173,12 +190,17 @@ namespace AltAI
 
         CommerceModifier getCommercePercentages() const;
 
-        int getMaxResearchRate() const;
-        int getMaxResearchRateWithProcesses() const;
-        int getMaxResearchRate(std::pair<int, int> fixedIncomeAndExpenses) const;
+        int getMaxResearchPercent() const;
+        int getMaxResearchPercentWithProcesses() const;
+        int getMaxResearchPercent(std::pair<int, int> fixedIncomeAndExpenses) const;        
 
-        int getMaxGold() const;
-        int getMaxGoldWithProcesses() const;
+        int getMaxGoldRate() const;
+        int getMaxGoldRateWithProcesses() const;
+
+        const std::vector<std::pair<int, int> >& getGoldAndResearchRates() const;
+
+        TotalOutput getCurrentOutput();
+        TotalOutput getCurrentProjectedOutput();
 
         int getUnitCount(UnitTypes unitType, bool includeUnderConstruction = false) const;
         int getUnitCount(UnitAITypes unitAIType) const;
@@ -199,7 +221,7 @@ namespace AltAI
         void calcMaxResearchRate_();
         //void calcCivics_();        
 
-        typedef std::map<int, City> CityMap;
+        typedef std::map<int, CityPtr> CityMap;
         CityMap cities_;
         std::set<int> citiesToInit_;
         typedef std::map<IDInfo, Unit> UnitMap;
@@ -208,6 +230,7 @@ namespace AltAI
         typedef UnitMap::const_iterator UnitsCIter;
         CvPlayer* pPlayer_;
         boost::shared_ptr<PlayerAnalysis> pPlayerAnalysis_;
+        boost::shared_ptr<OpponentsAnalysis> pOpponentsAnalysis_;
         boost::shared_ptr<CivHelper> pCivHelper_;
         std::map<int, boost::shared_ptr<AreaHelper> > areaHelpersMap_;
         boost::shared_ptr<SettlerManager> pSettlerManager_;
@@ -219,5 +242,6 @@ namespace AltAI
         std::set<IDInfo> cityFlags_;
         int maxRate_, maxRateWithProcesses_;
         int maxGold_, maxGoldWithProcesses_;
+        std::vector<std::pair<int, int> > goldAndResearchOutputsByCommerceRate_;
     };
 }

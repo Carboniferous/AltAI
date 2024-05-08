@@ -260,6 +260,23 @@ namespace AltAI
         return !(output1 == output2);
     }
 
+    template <int N, typename T>  // calc first output as %-age of the second
+        inline Output<N, T> asPercentageOf(const Output<N, T>& output1, const Output<N, T>& output2)
+    {
+        Output<N, T> delta;
+        for (size_t i = 0; i < N; ++i)
+        {
+            delta[i] = output2[i] == 0 ? 0 : (output1[i] * 100) / output2[i];
+        }
+        return delta;
+    }
+
+    template <typename T> 
+        inline int asPercentageOf(const T output1, const T output2)
+    {
+        return output2 == 0 ? 0 : output1 * 100 / output2;
+    }
+
     typedef Output<NUM_YIELD_TYPES> PlotYield;
     typedef Output<NUM_YIELD_TYPES> YieldModifier;
     typedef Output<NUM_COMMERCE_TYPES> Commerce;
@@ -570,6 +587,25 @@ namespace AltAI
         }
     };
 
+    struct CvUnitIDInfoOrderF
+    {
+        bool operator() (const CvUnit* pUnit1, const CvUnit* pUnit2) const
+        {
+            return pUnit1->getIDInfo() < pUnit2->getIDInfo();
+        }
+    };
+
+    struct CvSelectionGroupOrderF
+    {
+        bool operator() (const CvSelectionGroup* pGroup1, const CvSelectionGroup* pGroup2) const
+        {
+            return pGroup1->getID() < pGroup2->getID();
+        }
+    };
+
+    typedef std::set<const CvPlot*, CvPlotOrderF> PlotSet;
+    typedef std::map<const CvPlot*, std::vector<const CvUnit*>, CvPlotOrderF> PlotUnitsMap;
+
     struct LessThanZero
     {
         template <typename T>
@@ -695,6 +731,13 @@ namespace AltAI
     }
 
     std::string narrow(const std::wstring& wstr);
+
+    struct ShowPos : boost::noncopyable
+    {
+        explicit ShowPos(std::ostream& os) : os_(os) { os_ << std::showpos; }
+        ~ShowPos() { os_ << std::noshowpos; }
+        std::ostream& os_;
+    };
 
     enum BuildQueueTypes
     {

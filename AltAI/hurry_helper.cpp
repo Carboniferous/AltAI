@@ -8,14 +8,15 @@ namespace AltAI
 {
     HurryHelper::HurryHelper(const CvCity* pCity)
     {
-        HURRY_ANGER_DIVISOR_ = gGlobals.getDefineINT("HURRY_ANGER_DIVISOR");
-        PERCENT_ANGER_DIVISOR_ = gGlobals.getPERCENT_ANGER_DIVISOR();
-        HURRY_POP_ANGER_ = gGlobals.getDefineINT("HURRY_POP_ANGER");
-        NEW_HURRY_MODIFIER_ = gGlobals.getDefineINT("NEW_HURRY_MODIFIER");
+        HURRY_ANGER_DIVISOR_ = gGlobals.getDefineINT("HURRY_ANGER_DIVISOR");  // 10
+        PERCENT_ANGER_DIVISOR_ = gGlobals.getPERCENT_ANGER_DIVISOR();  // 1000
+        HURRY_POP_ANGER_ = gGlobals.getDefineINT("HURRY_POP_ANGER");  // 1
+        NEW_HURRY_MODIFIER_ = gGlobals.getDefineINT("NEW_HURRY_MODIFIER");  // 50
 
         const CvPlayer& player = CvPlayerAI::getPlayer(pCity->getOwner());
         globalHurryCostModifier_ = player.getHurryModifier();
 
+        // 67, 100, 150, 300
         hurryConscriptAngerPercent_ = gGlobals.getGameSpeedInfo(gGlobals.getGame().getGameSpeedType()).getHurryConscriptAngerPercent();
         
         hurryAngryTimer_ = pCity->getHurryAngerTimer();
@@ -70,6 +71,8 @@ namespace AltAI
 
     void HurryHelper::updateFlatHurryAngerLength_()
     {
+        // e.g.
+        // max(1, (10 * 100) / 100) * max(0, 100 + 0) / 100 => 10 * 100 / 100 = 10
         flatHurryAngerLength_ = std::max<int>(1, (((HURRY_ANGER_DIVISOR_ * hurryConscriptAngerPercent_) / 100) * std::max<int>(0, 100 + hurryAngryModifier_)) / 100);
     }
 
@@ -79,40 +82,44 @@ namespace AltAI
         return hurryAngryTimer_ > 0 ? 1 + ((1 + (hurryAngryTimer_ - 1) / flatHurryAngerLength_) * HURRY_POP_ANGER_ * PERCENT_ANGER_DIVISOR_) / std::max<int>(1, population_) : 0;
     }
 
-    std::pair<bool, HurryData> HurryHelper::canHurry(const CityData& data, HurryTypes hurryType) const
+    std::pair<bool, HurryData> HurryHelper::canHurry(const CityData& data, HurryTypes hurryType, bool ignoreBuildQueue) const
     {
         HurryData hurryData(hurryType);
         bool costsPopulation = productionPerPopulation_[hurryType] != 0, costsGold = goldPerProduction_[hurryType] != 0;
 
-        if ((!costsPopulation && !costsGold) || data.getBuildQueue().empty() || data.getBuildQueue().top().first == ProcessItem)
+        if ((!costsPopulation && !costsGold) || 
+            (!ignoreBuildQueue && (data.getBuildQueue().empty() || data.getBuildQueue().top().first == ProcessItem)))
         {
             return std::make_pair(false, hurryData);
         }
         else
         {
-            hurryData = getHurryCosts_(data, hurryType);
+            hurryData = getHurryCosts_(data, hurryType, ignoreBuildQueue);
     
             // even if can't hurry - return how many pop we would need
             return std::make_pair(costsPopulation ? population_ / 2 >= hurryData.hurryPopulation : true, hurryData);
         }
     }
 
-    HurryData HurryHelper::getHurryCosts_(const CityData& data, HurryTypes hurryType) const
+    HurryData HurryHelper::getHurryCosts_(const CityData& data, HurryTypes hurryType, bool ignoreBuildQueue) const
     {
         bool costsPopulation = productionPerPopulation_[hurryType] != 0, costsGold = goldPerProduction_[hurryType] != 0;
-        std::pair<BuildQueueTypes, int> buildItem = data.getBuildQueue().top();
 
         int hurryCostModifierModifier = 0;
         int productionModifier = data.getModifiersHelper()->getTotalYieldModifier(data)[OUTPUT_PRODUCTION];
-        if (buildItem.first == BuildingItem)
+        if (!ignoreBuildQueue)
         {
-            hurryCostModifierModifier = gGlobals.getBuildingInfo((BuildingTypes)buildItem.second).getHurryCostModifier();
-            productionModifier += data.getModifiersHelper()->getBuildingProductionModifier(data, (BuildingTypes)buildItem.second);
-        }
-        else if (buildItem.first == UnitItem)
-        {
-            hurryCostModifierModifier = gGlobals.getUnitInfo((UnitTypes)buildItem.second).getHurryCostModifier();
-            productionModifier += data.getModifiersHelper()-> getUnitProductionModifier((UnitTypes)buildItem.second);
+            std::pair<BuildQueueTypes, int> buildItem(data.getBuildQueue().top());
+            if (buildItem.first == BuildingItem)
+            {
+                hurryCostModifierModifier = gGlobals.getBuildingInfo((BuildingTypes)buildItem.second).getHurryCostModifier();
+                productionModifier += data.getModifiersHelper()->getBuildingProductionModifier(data, (BuildingTypes)buildItem.second);
+            }
+            else if (buildItem.first == UnitItem)
+            {
+                hurryCostModifierModifier = gGlobals.getUnitInfo((UnitTypes)buildItem.second).getHurryCostModifier();
+                productionModifier += data.getModifiersHelper()-> getUnitProductionModifier((UnitTypes)buildItem.second);
+            }
         }
 
         int hurryCostModifier = getHurryCostModifier_(hurryCostModifierModifier, data.getAccumulatedProduction() == 0);

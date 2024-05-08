@@ -270,7 +270,7 @@ namespace AltAI
 
         if (node.specialBuildingTypeNotReqd != NO_SPECIALBUILDING)
         {
-            os << gGlobals.getSpecialBuildingInfo(node.specialBuildingTypeNotReqd).getType() << " not required ";
+            os << " " << gGlobals.getSpecialBuildingInfo(node.specialBuildingTypeNotReqd).getType() << " not required ";
         }
 
         return os;

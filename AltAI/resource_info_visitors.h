@@ -30,6 +30,8 @@ namespace AltAI
         int rawHappy;
         std::vector<std::pair<BuildingTypes, int> > buildingHappy;
         int actualHappy, potentialHappy, unusedHappy;
+
+        void debug(std::ostream& os) const;
     };
 
     ResourceHappyInfo getResourceHappyInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo, ResourceQuery::ResourceQueryFlags mode);
@@ -42,11 +44,20 @@ namespace AltAI
         int rawHealth;
         std::vector<std::pair<BuildingTypes, int> > buildingHealth;
         int actualHealth, potentialHealth, unusedHealth;
+
+        void debug(std::ostream& os) const;
     };
 
     ResourceHealthInfo getResourceHealthInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
 
-    void updateCityData(CityData& data, const boost::shared_ptr<ResourceInfo>& pResourceInfo, bool isAdding);
+    struct ResourceBuildingInfo
+    {
+        std::vector<std::pair<BuildingTypes, int> > buildingModifiers, nationalBuildingModifiers, globalBuildingModifiers;
+    };
+
+    ResourceBuildingInfo getResourceBuildingInfo(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
+
+    void updateRequestData(CityData& data, const boost::shared_ptr<ResourceInfo>& pResourceInfo, bool isAdding);
 
     std::vector<BuildTypes> getBuildTypes(const boost::shared_ptr<ResourceInfo>& pResourceInfo);
 

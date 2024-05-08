@@ -11,7 +11,6 @@
 #include "./iters.h"
 #include "./game.h"
 #include "./player.h"
-#include "./city.h"
 #include "./helper_fns.h"
 #include "./player_analysis.h"
 #include "./civ_helper.h"
@@ -25,7 +24,7 @@ namespace AltAI
         class CityTechsUpdater : public boost::static_visitor<>
         {
         public:
-            CityTechsUpdater(const CvCity* pCity, CityData& data) : pCity_(pCity), data_(data)
+            explicit CityTechsUpdater(CityData& data) : data_(data)
             {
             }
 
@@ -96,7 +95,6 @@ namespace AltAI
             }
 
         private:
-            const CvCity* pCity_;
             CityData& data_;
         };
     }
@@ -618,7 +616,7 @@ namespace AltAI
     void updateRequestData(const CvCity* pCity, CityData& data, const boost::shared_ptr<TechInfo>& pTechInfo)
     {
         data.getCivHelper()->addTech(pTechInfo->getTechType());
-        boost::apply_visitor(CityTechsUpdater(pCity, data), pTechInfo->getInfo());
+        boost::apply_visitor(CityTechsUpdater(data), pTechInfo->getInfo());
         data.recalcOutputs();
     }
 

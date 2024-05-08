@@ -14,43 +14,6 @@ namespace AltAI
             PlayerTypes playerType;
         };
 
-        bool isEmpty(const BuildingInfo::UnitExpNode& node)
-        {
-            BuildingInfo::UnitExpNode emptyNode;
-            return node.freeExperience == emptyNode.freeExperience && 
-                node.globalFreeExperience == emptyNode.globalFreeExperience && 
-                node.domainFreeExperience.empty() &&
-                node.domainProductionModifier.empty() &&
-                node.combatTypeFreeExperience.empty() &&
-                node.freePromotion == emptyNode.freePromotion;
-        }
-
-        bool isEmpty(const BuildingInfo::CityDefenceNode& node)
-        {
-            BuildingInfo::CityDefenceNode emptyNode;
-            return node.defenceBonus == emptyNode.defenceBonus &&
-                node.globalDefenceBonus == emptyNode.globalDefenceBonus &&
-                node.bombardRateModifier == emptyNode.bombardRateModifier &&
-                node.espionageDefence == emptyNode.espionageDefence;
-        }
-
-        bool isEmpty(const BuildingInfo::YieldNode& node)
-        {
-            BuildingInfo::YieldNode emptyNode;
-            return node.yield == emptyNode.yield &&
-                node.modifier == emptyNode.modifier &&
-                node.global == emptyNode.global;
-        }
-
-        bool isEmpty(const BuildingInfo::BonusNode& node)
-        {
-            BuildingInfo::BonusNode emptyNode;
-            return node.bonusType == emptyNode.bonusType &&
-                node.yieldModifier == emptyNode.yieldModifier &&
-                node.happy == emptyNode.happy && node.health == emptyNode.health &&
-                node.prodModifier == emptyNode.prodModifier;
-        }
-
         void getYieldNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
         {
             // TODO check we can't miss any combinations of arrays here which are permitted in the xml
@@ -160,7 +123,12 @@ namespace AltAI
                 }
             }
 
-            if (!isEmpty(node.extraCommerce) || !node.specialistTypesAndYields.empty())
+            node.generatedGPP = std::make_pair(buildingInfo.getGreatPeopleRateChange(), (UnitClassTypes)buildingInfo.getGreatPeopleUnitClass());
+            node.cityGPPRateModifier = buildingInfo.getGreatPeopleRateModifier();
+            node.playerGPPRateModifier = buildingInfo.getGlobalGreatPeopleRateModifier();
+
+            if (!isEmpty(node.extraCommerce) || !node.specialistTypesAndYields.empty() ||
+                node.generatedGPP.first != 0 || node.cityGPPRateModifier != 0 || node.playerGPPRateModifier != 0)
             {
                 baseNode.nodes.push_back(node);
             }
@@ -259,6 +227,10 @@ namespace AltAI
             node.globalDefenceBonus = buildingInfo.getAllCityDefenseModifier();
             node.bombardRateModifier = buildingInfo.getBombardDefenseModifier();
             node.espionageDefence = buildingInfo.getEspionageDefenseModifier();
+            node.airDefenceModifier = buildingInfo.getAirModifier();
+            node.nukeDefenceModifier = buildingInfo.getNukeModifier();
+            node.extraAirUnitCapacity = buildingInfo.getAirUnitCapacity();
+            node.extraAirLiftCount = buildingInfo.getAirlift();
 
             if (!isEmpty(node))
             {
@@ -282,32 +254,28 @@ namespace AltAI
                     node.bonusType = (BonusTypes)i;
                     baseNode.nodes.push_back(node);
                 }
-            } 
-        }
+            }
 
-        void getFreeBonusNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
-        {
-            BuildingInfo::FreeBonusNode node;
             BonusTypes freeBonus = (BonusTypes)buildingInfo.getFreeBonus();
             if (freeBonus != NO_BONUS)
             {
+                BuildingInfo::BonusNode node;
                 int numFreeBonuses = buildingInfo.getNumFreeBonuses();
                 if (numFreeBonuses == -1)
                 {
                     numFreeBonuses = gGlobals.getWorldInfo(gGlobals.getMap().getWorldSize()).getNumFreeBuildingBonuses();
                 }
-                node.freeBonuses = std::make_pair(freeBonus, numFreeBonuses);
+                node.bonusType = freeBonus;
+                node.freeBonusCount = numFreeBonuses;
                 baseNode.nodes.push_back(node);
             }
-        }
 
-        void getRemoveBonusNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
-        {
-            BuildingInfo::RemoveBonusNode node;
             BonusTypes noBonus = (BonusTypes)buildingInfo.getNoBonus();
             if (noBonus != NO_BONUS)
             {
+                BuildingInfo::BonusNode node;
                 node.bonusType = noBonus;
+                node.isRemoved = true;
                 baseNode.nodes.push_back(node);
             }
         }
@@ -322,6 +290,7 @@ namespace AltAI
             node.workerSpeedModifier = buildingInfo.getWorkerSpeedModifier();
             node.noUnhealthinessFromBuildings = buildingInfo.isBuildingOnlyHealthy();
             node.noUnhealthinessFromPopulation = buildingInfo.isNoUnhealthyPopulation();
+            node.noUnhappiness = buildingInfo.isNoUnhappiness();
             node.startsGoldenAge = buildingInfo.isGoldenAge();
             node.globalPopChange = buildingInfo.getGlobalPopulationChange();
             node.makesCityCapital = buildingInfo.isCapital();
@@ -347,10 +316,7 @@ namespace AltAI
                 }
             }
 
-            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.hurryAngerModifier != 0 || node.workerSpeedModifier != 0 || 
-                node.globalPopChange != 0 || node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation ||
-                node.makesCityCapital || node.isGovernmentCenter || node.startsGoldenAge || 
-                node.freeBuildingType != NO_BUILDING || !node.civicTypes.empty() || node.nFreeTechs > 0)
+            if (!isEmpty(node))
             {
                 baseNode.nodes.push_back(node);
             }
@@ -377,6 +343,18 @@ namespace AltAI
             }
         }
 
+        void getHurryNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
+        {
+            BuildingInfo::HurryNode node;
+            node.hurryAngerModifier = buildingInfo.getHurryAngerModifier();
+            node.globalHurryCostModifier = buildingInfo.getGlobalHurryModifier();
+
+            if (node.hurryAngerModifier != 0 || node.globalHurryCostModifier != 0)
+            {
+                baseNode.nodes.push_back(node);
+            }
+        }
+
         void getAreaEffectNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
         {
             BuildingInfo::AreaEffectNode node;
@@ -384,7 +362,7 @@ namespace AltAI
             node.areaHealth = buildingInfo.getAreaHealth();
             node.globalHealth = buildingInfo.getGlobalHealth();
             node.areaHappy = buildingInfo.getAreaHappiness();
-            node.globalHappy = buildingInfo.getGlobalHealth();
+            node.globalHappy = buildingInfo.getGlobalHappiness();
 
             if (node.areaHealth != 0 || node.globalHealth != 0 || node.areaHappy != 0 ||
                 node.globalHappy != 0)
@@ -402,6 +380,7 @@ namespace AltAI
             node.cost = buildingInfo.getProductionCost();
             const CvPlayer& player = CvPlayerAI::getPlayer(requestData.playerType);
             node.productionModifier = player.getProductionModifier(requestData.buildingType);
+            node.hurryCostModifier = buildingInfo.getHurryCostModifier();
 
             node.happy = buildingInfo.getHappiness();
             node.health = buildingInfo.getHealth();
@@ -487,8 +466,6 @@ namespace AltAI
             getCommerceNode(node, buildingInfo);
             getTradeNode(node, buildingInfo);
             getBonusNode(node, buildingInfo);
-            getFreeBonusNode(node, buildingInfo);
-            getRemoveBonusNode(node, buildingInfo);
             getPowerNode(node, buildingInfo);
             getSpecialistNode(node, buildingInfo);
             getSpecialistSlotNode(node, buildingInfo);
@@ -496,10 +473,123 @@ namespace AltAI
             getCityDefenceNode(node, buildingInfo);
             getUnitExpNode(node, buildingInfo);
             getReligionNode(node, buildingInfo);
+            getHurryNode(node, buildingInfo);
             getAreaEffectNode(node, buildingInfo);
 
             return node;
         }
+    }
+
+    bool BuildingInfo::BonusNode::operator == (const BuildingInfo::BonusNode& other) const
+    {
+        return bonusType == other.bonusType &&
+            yieldModifier == other.yieldModifier &&
+            happy == other.happy &&
+            health == other.health &&
+            prodModifier == other.prodModifier &&
+            freeBonusCount == other.freeBonusCount &&
+            isRemoved == other.isRemoved;
+    }
+
+    bool BuildingInfo::UnitExpNode::operator == (const BuildingInfo::UnitExpNode& other) const
+    {
+        bool areEqual = freeExperience == other.freeExperience && 
+            globalFreeExperience == other.globalFreeExperience && 
+            freePromotion == other.freePromotion &&
+            domainFreeExperience.size() == other.domainFreeExperience.size() &&
+            domainProductionModifier.size() == other.domainProductionModifier.size() &&
+            combatTypeFreeExperience.size() == other.combatTypeFreeExperience.size();
+
+        if (areEqual)
+        {
+            for (size_t i = 0, count = domainFreeExperience.size(); i < count; ++i)
+            {
+                if (std::find(other.domainFreeExperience.begin(), other.domainFreeExperience.end(), domainFreeExperience[i]) == other.domainFreeExperience.end())
+                {
+                    areEqual = false;
+                    break;
+                }
+            }
+        }
+
+        if (areEqual)
+        {
+            for (size_t i = 0, count = domainProductionModifier.size(); i < count; ++i)
+            {
+                if (std::find(other.domainProductionModifier.begin(), other.domainProductionModifier.end(), domainProductionModifier[i]) == other.domainProductionModifier.end())
+                {
+                    areEqual = false;
+                    break;
+                }
+            }
+        }
+
+        if (areEqual)
+        {
+            for (size_t i = 0, count = combatTypeFreeExperience.size(); i < count; ++i)
+            {
+                if (std::find(other.combatTypeFreeExperience.begin(), other.combatTypeFreeExperience.end(), combatTypeFreeExperience[i]) == other.combatTypeFreeExperience.end())
+                {
+                    areEqual = false;
+                    break;
+                }
+            }
+        }
+        return areEqual;
+    }
+
+    bool BuildingInfo::YieldNode::operator == (const BuildingInfo::YieldNode& other) const
+    {
+        return yield == other.yield &&
+            modifier == other.modifier &&
+            powerModifier == other.powerModifier &&
+            plotCond == other.plotCond &&
+            militaryProductionModifier == other.militaryProductionModifier &&
+            global == other.global;
+    }
+
+    bool BuildingInfo::CityDefenceNode::operator == (const BuildingInfo::CityDefenceNode& other) const
+    {
+        return defenceBonus == other.defenceBonus &&
+            globalDefenceBonus == other.globalDefenceBonus &&
+            bombardRateModifier == other.bombardRateModifier &&
+            espionageDefence == other.espionageDefence &&
+            airDefenceModifier == other.airDefenceModifier &&
+            nukeDefenceModifier == other.nukeDefenceModifier &&
+            extraAirUnitCapacity == other.extraAirUnitCapacity &&
+            extraAirLiftCount == other.extraAirLiftCount;
+    }
+
+    bool BuildingInfo::MiscEffectNode::operator == (const BuildingInfo::MiscEffectNode& other) const
+    {
+        bool areEqual = cityMaintenanceModifierChange == other.cityMaintenanceModifierChange &&
+            foodKeptPercent == other.foodKeptPercent &&
+            hurryAngerModifier == other.hurryAngerModifier &&
+            workerSpeedModifier == other.workerSpeedModifier &&
+            globalPopChange == other.globalPopChange &&
+            nFreeTechs == other.nFreeTechs &&
+            noUnhealthinessFromBuildings == other.noUnhealthinessFromBuildings &&
+            noUnhealthinessFromPopulation == other.noUnhealthinessFromPopulation &&
+            noUnhappiness == other.noUnhappiness &&
+            startsGoldenAge == other.startsGoldenAge &&
+            makesCityCapital == other.makesCityCapital &&
+            isGovernmentCenter == other.isGovernmentCenter &&
+            freeBuildingType == other.freeBuildingType &&
+            civicTypes.size() == other.civicTypes.size();
+
+        if (areEqual)
+        {
+            for (size_t i = 0, count = civicTypes.size(); i < count; ++i)
+            {
+                if (std::find(other.civicTypes.begin(), other.civicTypes.end(), civicTypes[i]) == other.civicTypes.end())
+                {
+                    areEqual = false;
+                    break;
+                }
+            }
+        }
+
+        return areEqual;
     }
 
     BuildingInfo::BuildingInfo(BuildingTypes buildingType) : buildingType_(buildingType), playerType_(NO_PLAYER)

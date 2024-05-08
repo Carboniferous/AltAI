@@ -30,7 +30,7 @@ namespace AltAI
 
         if (teamIter == teams_.end())
         {
-            teamIter = teams_.insert(std::make_pair(player->getTeam(), boost::shared_ptr<Team>(new Team(&CvTeamAI::getTeam(player->getTeam()))))).first;
+            teamIter = teams_.insert(std::make_pair(player->getTeam(), TeamPtr(new Team(&CvTeamAI::getTeam(player->getTeam()))))).first;
         }
         teamIter->second->addPlayer(playerIter->second);
     }
@@ -65,7 +65,7 @@ namespace AltAI
         return iter->second;
     }
 
-    boost::shared_ptr<Team> Game::getTeam(TeamTypes teamType) const
+    TeamPtr Game::getTeam(TeamTypes teamType) const
     {
         TeamMap::const_iterator iter(teams_.find(teamType));
         if (iter == teams_.end())
@@ -77,7 +77,7 @@ namespace AltAI
                 std::ostream& os = ErrorLog::getLog(CvPlayerAI::getPlayer(playerType))->getStream();
                 os << "Team: " << teamType << " not found?\n";
             }
-            return boost::shared_ptr<Team>();
+            return TeamPtr();
         }
 
         return iter->second;

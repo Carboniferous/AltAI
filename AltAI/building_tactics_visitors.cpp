@@ -153,7 +153,7 @@ namespace AltAI
             if (node.global)
             {
                 isGlobal_ = true;
-            }
+            }            
         }
 
         void operator() (const BuildingInfo::CommerceNode& node)
@@ -243,10 +243,17 @@ namespace AltAI
             }
         }
 
-        void operator() (const BuildingInfo::FreeBonusNode& node)
+        void operator() (const BuildingInfo::BonusNode& node)
         {
-            isEconomic_ = true;
-            isGlobal_ = true;
+            if (node.prodModifier != 0)
+            {
+                depItems_.push_back(IDependentTacticPtr(new ResouceProductionBonusDependency(node.bonusType, node.prodModifier)));
+            }
+            if (node.freeBonusCount > 0)
+            {
+                isEconomic_ = true;
+                isGlobal_ = true;
+            }
         }
 
         void operator() (const BuildingInfo::CityDefenceNode& node)
@@ -454,9 +461,12 @@ namespace AltAI
             isEconomic_ = true;
         }
 
-        void operator() (const BuildingInfo::FreeBonusNode& node)
+        void operator() (const BuildingInfo::BonusNode& node)
         {
-            isEconomic_ = true;
+            if (node.freeBonusCount > 0)
+            {
+                isEconomic_ = true;
+            }
         }
 
         void operator() (const BuildingInfo::CityDefenceNode& node)

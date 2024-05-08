@@ -26,7 +26,7 @@
 // AltAI headers
 #include "game.h"
 #include "player.h"
-#include "city.h"
+#include "unit_tactics.h"
 
 // Public Functions...
 
@@ -414,7 +414,7 @@ void CvSelectionGroup::playActionSound()
 }
 
 
-void CvSelectionGroup::pushMission(MissionTypes eMission, int iData1, int iData2, int iFlags, bool bAppend, bool bManual, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit)
+void CvSelectionGroup::pushMission(MissionTypes eMission, int iData1, int iData2, int iFlags, bool bAppend, bool bManual, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit, const char* callingFunction)
 {
 	PROFILE_FUNC();
 
@@ -446,7 +446,7 @@ void CvSelectionGroup::pushMission(MissionTypes eMission, int iData1, int iData2
     // AltAI
     //if (CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI())
     {
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->logMission(this, mission, eMissionAI, pMissionAIPlot, pMissionAIUnit);
+        GC.getGame().getAltAI()->getPlayer(m_eOwner)->logMission(this, mission, eMissionAI, pMissionAIPlot, pMissionAIUnit, callingFunction);
     }
 
 	AI_setMissionAI(eMissionAI, pMissionAIPlot, pMissionAIUnit);
@@ -1436,6 +1436,8 @@ void CvSelectionGroup::continueMission(int iSteps)
 		return;
 	}
 
+    const bool usingAltAI = CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI();
+
 	if (!bDone)
 	{
 		if (getNumUnits() > 0)
@@ -1487,7 +1489,8 @@ void CvSelectionGroup::continueMission(int iSteps)
 					break;
 
 				case MISSION_MOVE_TO_UNIT:
-					if ((getHeadUnitAI() == UNITAI_CITY_DEFENSE) && plot()->isCity() && (plot()->getTeam() == getTeam()))
+                    // this check appears to mean that unit will halt in first city it finds that the unit's team owns and the unit is a better defender than other units present
+					if (!usingAltAI && (getHeadUnitAI() == UNITAI_CITY_DEFENSE) && plot()->isCity() && (plot()->getTeam() == getTeam()))
 					{
 						if (plot()->getBestDefender(getOwnerINLINE())->getGroup() == this)
 						{
@@ -1515,8 +1518,19 @@ void CvSelectionGroup::continueMission(int iSteps)
 								}
 							}
 						}
-							 
-						if (groupPathTo(pTargetUnit->getX_INLINE(), pTargetUnit->getY_INLINE(), headMissionQueueNode()->m_data.iFlags))
+					    
+                        XYCoords targetCoords = pTargetUnit->plot()->getCoords();
+                        if (usingAltAI)
+                        {
+                            const CvPlot* pTargetPlot = AltAI::getNextMovePlot(*GC.getGame().getAltAI()->getPlayer(m_eOwner), this, pTargetUnit->plot());
+                            if (pTargetPlot)
+                            {
+                                targetCoords = pTargetPlot->getCoords();
+                            }
+                        }
+
+						//if (groupPathTo(pTargetUnit->getX_INLINE(), pTargetUnit->getY_INLINE(), headMissionQueueNode()->m_data.iFlags))
+                        if (groupPathTo(targetCoords.iX, targetCoords.iY, headMissionQueueNode()->m_data.iFlags))
 						{
 							bAction = true;
 						}
@@ -3011,6 +3025,9 @@ bool CvSelectionGroup::groupAttack(int iX, int iY, int iFlags, bool& bFailedAlre
 						return false;
 					}
 
+                    // bNoBlitz will only be false if unit isBlitz (can attack mulitple times) and hasn't made an attack, otherwise bNoBlitz is aways true
+                    // used in weird way in conjuction with isBlitz and isMadeAttack (why not just use these directly?)
+                    // unit can attack if isMadeAttack is false, or it's true and isBlitz is true
 					bool bNoBlitz = (!pBestAttackUnit->isBlitz() || !pBestAttackUnit->isMadeAttack());
 
 					if (groupDeclareWar(pDestPlot))
@@ -3073,7 +3090,7 @@ bool CvSelectionGroup::groupAttack(int iX, int iY, int iFlags, bool& bFailedAlre
 							// if this is AI stack, follow through with the attack to the end
 							if (!isHuman() && getNumUnits() > 1)
 							{
-								AI_queueGroupAttack(iX, iY);
+                                AI_queueGroupAttack(iX, iY);
 							}
 							
 							break;
@@ -3102,6 +3119,11 @@ void CvSelectionGroup::groupMove(CvPlot* pPlot, bool bCombat, CvUnit* pCombatUni
 		pLoopUnit = ::getUnit(pUnitNode->m_data);
 		pUnitNode = nextUnitNode(pUnitNode);
 
+        // unit can move and...
+        // ...if is combat and unit is not no capture or plot is not enemy city then if canMoveAttackInto plot is true else if canMoveInto plot is true
+        // ... or if unit is combatunit which was passed in (which will be true if this unit has just attacked the plot)
+        // (so if combat but unit is no capture but is city => true && (false || false) = false -> check canMoveInto
+        // if combat is true and plot is city and unit can capture => true && (true || false) = true -> check canMoveOrAttackInto
 		if ((pLoopUnit->canMove() && ((bCombat && (!(pLoopUnit->isNoCapture()) || !(pPlot->isEnemyCity(*pLoopUnit)))) ? pLoopUnit->canMoveOrAttackInto(pPlot) : pLoopUnit->canMoveInto(pPlot))) || (pLoopUnit == pCombatUnit))
 		{
 			pLoopUnit->move(pPlot, true);
@@ -3428,7 +3450,7 @@ bool CvSelectionGroup::groupAmphibMove(CvPlot* pPlot, int iFlags)
 						if (pGroup->canAllMove())
 						{
 							FAssert(!pGroup->at(pPlot->getX_INLINE(), pPlot->getY_INLINE()));
-							pGroup->pushMission(MISSION_MOVE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), (MOVE_IGNORE_DANGER | iFlags));
+							pGroup->pushMission(MISSION_MOVE_TO, pPlot->getX_INLINE(), pPlot->getY_INLINE(), (MOVE_IGNORE_DANGER | iFlags), false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 							bLanding = true;
 						}
 					}

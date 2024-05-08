@@ -191,7 +191,9 @@ namespace AltAI
 
     Commerce BuildingsHelper::getBuildingCommerce(const CityData& data, BuildingTypes buildingType) const
     {
+#ifdef ALTAI_DEBUG
         //std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(owner_))->getStream();
+#endif
 
         Commerce totalCommerce;
         const int buildingCount = getNumBuildings(buildingType);
@@ -247,7 +249,9 @@ namespace AltAI
                 {
                     commerce *= 2;
                 }
+#ifdef ALTAI_DEBUG
                 //os << " total = " << commerce;
+#endif
                 totalCommerce[commerceType] += commerce;
             }
         }

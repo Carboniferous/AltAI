@@ -13,6 +13,43 @@
 
 namespace AltAI
 {
+    std::string ignoreFlagToString(int ignoreFlags)
+    {
+        std::ostringstream oss;
+        if (ignoreFlags != 0)
+        {
+            if (ignoreFlags & IDependentTactic::Ignore_Techs)
+            {
+                oss << " ignore techs ";
+            }
+            if (ignoreFlags & IDependentTactic::Ignore_City_Buildings)
+            {
+                oss << " ignore city buildings ";
+            }
+            if (ignoreFlags & IDependentTactic::Ignore_Civ_Buildings)
+            {
+                oss << " ignore civ buildings ";
+            }
+            if (ignoreFlags & IDependentTactic::Ignore_Religions)
+            {
+                oss << " ignore religions ";
+            }
+            if (ignoreFlags & IDependentTactic::Ignore_Resources)
+            {
+                oss << " ignore resources ";
+            }
+            if (ignoreFlags & IDependentTactic::Ignore_CivUnits)
+            {
+                oss << " ignore civ units ";
+            }
+        }
+        else
+        {
+            oss << " none ";
+        }
+        return oss.str();
+    }
+
     IDependentTacticPtr IDependentTactic::factoryRead(FDataStreamBase* pStream)
     {
         IDependentTacticPtr pDependentTactic;
@@ -43,7 +80,11 @@ namespace AltAI
         case CivUnitDependency::ID:
             pDependentTactic = IDependentTacticPtr(new CivUnitDependency());
             break;
+        case ResouceProductionBonusDependency::ID:
+            pDependentTactic = IDependentTacticPtr(new ResouceProductionBonusDependency());
+            break;
         default:
+            FAssertMsg(true, "Unexpected ID in IDependentTactic::factoryRead");
             break;
         }
 
@@ -100,6 +141,7 @@ namespace AltAI
             pBuildingTactic = ICityBuildingTacticPtr(new FreeTechBuildingTactic());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in ICityBuildingTactic::factoryRead");
             break;
         }
 
@@ -112,32 +154,40 @@ namespace AltAI
         switch (depItem.first)
         {
         case ResearchTechDependency::ID:
-            os << gGlobals.getTechInfo((TechTypes)depItem.second).getType();
+            os << "ResearchTechDependency: " << gGlobals.getTechInfo((TechTypes)depItem.second).getType();
             break;
         case CityBuildingDependency::ID:
-            os << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
+            os << "CityBuildingDependency: " << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
             break;
         case CivBuildingDependency::ID:
-            os << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
+            os << "CivBuildingDependency: " << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
             break;
         case ReligiousDependency::ID:
-            os << gGlobals.getReligionInfo((ReligionTypes)depItem.second).getType();
+            os << "ReligiousDependency: " << gGlobals.getReligionInfo((ReligionTypes)depItem.second).getType();
             break;
         case CityBonusDependency::ID:
-            os << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "");
+            os << "CityBonusDependency: " << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "none?");
             break;
         case CivUnitDependency::ID:
-            os << (depItem.second != NO_UNIT ? gGlobals.getUnitInfo((UnitTypes)depItem.second).getType() : "");
+            os << "CivUnitDependency: " << (depItem.second != NO_UNIT ? gGlobals.getUnitInfo((UnitTypes)depItem.second).getType() : "none?");
+            break;
+        case ResouceProductionBonusDependency::ID:
+            os << "ResouceProductionBonusDependency: " << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "none?");
             break;
         case -1:
-            os << "No Dependencies ";
+            os << "No Dependencies";
             break;
         default:
             os << "UNKNOWN Dependency?";
             break;
         }
+        os << ' ';
     }
 
+    // basically - get dependent items for given set of ignore flags
+    // if ignore flags is set to none then dependent items will be added if not required (i.e. known techs, present dependent buildings)
+    // if ignore flags are set - those items will be added instead as if they were required regardless
+    // a special 'no dep' item is returned if all dependencies are required/satisfied (allowing for ignore flags) but none have been explicitly added
     std::vector<DependencyItem> ICityBuildingTactics::getDepItems(int ignoreFlags) const
     {
         std::vector<DependencyItem> depItems;
@@ -148,12 +198,13 @@ namespace AltAI
         }
         bool allDependenciesSatisfied = true;
 
-        const std::vector<IDependentTacticPtr> deps = getDependencies();      
+        const std::vector<IDependentTacticPtr>& deps = getDependencies();      
         for (size_t i = 0, count = deps.size(); i < count; ++i)
         {
+            // e.g. if a dependency such as a religion present in city is not required or relevant ignore flag is set
             if (!deps[i]->required(pCity, ignoreFlags))
             {
-                const std::vector<DependencyItem>& thisDepItems = deps[i]->getDependencyItems();
+                const std::vector<DependencyItem> thisDepItems = deps[i]->getDependencyItems();
                 std::copy(thisDepItems.begin(), thisDepItems.end(), std::back_inserter(depItems));
             }
             else
@@ -162,12 +213,13 @@ namespace AltAI
             }
         }
 
-        const std::vector<ResearchTechDependencyPtr> techDeps = getTechDependencies();
+        const std::vector<ResearchTechDependencyPtr>& techDeps = getTechDependencies();
         for (size_t i = 0, count = techDeps.size(); i < count; ++i)
         {
+            // i.e. if tech is not needed (so we know it) or tech ignore flag is set
             if (!techDeps[i]->required(pCity, ignoreFlags))
             {
-                const std::vector<DependencyItem>& thisDepItems = techDeps[i]->getDependencyItems();
+                const std::vector<DependencyItem> thisDepItems = techDeps[i]->getDependencyItems();
                 std::copy(thisDepItems.begin(), thisDepItems.end(), std::back_inserter(depItems));
             }
             else
@@ -176,8 +228,10 @@ namespace AltAI
             }
         }
 
-        if (allDependenciesSatisfied && depItems.empty())
+        // i.e. for the given ignore flags, all dependencies were satisfied and no dependent items exist for dependencies 
+        if (allDependenciesSatisfied && depItems.empty()) 
         {
+            // add a special 'no dependency' dependency so we can use it as a map key with other tactics
             depItems.push_back(std::make_pair(-1, -1));
         }
 
@@ -197,6 +251,7 @@ namespace AltAI
             pCityBuildingTactics = ICityBuildingTacticsPtr(new CityBuildingTactic());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in ICityBuildingTactics::factoryRead");
             break;
         }
 
@@ -232,6 +287,7 @@ namespace AltAI
             pWorkerBuildTactic = IWorkerBuildTacticPtr(new MilitaryImprovementTactic());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in IWorkerBuildTactic::factoryRead");
             break;
         }
 
@@ -252,6 +308,7 @@ namespace AltAI
             pGlobalBuildingTactics = ILimitedBuildingTacticsPtr(new LimitedBuildingTactic());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in IGlobalBuildingTactics::factoryRead");
             break;
         }
 
@@ -272,6 +329,7 @@ namespace AltAI
             pProcessTactics = IProcessTacticsPtr(new ProcessTactic());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in IProcessTactics::factoryRead");
             break;
         }
 
@@ -319,6 +377,7 @@ namespace AltAI
             pCityUnitTactic = ICityUnitTacticPtr(new ScoutUnitTactic());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in ICityUnitTactic::factoryRead");
             break;
         }
 
@@ -354,6 +413,7 @@ namespace AltAI
             pUnitTactic = IBuiltUnitTacticPtr(new HurryBuildingUnitTactic());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in IBuiltUnitTactic::factoryRead");
             break;
         }
 
@@ -370,8 +430,6 @@ namespace AltAI
 
         switch (ID)
         {
-        default:
-            break;
         case FreeTechTactic::ID:
             pTechTactic = ITechTacticPtr(new FreeTechTactic());
             break;
@@ -386,6 +444,12 @@ namespace AltAI
             break;
         case ProvidesResourceTechTactic::ID:
             pTechTactic = ITechTacticPtr(new ProvidesResourceTechTactic());
+            break;
+        case EconomicTechTactic::ID:
+            pTechTactic = ITechTacticPtr(new EconomicTechTactic());
+            break;
+        default:
+            FAssertMsg(true, "Unexpected ID in ITechTactic::factoryRead");
             break;
         }
 
@@ -403,11 +467,12 @@ namespace AltAI
         switch (ID)
         {
         case -1:
-            return boost::shared_ptr<PlayerTechTactics>();  // Null tactic - valid for tech tactics - some techs have no tactics of type ITechTactic
+            return ITechTacticsPtr();  // Null tactic - valid for tech tactics - some techs have no tactics of type ITechTactic
         case PlayerTechTactics::ID:
             pTechTactics = ITechTacticsPtr(new PlayerTechTactics());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in ITechTactics::factoryRead");
             break;
         
         }
@@ -432,6 +497,7 @@ namespace AltAI
             pCivicTactic = ICivicTacticPtr(new HurryCivicTactic());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in ICivicTactic::factoryRead");
             break;
         }
 
@@ -451,7 +517,14 @@ namespace AltAI
         case EconomicResourceTactic::ID:
             pResourceTactic = IResourceTacticPtr(new EconomicResourceTactic());
             break;
+        case UnitResourceTactic::ID:
+            pResourceTactic = IResourceTacticPtr(new UnitResourceTactic());
+            break;
+        case BuildingResourceTactic::ID:
+            pResourceTactic = IResourceTacticPtr(new BuildingResourceTactic());
+            break;
         default:
+            FAssertMsg(true, "Unexpected ID in IResourceTactic::factoryRead");
             break;
         }
 

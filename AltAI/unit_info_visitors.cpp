@@ -40,15 +40,17 @@ namespace AltAI
     class CouldConstructUnitVisitor : public boost::static_visitor<bool>
     {
     public:
-        CouldConstructUnitVisitor(const Player& player, int lookaheadDepth, bool ignoreRequiredResources)
-            : player_(player), pCity_(NULL), lookaheadDepth_(lookaheadDepth), ignoreRequiredResources_(ignoreRequiredResources)
+        CouldConstructUnitVisitor(const Player& player, int lookaheadDepth, bool ignoreRequiredResources, bool ignoreRequiredBuildings)
+            : player_(player), pCity_(NULL), lookaheadDepth_(lookaheadDepth),
+              ignoreRequiredResources_(ignoreRequiredResources), ignoreRequiredBuildings_(ignoreRequiredBuildings)
         {
             civHelper_ = player.getCivHelper();
             pAnalysis_ = player.getAnalysis();
         }
 
-        CouldConstructUnitVisitor(const Player& player, const CvCity* pCity, int lookaheadDepth, bool ignoreRequiredResources)
-            : player_(player), pCity_(pCity), lookaheadDepth_(lookaheadDepth), ignoreRequiredResources_(ignoreRequiredResources)
+        CouldConstructUnitVisitor(const Player& player, const CvCity* pCity, int lookaheadDepth, bool ignoreRequiredResources, bool ignoreRequiredBuildings)
+            : player_(player), pCity_(pCity), lookaheadDepth_(lookaheadDepth),
+              ignoreRequiredResources_(ignoreRequiredResources), ignoreRequiredBuildings_(ignoreRequiredBuildings)
         {
             civHelper_ = player.getCivHelper();
             pAnalysis_ = player.getAnalysis();
@@ -123,11 +125,6 @@ namespace AltAI
                 return false;
             }
 
-            if (pCity_ && node.domainType == DOMAIN_SEA && !pCity_->isCoastal(gGlobals.getUnitInfo(node.unitType).getMinAreaSize()))
-            {
-                return false;
-            }
-
             for (size_t i = 0, count = node.techTypes.size(); i < count; ++i)
             {
                 // if we don't we have the tech and its depth is deeper than our lookaheadDepth, return false
@@ -155,9 +152,9 @@ namespace AltAI
             }
 
             // todo - add religion and any other checks
-            bool passedAreaCheck = node.minAreaSize < 0;
+            bool passedAreaCheck = node.minAreaSize < 0 && !node.requireAreaBonuses;
             bool passedBonusCheck = ignoreRequiredResources_ || (node.andBonusTypes.empty() && node.orBonusTypes.empty());
-            bool passedBuildingCheck = node.prereqBuildingType == NO_BUILDING;
+            bool passedBuildingCheck = ignoreRequiredBuildings_ || node.prereqBuildingType == NO_BUILDING;
 
             if (!passedBuildingCheck)
             {
@@ -174,26 +171,28 @@ namespace AltAI
             if (pCity_)
             {
                 checkCity_(pCity_, node, passedAreaCheck, passedBonusCheck, passedBuildingCheck);
-                if (passedAreaCheck && passedBonusCheck && passedBuildingCheck)
-                {
-                    return true;
-                }
-                // will never be able to build whatever other cities do
-                if (!passedAreaCheck)
-                {
-                    return false;
-                }
+                return passedAreaCheck && passedBonusCheck && passedBuildingCheck;
             }
-
-            CityIter cityIter(*player_.getCvPlayer());
-            CvCity* pCity;
-
-            while (pCity = cityIter())
+            else
             {
-                checkCity_(pCity, node, passedAreaCheck, passedBonusCheck, passedBuildingCheck);
-            }
+                CityIter cityIter(*player_.getCvPlayer());
+                CvCity* pCity;
 
-            return passedAreaCheck && passedBonusCheck && passedBuildingCheck;
+                while (pCity = cityIter())
+                {
+                    // have to pass all tests in one city - so copy flags to avoid setting some to true in one city and some in another
+                    // which could lead to the wrong answer
+                    bool cityPassedAreaCheck(passedAreaCheck), cityPassedBonusCheck(passedBonusCheck), cityPassedBuildingCheck(passedBuildingCheck);
+                    checkCity_(pCity, node, cityPassedAreaCheck, cityPassedBonusCheck, cityPassedBuildingCheck);
+                    if (cityPassedAreaCheck && cityPassedBonusCheck && cityPassedBuildingCheck)
+                    {
+                        return true;  // found a city we can build the unit
+                    }
+                }
+                // if have no cities yet - still allow tactic to be created if pass required checks - since some are not city dependant
+                // this is useful as it allow creation of some unit tactics based on initial techs, etc... so we can determine city guard units
+                return passedAreaCheck && passedBonusCheck && passedBuildingCheck && player_.getCvPlayer()->getNumCities() == 0;
+            }
         }
 
     private:
@@ -202,11 +201,37 @@ namespace AltAI
         {
             if (!passedAreaCheck)
             {
+                // assume ok, unless find otherwise - we know there is something to check or wouldn't be here
+                passedAreaCheck = true;  
                 if (node.domainType == DOMAIN_SEA)
                 {
-                    if (pCity->isCoastal(node.minAreaSize))
+                    if (node.minAreaSize > 0 && !pCity->isCoastal(node.minAreaSize))
                     {
-                        passedAreaCheck = true;
+                        passedAreaCheck = false;
+                    }
+
+                    if (node.requireAreaBonuses)
+                    {
+                        // by definition, adjacent areas for a land city must be water
+                        std::vector<const CvArea*> adjacentAreas = pCity->plot()->getAdjacentAreas();
+                        bool foundBonuses = false;
+                        for (size_t i = 0, count = adjacentAreas.size(); i < count; ++i)
+                        {
+                            // this is how the original AI works out if a city can build workboats
+                            // arguably this is a cheat, since you could work out that an area has no resources
+                            // by the inability to build a workboat. In practice, the existing AI doesn't exploit
+                            // this information - and nor does AltAI - this code is just filtering builds that 
+                            // would fail from a check to canTrain anyway.
+                            foundBonuses = adjacentAreas[i]->getNumTotalBonuses() > 0;
+                            if (foundBonuses)
+                            {
+                                break;
+                            }
+                        }
+                        if (!foundBonuses)
+                        {
+                            passedAreaCheck = false;
+                        }
                     }
                 }
                 else if (node.domainType == DOMAIN_LAND)
@@ -215,6 +240,7 @@ namespace AltAI
                     {
                         passedAreaCheck = true;
                     }
+                    // don't need to worry about requireAreaBonuses for land workers - since none of them are consumable
                 }
             }
 
@@ -258,19 +284,26 @@ namespace AltAI
         const CvCity* pCity_;
         int lookaheadDepth_;
         bool ignoreRequiredResources_;
+        bool ignoreRequiredBuildings_;
         boost::shared_ptr<CivHelper> civHelper_;
         boost::shared_ptr<PlayerAnalysis> pAnalysis_;
     };
 
-    bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources)
+    bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources, bool ignoreRequiredBuildings)
     {
-        CouldConstructUnitVisitor visitor(player, lookaheadDepth, ignoreRequiredResources);
+        CouldConstructUnitVisitor visitor(player, lookaheadDepth, ignoreRequiredResources, ignoreRequiredBuildings);
         return boost::apply_visitor(visitor, pUnitInfo->getInfo());
     }
 
-    bool couldConstructUnit(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources)
+    bool couldConstructUnit(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources, bool ignoreRequiredBuildings)
     {
-        CouldConstructUnitVisitor visitor(player, city.getCvCity(), lookaheadDepth, ignoreRequiredResources);
+        CouldConstructUnitVisitor visitor(player, city.getCvCity(), lookaheadDepth, ignoreRequiredResources, ignoreRequiredBuildings);
+        return boost::apply_visitor(visitor, pUnitInfo->getInfo());
+    }
+
+    bool couldEverConstructUnit(const Player& player, const City& city, const boost::shared_ptr<UnitInfo>& pUnitInfo, int lookAheadDepth)
+    {
+        CouldConstructUnitVisitor visitor(player, city.getCvCity(), lookAheadDepth, true, true);
         return boost::apply_visitor(visitor, pUnitInfo->getInfo());
     }
 
@@ -648,7 +681,7 @@ namespace AltAI
                     return false;
                 }
 
-                if (!couldConstructUnit(player_, 0, player_.getAnalysis()->getUnitInfo(upgradeUnit), false))
+                if (!couldConstructUnit(player_, 0, player_.getAnalysis()->getUnitInfo(upgradeUnit), false, false))
                 {
                     return false;
                 }

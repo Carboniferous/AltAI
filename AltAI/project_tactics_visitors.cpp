@@ -5,7 +5,6 @@
 #include "./tactic_actions.h"
 #include "./player.h"
 #include "./player_analysis.h"
-#include "./city.h"
 
 
 namespace AltAI

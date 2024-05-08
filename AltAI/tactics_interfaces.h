@@ -71,7 +71,7 @@ namespace AltAI
         enum IgnoreFlags
         {
             Ignore_None = 0, Ignore_Techs = (1 << 0), Ignore_City_Buildings = (1 << 1), Ignore_Civ_Buildings = (1 << 2),
-            Ignore_Religions = (1 << 3), Ignore_Resources = (1 << 4), Ignore_CivUnits = (1 << 5)
+            Ignore_Religions = (1 << 3), Ignore_Resources = (1 << 4), Ignore_CivUnits = (1 << 5), Ignore_Resource_Techs = (1 << 6)
         };
 
         virtual ~IDependentTactic() = 0 {}
@@ -90,7 +90,9 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         static IDependentTacticPtr factoryRead(FDataStreamBase*);
-    };    
+    };
+
+    std::string ignoreFlagToString(int ignoreFlags);
 
     struct IsNotRequired
     {
@@ -179,7 +181,7 @@ namespace AltAI
         
         virtual void debug(std::ostream&) const = 0;
         virtual void apply(const CityUnitTacticsPtr&, TacticSelectionData&) = 0;
-        virtual std::vector<XYCoords> getPossibleTargets(const Player& player, IDInfo city) = 0;
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city) = 0;
 
         // save/load functions
         virtual void write(FDataStreamBase*) const = 0;
@@ -212,13 +214,14 @@ namespace AltAI
         virtual ~ICityBuildingTactics() = 0 {}
 
         virtual IDInfo getCity() const = 0;
+        virtual CityDataPtr getCityData() const = 0;
         virtual void addTactic(const ICityBuildingTacticPtr&) = 0;
         virtual void addDependency(const IDependentTacticPtr&) = 0;
         virtual void addTechDependency(const ResearchTechDependencyPtr&) = 0;
         virtual const std::vector<IDependentTacticPtr>& getDependencies() const = 0;
         virtual const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const = 0;
-        virtual void update(const Player&, const CityDataPtr&) = 0;
-        virtual void updateDependencies(const Player&, const CvCity*) = 0;
+        virtual void update(Player&, const CityDataPtr&) = 0;
+        virtual void updateDependencies(Player&, const CvCity*) = 0;
         virtual bool areDependenciesSatisfied(int) const = 0;
         virtual void apply(TacticSelectionData&) = 0;
         virtual void apply(TacticSelectionDataMap&, int) = 0;
@@ -234,6 +237,7 @@ namespace AltAI
         virtual void write(FDataStreamBase*) const = 0;
         virtual void read(FDataStreamBase*) = 0;
 
+        // given the set of ignore flags, what dependent items do we have left?
         std::vector<DependencyItem> getDepItems(int ignoreFlags) const;
 
         static ICityBuildingTacticsPtr factoryRead(FDataStreamBase*);
@@ -247,9 +251,9 @@ namespace AltAI
     public:
         virtual ~IGlobalBuildingTactics() = 0 {}
         virtual void addDependency(const IDependentTacticPtr&) = 0;
-        virtual void update(const Player&) = 0;
-        virtual void update(const Player&, const CityDataPtr&) = 0;
-        virtual void updateDependencies(const Player&) = 0;
+        virtual void update(Player&) = 0;
+        virtual void update(Player&, const CityDataPtr&) = 0;
+        virtual void updateDependencies(Player&) = 0;
         virtual bool areDependenciesSatisfied(IDInfo, int) const = 0;
         virtual void addCityTactic(IDInfo, const ICityBuildingTacticsPtr&) = 0;
         virtual ICityBuildingTacticsPtr getCityTactics(IDInfo) const = 0;
@@ -361,7 +365,7 @@ namespace AltAI
         virtual ~ICivicTactic() = 0 {}
 
         virtual void debug(std::ostream&) const = 0;
-        virtual void update(const CivicTacticsPtr&, const Player&) = 0;
+        virtual void update(const CivicTacticsPtr&, Player&) = 0;
         virtual void apply(const CivicTacticsPtr&, TacticSelectionData&) = 0;
 
         virtual void write(FDataStreamBase*) const = 0;
@@ -383,8 +387,8 @@ namespace AltAI
 
         virtual void debug(std::ostream& os) const = 0;
 
-        virtual void update(const ResourceTacticsPtr&, const Player&) = 0;
-        virtual void update(const ResourceTacticsPtr&, const City&) = 0;
+        virtual void update(const ResourceTacticsPtr&, Player&) = 0;
+        virtual void update(const ResourceTacticsPtr&, City&) = 0;
         virtual void apply(const ResourceTacticsPtr&, TacticSelectionData&) = 0;
 
         virtual void write(FDataStreamBase*) const = 0;

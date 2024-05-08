@@ -33,8 +33,6 @@
 // AltAI
 #include "game.h"
 #include "player.h"
-#include "city.h"
-
 
 // Public Functions...
 
@@ -6585,6 +6583,7 @@ void CvGame::updateMoves()
 					{
 						if (!(player.hasBusyUnit()) && !(player.hasReadyUnit(true)))
 						{
+                            // not human, no busy units and no units ready to move
 							player.setAutoMoves(true);
 						}
 					}
@@ -6594,11 +6593,13 @@ void CvGame::updateMoves()
 				{
 					for(pLoopSelectionGroup = player.firstSelectionGroup(&iLoop); pLoopSelectionGroup; pLoopSelectionGroup = player.nextSelectionGroup(&iLoop))
 					{
+                        // executes mission set for this group
 						pLoopSelectionGroup->autoMission();
 					}
 
 					if (!(player.hasBusyUnit()))
 					{
+                        // turn off this flag if no further busy units (those fighting or with mission timer greater than zero)
 						player.setAutoMoves(false);
 					}
 				}

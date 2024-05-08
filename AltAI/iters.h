@@ -524,7 +524,7 @@ namespace AltAI
     {
         explicit UnitGroupIter(const CvSelectionGroup* pGroup_) : pGroup(pGroup_), pNode(NULL) {}
 
-        const CvUnit* operator() ()
+        CvUnit* operator() ()
         {
             pNode ? pNode = pGroup->nextUnitNode(pNode) : pNode = pGroup->headUnitNode();
             return pNode ? getUnit(pNode->m_data) : NULL;

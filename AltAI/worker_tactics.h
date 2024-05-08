@@ -22,12 +22,23 @@ namespace AltAI
         void updateCityBonusCount(const CvCity* pCity, BonusTypes bonusType, int delta);
         //void pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pEvent);
         void updatePlotRevealed(const CvPlot* pPlot);
+
+        std::vector<Unit::WorkerMission> getWorkerMissions(CvUnitAI* pUnit) const;
+        std::multimap<int, const CvPlot*> getUnitBonusValuePlotMap() const;
+        std::set<IDInfo> getUnitsToEscort() const;
+        void setEscort(const IDInfo& escortUnit);
+
         void logMissions(std::ostream& os) const;
+
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
 
     private:
         boost::shared_ptr<WorkerAnalysisImpl> pImpl_;
     };
 
+    UnitMissionPtr workerMissionFactoryHelper();
+
     void updateWorkerAnalysis(Player& player);
-    bool doWorkerAnalysis(Player& player, CvUnitAI* pUnit);
+    bool doWorkerMove(Player& player, CvUnitAI* pUnit);
 }

@@ -5,6 +5,8 @@
 
 namespace AltAI
 {
+    class Player;
+
     struct DotMapItem
     {
         struct DotMapPlotData
@@ -26,14 +28,16 @@ namespace AltAI
             BonusTypes bonusType;
             FeatureTypes featureType;
             std::vector<std::pair<PlotYield, ImprovementTypes> > possibleImprovements;
-            PlotYield currentYield;
+            PlotYield currentYield, conditionalYield;
             bool isPinned, isSelected, improvementMakesBonusValid;
             bool operator < (const DotMapPlotData& other) const { return coords < other.coords; }
             PlotYield getPlotYield() const { return workedImprovement == -1 ? currentYield : possibleImprovements[workedImprovement].first; }
+            PlotYield getProjectedPlotYield(const Player& player, const int timeHorizon) const;
 
             PlotYield getPlotYield(int index) const { return (index == -1 || possibleImprovements.empty()) ? currentYield : possibleImprovements[index].first; }
             ImprovementTypes getWorkedImprovement() const { return workedImprovement == -1 ? NO_IMPROVEMENT : possibleImprovements[workedImprovement].second; }
             ImprovementTypes getWorkedImprovement(int index) const { return index == -1 ? NO_IMPROVEMENT : possibleImprovements[index].second; }
+            bool setWorkedImpIndex(ImprovementTypes currentImp);
 
             void debug(std::ostream& os) const;
         };
@@ -51,15 +55,25 @@ namespace AltAI
             P pred;
         };
 
+        typedef std::multiset<DotMapPlotData, PlotDataAdaptor<MixedOutputOrderFunctor<PlotYield> > > SortedPlots;
+
         XYCoords coords;
-        PlotYield cityPlotYield;
+        PlotYield cityPlotYield, conditionalYield;
+        bool isFreshWater;
         std::set<BonusTypes> bonusTypes;
         int numDeadLockedBonuses;
+        std::vector<std::pair<BuildingTypes, PlotYield> > requiredAdditionalYieldBuildings;
         int areaID, subAreaID;
+        SortedPlots selectedPlots;
+        PlotYield projectedYield;
+        int projectedTurns;
+
         typedef std::set<DotMapPlotData> PlotDataSet;
+        PlotDataSet plotDataSet;
+
         typedef PlotDataSet::const_iterator PlotDataConstIter;
         typedef PlotDataSet::iterator PlotDataIter;
-        typedef PlotDataSet::reverse_iterator PlotDataRIter;
+        typedef PlotDataSet::reverse_iterator PlotDataRIter;       
 
         struct SelectedImprovement
         {
@@ -89,7 +103,7 @@ namespace AltAI
         {
             std::list<SelectedImprovement> bestImprovements;
 
-            for (PlotDataConstIter plotIter(plotData.begin()), endIter(plotData.end()); plotIter != endIter; ++plotIter)
+            for (PlotDataConstIter plotIter(plotDataSet.begin()), endIter(plotDataSet.end()); plotIter != endIter; ++plotIter)
             {
                 int bestImprovementIndex = plotIter->workedImprovement;
                 PlotYield bestYield = plotIter->getPlotYield();
@@ -126,16 +140,27 @@ namespace AltAI
             return bestImprovements;
         }
 
-        PlotDataSet plotData;
-
-        DotMapItem(XYCoords coords_, PlotYield cityPlotYield_);
+        DotMapItem(XYCoords coords_, PlotYield cityPlotYield_, bool isFreshWater_ = false, BonusTypes bonusType = NO_BONUS);
         bool operator < (const DotMapItem& other) const { return coords < other.coords; }
-        PlotYield getWeightedOutput(PlayerTypes playerType) const;
-        std::pair<PlotYield, int> getOutput(PlayerTypes playerType) const;
-        PlotYield getActualOutput() const;
-        PlotYield getOutput(PlayerTypes playerType, YieldWeights yieldWeights) const;
+        void calcOutput(const Player& player, int lookAheadTurns, int baseHealthyPop, bool debug = false);
+
+        int getFoundValue(const Player& player) const;
+        std::pair<PlotYield, int> getOutput() const;
         PlotYield getOutput(XYCoords coords, int improvementIndex) const;
+        std::vector<BonusTypes> getNewBonuses(const std::set<BonusTypes>& existingBonuses) const;
+        int getBaseFeatureHealth() const;
+
         DotMapPlotData getPlotData(XYCoords coords) const;
-        void debugOutputs(std::ostream& os) const;
+        std::vector<int> getGrowthRates(const CvPlayer& player, size_t maxPop, int baseHealthyPop, int cultureLevel);
+        void debugOutputs(const Player& player, std::ostream& os) const;
+
+        struct BuildTimesData
+        {
+            std::vector<int> impBuildTimes, impOutputs, foodOutputs;
+            std::vector<size_t> impIndices;
+        };
+
+        void getBuildTimesData(BuildTimesData& impBuildData, PlayerTypes playerType, int cultureLevel, int baseHealthyPop);
+        PlotYield getUsablePlots(const Player& player, SortedPlots& sortedPlots, int baseHealthyPop, int lookAheadTurns, bool debug = false);
     };
 }

@@ -13,9 +13,9 @@
 #include "./building_info_visitors.h"
 #include "./unit_info_visitors.h"
 #include "./resource_info_visitors.h"
+#include "./resource_tactics.h"
 #include "./trade_route_helper.h"
 #include "./tech_info_visitors.h"
-#include "./tech_info_streams.h"
 #include "./game.h"
 #include "./player.h"
 #include "./city.h"
@@ -41,6 +41,29 @@ namespace AltAI
             {
                 pMapAnalysis = player.getAnalysis()->getMapAnalysis();
                 civHelper = player.getCivHelper();
+                currentOutputProjection = player.getCurrentProjectedOutput();
+
+                possiblyIsolated = false;
+                // todo - consider teams instead of players?
+                int numKnownCivs = playerTactics.player.getNumKnownPlayers();
+                if (numKnownCivs == 0)
+                {
+                    possiblyIsolated = true;
+                    boost::shared_ptr<MapAnalysis> pMapAnalysis = playerTactics.player.getAnalysis()->getMapAnalysis();
+                    std::map<int /* sub area id */, std::vector<IDInfo> > subAreaCityMap = pMapAnalysis->getSubAreaCityMap();
+                    for (std::map<int, std::vector<IDInfo> >::const_iterator ci(subAreaCityMap.begin()), ciEnd(subAreaCityMap.end()); ci != ciEnd; ++ci)
+                    {
+                        // still got more exploring to do?
+                        if (!pMapAnalysis->isSubAreaComplete(ci->first))
+                        {
+                            possiblyIsolated = false;
+                            break;
+                        }
+                    }
+                }
+
+                warPlanCount = CvTeamAI::getTeam(player.getTeamID()).getAnyWarPlanCount(true);
+                atWarCount = CvTeamAI::getTeam(player.getTeamID()).getAtWarCount(true);
             }
 
             void sanityCheckTechs()
@@ -62,7 +85,7 @@ namespace AltAI
 
                             const int rate = player.getCvPlayer()->calculateResearchRate(techType);
 
-                            const int approxTurns = 1 + totalTechCost / rate;
+                            const int approxTurns = 1 + totalTechCost / (rate == 0 ? 1 : rate);
 
                             techCostsMap[techType] = approxTurns;
 
@@ -99,6 +122,7 @@ namespace AltAI
                         civLog << "\nErasing tech selection: ";
                         for (DependencyItemSet::const_iterator di(ci->first.begin()), diEnd(ci->first.end()); di != diEnd; ++di)
                         {
+                            if (di != ci->first.begin()) civLog << "+";
                             debugDepItem(*di, civLog);                            
                         }
 #endif
@@ -114,14 +138,27 @@ namespace AltAI
 
             int getBaseTechScore(TechTypes techType, const TacticSelectionData& selectionData) const
             {
+                TotalOutputValueFunctor valueF(makeOutputW(1, 1, 1, 1, 1, 1));
                 int score = 0;
 
-                if (selectionData.getFreeTech)
+                if (selectionData.possibleFreeTech != NO_TECH)
                 {
+                    const int techCost = calculateTechResearchCost(selectionData.possibleFreeTech, player.getPlayerID());
 #ifdef ALTAI_DEBUG
-                    civLog << "\nChecking free tech data for tech: " << gGlobals.getTechInfo(techType).getType();
+                    const int rate = player.getCvPlayer()->calculateResearchRate(techType);
+                    civLog << "\nChecking free tech data for tech: " << gGlobals.getTechInfo(selectionData.possibleFreeTech).getType()
+                        << " research rate for tech: " << rate << " cost = " << techCost << " approx turns = " << (1 + techCost / (rate == 0 ? 1 : rate));
 #endif
-                    score += selectionData.freeTechValue;
+                    score += techCost;
+                }
+
+                if (!isEmpty(selectionData.baselineDelta))
+                {
+                    score += valueF(selectionData.baselineDelta);
+#ifdef ALTAI_DEBUG
+                    civLog << "\n baseline delta for tech: " << selectionData.baselineDelta << " score = " << valueF(selectionData.baselineDelta)
+                        << " % of current output = " << asPercentageOf(selectionData.baselineDelta, currentOutputProjection);
+#endif
                 }
 
                 return score;
@@ -142,25 +179,18 @@ namespace AltAI
 
             int getUnitValue(TechTypes techType, const TacticSelectionData& selectionData) const
             {
-                int value = 0;
-                for (std::set<UnitTacticValue>::const_iterator ci(selectionData.cityAttackUnits.begin()), ciEnd(selectionData.cityAttackUnits.end()); ci != ciEnd; ++ci)
-                {
-                    value += ci->unitAnalysisValue;
-                }
-                for (std::set<UnitTacticValue>::const_iterator ci(selectionData.cityDefenceUnits.begin()), ciEnd(selectionData.cityDefenceUnits.end()); ci != ciEnd; ++ci)
-                {
-                    value += ci->unitAnalysisValue;
-                }
-                for (std::set<UnitTacticValue>::const_iterator ci(selectionData.collateralUnits.begin()), ciEnd(selectionData.collateralUnits.end()); ci != ciEnd; ++ci)
-                {
-                    value += ci->unitAnalysisValue;
-                }
+                int value = TacticSelectionData::getUnitTacticValue(selectionData.cityAttackUnits) +
+                    TacticSelectionData::getUnitTacticValue(selectionData.cityDefenceUnits) +
+                    TacticSelectionData::getUnitTacticValue(selectionData.collateralUnits);
 
-                if (CvTeamAI::getTeam(player.getTeamID()).getAtWarCount(true) == 0 &&
-                    CvTeamAI::getTeam(player.getTeamID()).getAnyWarPlanCount(true) == 0)
+                if (atWarCount == 0 && warPlanCount == 0)
                 {
                     value /= 3;
                 }
+
+                // ignore question of war for now - want to also value escorts for expansion if isolated as well as cargo ships
+                const int seaMultiplier = (possiblyIsolated ? 4 : 1);
+                value += TacticSelectionData::getUnitTacticValue(selectionData.seaCombatUnits) * seaMultiplier;
 
                 return value;
             }
@@ -178,10 +208,11 @@ namespace AltAI
                     return 0;
                 }
 
+                const int freeCityCulture = player.getCvPlayer()->getFreeCityCommerce(COMMERCE_CULTURE);
                 int bestIndex = -1, bestValue = 0;
                 for (size_t i = 0, count = selectionData.cultureSources.size(); i < count; ++i)
                 {
-                    int thisValue = (selectionData.cultureSources[i].globalValue * 20 * 100) / selectionData.cultureSources[i].cityCost;
+                    int thisValue = (std::max<int>(0, selectionData.cultureSources[i].globalValue - freeCityCulture) * 20 * 100) / selectionData.cultureSources[i].cityCost;
                     if (thisValue > bestValue)
                     {
                         bestValue = thisValue;
@@ -196,7 +227,7 @@ namespace AltAI
 
                 PlotYield delta;
                 DotMapItem targetDotMap = player.getSettlerManager()->getPlotDotMap(bestTargetPlot);
-                const DotMapItem::PlotDataSet& plotDataSet = targetDotMap.plotData;
+                const DotMapItem::PlotDataSet& plotDataSet = targetDotMap.plotDataSet;
                 for (DotMapItem::PlotDataSet::const_iterator ci(plotDataSet.begin()), ciEnd(plotDataSet.end()); ci != ciEnd; ++ci)
                 {
                     if (stepDistance(targetDotMap.coords.iX, targetDotMap.coords.iY, ci->coords.iX, ci->coords.iY) > 1)
@@ -210,7 +241,7 @@ namespace AltAI
                 return bestValue * YieldValueFunctor(makeYieldW(1, 1, 1))(delta);
             }
 
-            int getConnectableResourceValue(TechTypes techType, const TacticSelectionData& selectionData) const
+            int getConnectableResourceValue(TechTypes techType, TacticSelectionData& selectionData)
             {
                 if (selectionData.connectableResources.empty())
                 {
@@ -219,18 +250,28 @@ namespace AltAI
 
                 int score = 0;
 
+                boost::shared_ptr<PlayerTactics> pPlayerTactics = player.getAnalysis()->getPlayerTactics();
                 std::map<BonusTypes, std::vector<UnitTypes> > unitBonusMap;
 
 #ifdef ALTAI_DEBUG
                 std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
                 os << "\ngetConnectableResourceValue() for tech: " << gGlobals.getTechInfo(techType).getType();
+                for (std::map<BonusTypes, std::vector<XYCoords> >::const_iterator ci(selectionData.connectableResources.begin()), 
+                    ciEnd(selectionData.connectableResources.end()); ci != ciEnd; ++ci)
+                {
+                    os << " resource: " << gGlobals.getBonusInfo(ci->first).getType() << " at: ";
+                    for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+                    {
+                        os << ci->second[i] << " ";
+                    }
+                }
 #endif
 
-                for (PlayerTactics::UnitTacticsMap::const_iterator iter(player.getAnalysis()->getPlayerTactics()->unitTacticsMap_.begin()),
+                for (PlayerTactics::UnitTacticsMap::const_iterator iter(pPlayerTactics->unitTacticsMap_.begin()),
                     endIter(player.getAnalysis()->getPlayerTactics()->unitTacticsMap_.end()); iter != endIter; ++iter)
                 {
                     const CvCity* pCapitalCity = player.getCvPlayer()->getCapitalCity();
-                    if (pCapitalCity)  // barbs have no capital; probably don't care about them researching road building too much
+                    if (pCapitalCity)  // barbs have no capital (and nor do we on first turn); probably don't care about them researching road building too much
                     {
                         CityUnitTacticsPtr pCityTactics = iter->second->getCityTactics(pCapitalCity->getIDInfo());
                         if (pCityTactics)
@@ -244,9 +285,9 @@ namespace AltAI
                                     if (thisDepItems[j].first == CityBonusDependency::ID)
                                     {
                                         unitBonusMap[(BonusTypes)thisDepItems[j].second].push_back(iter->first);
-    #ifdef ALTAI_DEBUG
+#ifdef ALTAI_DEBUG
                                         os << "\n\tadded dep item: " << gGlobals.getBonusInfo((BonusTypes)thisDepItems[j].second).getType();
-    #endif
+#endif
                                     }
                                 }
                             }
@@ -254,19 +295,109 @@ namespace AltAI
                     }
                 }
 
+                const TacticSelectionData& baseSelectionData = playerTactics.getBaseTacticSelectionData();
+
                 for (std::map<BonusTypes, std::vector<XYCoords> >::const_iterator ci(selectionData.connectableResources.begin()), 
                     ciEnd(selectionData.connectableResources.end()); ci != ciEnd; ++ci)
                 {
+                    std::map<BonusTypes, std::pair<TotalOutput, TotalOutput> >::const_iterator potentialResourceOutputIter = baseSelectionData.potentialResourceOutputDeltas.find(ci->first);
+                    if (potentialResourceOutputIter != baseSelectionData.potentialResourceOutputDeltas.end())
+                    {
+                        if (!isEmpty(potentialResourceOutputIter->second.first))
+                        {
+                            TotalOutputValueFunctor valueF(makeOutputW(1, 1, 1, 1, 1, 1));                        
+                            score += valueF(potentialResourceOutputIter->second.first);
+#ifdef ALTAI_DEBUG
+                            os << "\n\t" << gGlobals.getBonusInfo(ci->first).getType() << " added connectable resource value: " << valueF(potentialResourceOutputIter->second.first);
+#endif
+                        }
+                        else
+                        {
+#ifdef ALTAI_DEBUG
+                            os << "\n\t no impact for connection of resource: " << gGlobals.getBonusInfo(ci->first).getType();
+#endif
+                        }
+                    }
+                    else
+                    {
+#ifdef ALTAI_DEBUG
+                        os << "\n\t resource not found in potentialResourceOutputDeltas: " << gGlobals.getBonusInfo(ci->first).getType();
+#endif
+                    }
+
                     std::map<BonusTypes, std::vector<UnitTypes> >::const_iterator unitsIter = unitBonusMap.find(ci->first);
                     if (unitsIter != unitBonusMap.end())
                     {
                         for (size_t unitIndex = 0, unitCount = unitsIter->second.size(); unitIndex < unitCount; ++unitIndex)
                         {
-                            score += player.getAnalysis()->getUnitAnalysis()->getCurrentUnitValue(unitsIter->second[unitIndex]);
+                            score += getUnitValue(NO_TECH, baseSelectionData);
 #ifdef ALTAI_DEBUG
-                            os << "\n\tadded unit value: " << gGlobals.getUnitInfo(unitsIter->second[unitIndex]).getType() << " = "
-                                << player.getAnalysis()->getUnitAnalysis()->getCurrentUnitValue(unitsIter->second[unitIndex]);
+                            os << "\n\t unit value from base selection date: " << getUnitValue(NO_TECH, baseSelectionData);
+                            //os << "\n\tadded unit value: " << gGlobals.getUnitInfo(unitsIter->second[unitIndex]).getType() << " = "
+                            //    << player.getAnalysis()->getUnitAnalysis()->getCurrentUnitValue(unitsIter->second[unitIndex]);
 #endif                            
+                        }
+                    }
+                }
+
+                for (TacticSelectionDataMap::iterator tacticMapIter(tacticSelectionDataMap.begin()), tacticMapEndIter(tacticSelectionDataMap.end()); tacticMapIter != tacticMapEndIter; ++tacticMapIter)
+                {
+                    for (DependencyItemSet::const_iterator depIter(tacticMapIter->first.begin()), depEndIter(tacticMapIter->first.end()); depIter != depEndIter; ++depIter)
+                    {
+                        if (depIter->first == ResouceProductionBonusDependency::ID)
+                        {
+                            std::map<BonusTypes, std::vector<XYCoords> >::const_iterator crIter = selectionData.connectableResources.find((BonusTypes)depIter->second);
+                            if (crIter != selectionData.connectableResources.end())
+                            {
+#ifdef ALTAI_DEBUG
+                                os << "\n\t found building tactic with usable resource acceleration dependency: " << gGlobals.getBonusInfo((BonusTypes)depIter->second).getType();
+                                tacticMapIter->second.debug(os);
+                                os << "\n";
+#endif
+                                for (std::set<EconomicBuildingValue>::const_iterator ebIter(tacticMapIter->second.economicBuildings.begin()), ebEndIter(tacticMapIter->second.economicBuildings.end());
+                                    ebIter != ebEndIter; ++ebIter)
+                                {
+                                    BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(ebIter->buildingType).getBuildingClassType();
+                                    if (isWorldWonderClass(buildingClassType))
+                                    {
+                                        PlayerTactics::LimitedBuildingsTacticsMap::iterator pBuildingTacticIter = pPlayerTactics->globalBuildingsTacticsMap_.find(ebIter->buildingType);
+                                        if (pBuildingTacticIter != pPlayerTactics->globalBuildingsTacticsMap_.end())
+                                        {
+                                            CityDataPtr pCopyCityData = player.getCity(ebIter->city.iID).getCityData()->clone();
+                                            ICityBuildingTacticsPtr pCityBuildingTactics = pBuildingTacticIter->second->getCityTactics(ebIter->city);
+                                            std::vector<IDependentTacticPtr> pCityDeps =  pCityBuildingTactics->getDependencies();
+                                            for (size_t depIndex = 0, depCount = pCityDeps.size(); depIndex < depCount; ++depIndex)
+                                            {
+                                                pCityDeps[depIndex]->apply(pCopyCityData);
+                                            }
+
+                                            std::vector<DependencyItem> newDepItems = pCityBuildingTactics->getDepItems(IDependentTactic::Ignore_Techs);
+                                            DependencyItemSet newDepSet(newDepItems.begin(), newDepItems.end());
+
+                                            pCityBuildingTactics->update(player, pCopyCityData);
+                                            TacticSelectionDataMap tacticSelectionDataMap;
+                                            pCityBuildingTactics->apply(tacticSelectionDataMap, IDependentTactic::Ignore_Techs);
+
+                                            for (size_t depIndex = 0, depCount = pCityDeps.size(); depIndex < depCount; ++depIndex)
+                                            {
+                                                pCityDeps[depIndex]->remove(pCopyCityData);
+                                            }
+#ifdef ALTAI_DEBUG
+                                            os << " diff with resource for city: " << narrow(player.getCity(ebIter->city.iID).getCvCity()->getName()) << " orig: ";
+                                            tacticMapIter->second.debug(os);
+                                            os << " after: ";
+                                            tacticSelectionDataMap[newDepSet].debug(os);
+#endif
+                                        }
+                                    }
+                                    else if (isNationalWonderClass(buildingClassType))
+                                    {
+                                    }
+                                    else
+                                    {
+                                    }
+                                }                                
+                            }
                         }
                     }
                 }
@@ -276,7 +407,7 @@ namespace AltAI
 
             void calcBaseCityBuildItems(const TacticSelectionData& baseSelectionData, TotalOutput currentOutput)
             {
-                const int turnsAvailable = 30;
+                const int turnsAvailable = player.getAnalysis()->getNumSimTurns();
                 TotalOutputValueFunctor valueF(makeOutputW(1, 1, 1, 1, 1, 1));
                 const int currentOutputValue = valueF(currentOutput) * turnsAvailable / 100;  // ~1% output threshold
 
@@ -286,9 +417,10 @@ namespace AltAI
                 outputTypes.push_back(OUTPUT_RESEARCH);
                 outputTypes.push_back(OUTPUT_GOLD);
 
-                for (std::multiset<EconomicBuildingValue>::const_iterator baseIter(baseSelectionData.economicBuildings.begin()), baseEndIter(baseSelectionData.economicBuildings.end()); baseIter != baseEndIter; ++baseIter)
+                for (std::set<EconomicBuildingValue>::const_iterator baseIter(baseSelectionData.economicBuildings.begin()), baseEndIter(baseSelectionData.economicBuildings.end()); baseIter != baseEndIter; ++baseIter)
                 {
-                    if (economicBuildsData.usedCityTurns[baseIter->city] <= turnsAvailable && TacticSelectionData::isSignificantTacticItem(*baseIter, currentOutput, outputTypes))
+                    if (economicBuildsData.usedCityTurns[baseIter->city] <= turnsAvailable && 
+                        TacticSelectionData::isSignificantTacticItem(*baseIter, currentOutput, turnsAvailable, outputTypes))
                     {
                         economicBuildsData.cityBuildItemsMap[baseIter->city].push_back(&*baseIter);
                         economicBuildsData.usedCityTurns[baseIter->city] += baseIter->nTurns;
@@ -306,9 +438,9 @@ namespace AltAI
                 }
             }
 
-            void compareTacticToBase(const TacticSelectionData& selectionData, TotalOutput currentOutput)
+            std::list<const EconomicBuildingValue*> compareTacticToBase(const TacticSelectionData& selectionData, TotalOutput currentOutput)
             {
-                const int turnsAvailable = 30;
+                const int turnsAvailable = player.getAnalysis()->getNumSimTurns();
                 TotalOutputValueFunctor valueF(makeOutputW(1, 1, 1, 1, 1, 1));
                 const int currentOutputValue = valueF(currentOutput) * turnsAvailable / 100;  // ~1% output threshold
 
@@ -322,11 +454,13 @@ namespace AltAI
                 std::map<IDInfo, std::list<const EconomicBuildingValue*> > cityBuildItemsMapForTech(economicBuildsData.cityBuildItemsMap);
 
                 std::list<const EconomicBuildingValue*> selectedTacticItems;
-                for (std::multiset<EconomicBuildingValue>::const_iterator iter(selectionData.economicBuildings.begin()), endIter(selectionData.economicBuildings.end()); iter != endIter; ++iter)
+                // iterate over tech tactic economic buildings
+                for (std::set<EconomicBuildingValue>::const_iterator iter(selectionData.economicBuildings.begin()), endIter(selectionData.economicBuildings.end()); iter != endIter; ++iter)
                 {
                     std::map<IDInfo, std::list<const EconomicBuildingValue*> >::iterator currentBuildsIter(cityBuildItemsMapForTech.find(iter->city));
                     if (currentBuildsIter != cityBuildItemsMapForTech.end())
                     {
+                        // check tech selected build v. base tactic set of builds
                         for (std::list<const EconomicBuildingValue*>::iterator li(currentBuildsIter->second.begin()), liEnd(currentBuildsIter->second.end()); li != liEnd; ++li)
                         {
                             if (valueF(iter->output) > valueF((*li)->output))  // better building from tech...
@@ -345,7 +479,7 @@ namespace AltAI
                             }
                         }
                     }
-                    else if (TacticSelectionData::isSignificantTacticItem(*iter, currentOutput, outputTypes))
+                    else if (TacticSelectionData::isSignificantTacticItem(*iter, currentOutput, turnsAvailable, outputTypes))
                     {
                         cityBuildItemsMapForTech[iter->city].push_back(&*iter);
                         usedCityTurns[iter->city] += iter->nTurns;
@@ -369,6 +503,8 @@ namespace AltAI
                     }
                 }
                 civLog << "\n";
+
+                return selectedTacticItems;
             }
 
             void scoreTechs()
@@ -376,57 +512,57 @@ namespace AltAI
                 int bestTechScore = 0;
                 TotalOutputValueFunctor valueF(makeOutputW(1, 1, 1, 1, 1, 1)), processValueF(makeOutputW(0, 0, 4, 3, 2, 1));
 
-                TotalOutput currentOutput;
-                CityIter cityIter(*player.getCvPlayer());
-                while (CvCity* pCity = cityIter())
-                {
-                    const City& city = player.getCity(pCity);
-                    currentOutput += city.getCityData()->getOutput();  // use this output fn as this is what is stored in the ProjectionLadders
-                }
+                TotalOutput currentOutput = player.getCurrentOutput();
+                int baseAttackUnitScore = 0, baseDefenceUnitScore = 0, baseCollateralUnitScore = 0;
+                const int turnsAvailable = player.getAnalysis()->getNumSimTurns();
 
                 civLog << "\nCiv base output = " << currentOutput;
 
+                int maxResearchRate = player.getMaxResearchPercent();  // % max rate
+
                 DependencyItemSet noDep;
                 noDep.insert(DependencyItem(-1, -1));
+                // todo - check if this is correct in case of other non-tech deps
                 TacticSelectionDataMap::const_iterator noDepIter = tacticSelectionDataMap.find(noDep);
                 if (noDepIter != tacticSelectionDataMap.end())
                 {
                     calcBaseCityBuildItems(noDepIter->second, currentOutput);
+                    baseAttackUnitScore = getBestUnitValue(noDepIter->second.cityAttackUnits);
+                    baseDefenceUnitScore = getBestUnitValue(noDepIter->second.cityDefenceUnits);
+                    baseCollateralUnitScore = getBestUnitValue(noDepIter->second.collateralUnits);
                 }
 
-                for (TacticSelectionDataMap::const_iterator ci(tacticSelectionDataMap.begin()), ciEnd(tacticSelectionDataMap.end());
+                civLog << " current best attack unit score = " << baseAttackUnitScore << ", current best defence unit score = " << baseDefenceUnitScore
+                                << ", current best collateral unit score = " << baseCollateralUnitScore;
+
+                for (TacticSelectionDataMap::iterator ci(tacticSelectionDataMap.begin()), ciEnd(tacticSelectionDataMap.end());
                     ci != ciEnd; ++ci)
                 {
                     for (DependencyItemSet::const_iterator di(ci->first.begin()), diEnd(ci->first.end()); di != diEnd; ++di)
                     {
-                        if (di->first == -1)
-                        {
-                            // no dep ref data...
-                            int bestAttackUnitScore = getBestUnitValue(ci->second.cityAttackUnits);
-                            int bestDefenceUnitScore = getBestUnitValue(ci->second.cityDefenceUnits);
-                            int bestCollateralUnitScore = getBestUnitValue(ci->second.collateralUnits);
-
-                            civLog << " current best attack unit score = " << bestAttackUnitScore << ", current best defence unit score = " << bestDefenceUnitScore
-                                << ", current best collateral unit score = " << bestCollateralUnitScore;
-                            //getSignificantTactics(ci->second, currentOutput);
-                        }
-                        else if (di->first == ResearchTechDependency::ID)
+                        if (di->first == ResearchTechDependency::ID)  // skip no dependency ('base' items)
                         {
                             TechTypes thisTechType = (TechTypes)di->second;
                             civLog << "\nTech score for: " << gGlobals.getTechInfo(thisTechType).getType();
                             //getSignificantTactics(ci->second, currentOutput);
-                            compareTacticToBase(ci->second, currentOutput);
+                            std::list<const EconomicBuildingValue*> selectedItems = compareTacticToBase(ci->second, currentOutput);
 
-                            if (ci->second.getFreeTech)
+                            if (ci->second.possibleFreeTech != NO_TECH)
                             {
                                 freeTechTechs.push_back((TechTypes)di->second);
                             }
                             int baseTechScore = getBaseTechScore((TechTypes)di->second, ci->second);
 
-                            civLog << " base tech score = " << baseTechScore;
+                            if (baseTechScore != 0)
+                            {
+                                civLog << " base tech score = " << baseTechScore;
+                            }
 
                             int workerScore = valueF(ci->second.cityImprovementsDelta);
-                            civLog << " cityImprovementsDelta = " << ci->second.cityImprovementsDelta;
+                            if (workerScore != 0)
+                            {
+                                civLog << " cityImprovementsDelta = " << ci->second.cityImprovementsDelta << ", score = " << workerScore;
+                            }
 
                             int bonusScore = getConnectableResourceValue(thisTechType, ci->second);
 
@@ -442,32 +578,160 @@ namespace AltAI
 
                             int buildingScore = 0;
 
-                            for (std::multiset<EconomicBuildingValue>::const_iterator vi(ci->second.economicBuildings.begin()),
+                            /*for (std::set<EconomicBuildingValue>::const_iterator vi(ci->second.economicBuildings.begin()),
                                 viEnd(ci->second.economicBuildings.end()); vi != viEnd; ++vi)
                             {
                                 buildingScore += valueF(vi->output);
+                            }*/
+                            for (std::list<const EconomicBuildingValue*>::const_iterator selectedEconomicBuildingsIter(selectedItems.begin()),
+                                selectedEconomicBuildingsEndIter(selectedItems.end()); selectedEconomicBuildingsIter != selectedEconomicBuildingsEndIter; ++selectedEconomicBuildingsIter)
+                            {
+                                buildingScore += valueF((*selectedEconomicBuildingsIter)->output);
                             }
 
-                            civLog << " building score = " << buildingScore << " worker score = " << workerScore << " bonus score = " << bonusScore
-                                << " resource score = " << resourceScore << " expansion score = " << expansionScore << " unit score = " << unitScore
-                                << ", best attack unit score = " << bestAttackUnitScore << ", best defence unit score = " << bestDefenceUnitScore
-                                << ", best collateral unit score = " << bestCollateralUnitScore;
+                            for (std::set<MilitaryBuildingValue>::const_iterator mi(ci->second.militaryBuildings.begin()),
+                                miEnd(ci->second.militaryBuildings.end()); mi != miEnd; ++mi)
+                            {
+                                civLog << "\n\t mil building: " << gGlobals.getBuildingInfo(mi->buildingType).getType() << ' ';
+                                std::list<std::pair<UnitTypes, int> > unitValueDiffs = TacticSelectionData::getUnitValueDiffs(mi->cityAttackUnits, noDepIter->second.cityAttackUnits);
+
+                                for (std::list<std::pair<UnitTypes, int> >::const_iterator di(unitValueDiffs.begin()), diEnd(unitValueDiffs.end()); di != diEnd; ++di)
+                                {
+                                    civLog << " unit: " << gGlobals.getUnitInfo(di->first).getType() << " %city attack value %inc = " << di->second;
+                                }
+
+                                unitValueDiffs.clear();
+                                unitValueDiffs = TacticSelectionData::getUnitValueDiffs(mi->cityDefenceUnits, noDepIter->second.cityDefenceUnits);
+
+                                for (std::list<std::pair<UnitTypes, int> >::const_iterator di(unitValueDiffs.begin()), diEnd(unitValueDiffs.end()); di != diEnd; ++di)
+                                {
+                                    civLog << " unit: " << gGlobals.getUnitInfo(di->first).getType() << " %city defence value %inc = " << di->second;
+                                }
+
+                                unitValueDiffs.clear();
+                                unitValueDiffs = TacticSelectionData::getUnitValueDiffs(mi->thisCityDefenceUnits, noDepIter->second.thisCityDefenceUnits);
+
+                                for (std::list<std::pair<UnitTypes, int> >::const_iterator di(unitValueDiffs.begin()), diEnd(unitValueDiffs.end()); di != diEnd; ++di)
+                                {
+                                    civLog << " unit: " << gGlobals.getUnitInfo(di->first).getType() << " %this city defence value %inc = " << di->second;
+                                }
+                                if (!unitValueDiffs.empty())
+                                {
+                                    civLog << " for city: " << safeGetCityName(mi->city);
+                                }
+                            }
+
+                            if (buildingScore != 0)
+                            {
+                                civLog << " building score = " << buildingScore;
+                            }
+                            if (bonusScore != 0)
+                            {
+                                civLog << " bonus score = " << bonusScore;
+                            }
+                            if (resourceScore != 0)
+                            {
+                                civLog << " resource score = " << resourceScore;
+                            }
+                            if (expansionScore != 0)
+                            {
+                                civLog << " expansion score = " << expansionScore;
+                            }
+                            
+                            if (unitScore != 0)
+                            {
+                                civLog << " unit score = " << unitScore
+                                    << " att % incr: " << asPercentageOf(bestAttackUnitScore, baseAttackUnitScore)
+                                    << " def % incr: " << asPercentageOf(bestDefenceUnitScore, baseDefenceUnitScore)
+                                    << " coll % incr: " << asPercentageOf(bestCollateralUnitScore, baseCollateralUnitScore);
+                            }
+                            if (bestAttackUnitScore != 0)
+                            {
+                                civLog << ", best attack unit score = " << bestAttackUnitScore;
+                            }
+                            if (bestDefenceUnitScore != 0)
+                            {
+                                civLog << ", best defence unit score = " << bestDefenceUnitScore;
+                            }
+                            if (bestCollateralUnitScore != 0)
+                            {
+                                civLog << ", best collateral unit score = " << bestCollateralUnitScore;
+                            }
 
                             int processScore = 0;
 
                             for (std::map<ProcessTypes, TotalOutput>::const_iterator pi(ci->second.processOutputsMap.begin()),
                                 piEnd(ci->second.processOutputsMap.end()); pi != piEnd; ++pi)
                             {
-                                // todo - come up with better scaling logic here
-                                processScore += processValueF(pi->second) / player.getCvPlayer()->getNumCities();
+                                // if process generates research, evaluate the additional research rate as %age of current max research rate
+                                // if process generates gold, instead evaluate the additional research possible through ability to 
+                                // lower gold rate as %age of current max research rate
+                                int maxResearchPercent = player.getMaxResearchPercent();  // as %age
+
+                                const std::vector<std::pair<int, int> >& goldAndResearchOutputsByCommerceRate = player.getGoldAndResearchRates();
+                                int currentGoldRate = goldAndResearchOutputsByCommerceRate[(100 - maxResearchPercent) / 10].first,
+                                    currentResearchRate = goldAndResearchOutputsByCommerceRate[(100 - maxResearchPercent) / 10].second;
+
+                                const CvProcessInfo& processInfo = gGlobals.getProcessInfo(pi->first);
+                                // can process generate gold?
+                                if (processInfo.getProductionToCommerceModifier(COMMERCE_GOLD) > 0)
+                                {
+                                    int processGoldRate = pi->second[OUTPUT_GOLD] / turnsAvailable;
+
+                                    // how much extra gold/turn do we need to move up to 100% research? (0% gold slider)
+                                    int requiredAdditionalGoldOutput = currentGoldRate - goldAndResearchOutputsByCommerceRate[0].first;
+                                    // what %age of that amount can we generate from this process?
+                                    int percentOfProcessGoldAvailableForResearch = asPercentageOf(processGoldRate, requiredAdditionalGoldOutput);
+
+                                    int newMaxPossibleResearchRate = std::min<int>(100, maxResearchPercent + (percentOfProcessGoldAvailableForResearch * (100 - maxResearchPercent)) / 100);
+                                    int remainderProcessGold = std::max<int>(0, processGoldRate - requiredAdditionalGoldOutput);
+
+                                    int additionalResearchPerTurn = goldAndResearchOutputsByCommerceRate[(100 - newMaxPossibleResearchRate) / 10].second - currentResearchRate;
+                                    int additionalResearchPercent = asPercentageOf(additionalResearchPerTurn, currentResearchRate);
+
+                                    int additionalGoldPercent = asPercentageOf(remainderProcessGold, currentGoldRate);
+
+                                    civLog << " process - gold - requiredAdditionalGoldOutput = " << requiredAdditionalGoldOutput
+                                        << " newMaxPossibleResearchRate = " << newMaxPossibleResearchRate
+                                        << " additionalResearchPerTurn = " << additionalResearchPerTurn << " additionalGoldPerTurn = " << remainderProcessGold
+                                        << " additionalResearchPercent = " << additionalResearchPercent << " additionalGoldPercent = " << additionalGoldPercent;
+
+                                    processScore += (valueF(pi->second) * percentOfProcessGoldAvailableForResearch) / 100;
+                                }
+
+                                // can process generate research?
+                                if (processInfo.getProductionToCommerceModifier(COMMERCE_RESEARCH) > 0)
+                                {
+                                    // if our max research rate is low - this increases the value of being able to build research
+                                    // calc %age of build research per turn compared to max research - gives some indication of how much of our
+                                    // slider driven research could be replaced
+                                    int currentResearch = goldAndResearchOutputsByCommerceRate[(100 - maxResearchPercent) / 10].second;
+                                    int percentOfResearch = asPercentageOf(pi->second[OUTPUT_RESEARCH] / turnsAvailable, currentResearch);
+                                    int weightedValue = percentOfResearch * (100 - maxResearchPercent) / 100;
+
+                                    civLog << " process - research - max research rate: " << maxResearchPercent << " => " << currentResearch 
+                                        << " per turn - process rate per turn: " << pi->second[OUTPUT_RESEARCH] / turnsAvailable 
+                                        << " rate % incr = " << percentOfResearch;
+
+                                    processScore += (valueF(pi->second) * weightedValue) / 100;
+                                }
+
+                                // don't bother with build culture here - todo - add into culture manager
                             }
 
-                            civLog << " process score = " << processScore;
+                            if (processScore != 0)
+                            {
+                                civLog << " process score = " << processScore;
+                            }
 
-                            int thisTechScore = baseTechScore + workerScore + resourceScore + buildingScore + processScore + expansionScore + unitScore;
+                            int thisTechScore = baseTechScore + workerScore + resourceScore + buildingScore + processScore + expansionScore + unitScore + bonusScore;
+                            civLog << "\n\t total score for: " << gGlobals.getTechInfo(thisTechType).getType() << " = " << thisTechScore << ", scaled by tech cost: " << thisTechScore / techCostsMap[thisTechType];
+
                             thisTechScore /= techCostsMap[thisTechType];
 
                             // scale by no. of techs in this dep set (assumes all deps are techs)
+                            // todo - fix this to split items with mulitple tech deps across those techs weighting by research cost
+                            // means we have to defer picking best tech and store scores in a map keyed by tech
                             techScoresMap[thisTechType] += thisTechScore / ci->first.size();
 
                             if (thisTechScore > bestTechScore)
@@ -503,6 +767,7 @@ namespace AltAI
 
                 if (bestTech != NO_TECH && setResearchTech(bestTech))
                 {
+                    // was this tech selected with a wonder in mind?
 #ifdef ALTAI_DEBUG
                     civLog << "\n(getResearchTech) Returning best tech: " << gGlobals.getTechInfo(bestTech).getType();
 #endif
@@ -588,6 +853,10 @@ namespace AltAI
 
             TacticSelectionDataMap tacticSelectionDataMap;
 
+            TotalOutput currentOutputProjection;
+            bool possiblyIsolated;
+            int warPlanCount, atWarCount;
+
             struct EconomicBuildsData
             {
                 std::map<IDInfo, std::list<const EconomicBuildingValue*> > cityBuildItemsMap;
@@ -599,7 +868,7 @@ namespace AltAI
             std::vector<TechTypes> freeTechTechs;
 
             const PlayerTactics& playerTactics;
-            const Player& player;
+            Player& player;
             boost::shared_ptr<MapAnalysis> pMapAnalysis;
             boost::shared_ptr<CivHelper> civHelper;
 
@@ -610,7 +879,7 @@ namespace AltAI
         };
     }
 
-    ResearchTech getResearchTech(const PlayerTactics& playerTactics, TechTypes ignoreTechType)
+    ResearchTech getResearchTech(PlayerTactics& playerTactics, TechTypes ignoreTechType)
     {
         std::ostream& os = CivLog::getLog(*playerTactics.player.getCvPlayer())->getStream();
 
@@ -621,6 +890,25 @@ namespace AltAI
         }
 
         TechSelectionData selectionData(playerTactics);
+
+        // update base resource tactics as may need them for connectable resource evaluations
+        TacticSelectionData& baseSelectionData = playerTactics.getBaseTacticSelectionData();
+        std::set<BonusTypes> ownedAndUnownedResources;
+        // combine owned and unowned as we want both here (owned as may not be connected and unowned as we may be about to own them)
+        playerTactics.player.getAnalysis()->getMapAnalysis()->getResources(ownedAndUnownedResources, ownedAndUnownedResources);
+        for (std::set<BonusTypes>::const_iterator ci(ownedAndUnownedResources.begin()), ciEnd(ownedAndUnownedResources.end()); ci != ciEnd; ++ci)
+        {
+#ifdef ALTAI_DEBUG
+            os << "\n\t recalc'ing base resource value for: " << gGlobals.getBonusInfo(*ci).getType();
+#endif
+            PlayerTactics::ResourceTacticsMap::const_iterator bonusTacticIter = playerTactics.resourceTacticsMap_.find(*ci);
+            if (bonusTacticIter != playerTactics.resourceTacticsMap_.end())
+            {
+                bonusTacticIter->second->apply(baseSelectionData);
+            }
+        }
+
+        playerTactics.debugTactics();
 
         // pure tech tactics ('first to tech' items, open borders, etc...)
         for (PlayerTactics::TechTacticsMap::const_iterator ci = playerTactics.techTacticsMap_.begin(), ciEnd = playerTactics.techTacticsMap_.end();
@@ -639,7 +927,7 @@ namespace AltAI
             ciEnd = playerTactics.cityBuildingTacticsMap_.end(); ci != ciEnd; ++ci)
         {
             const CvCity* pCity = getCity(ci->first);
-            const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
+            City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
 
             for (PlayerTactics::CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
             {
@@ -703,7 +991,7 @@ namespace AltAI
             const CvCity* pCity = getCity(ci->first);
             if (pCity)
             {
-                const City& city = playerTactics.player.getCity(pCity);
+                City& city = playerTactics.player.getCity(pCity);
                 TotalOutput base = city.getCurrentOutputProjection().getOutput();
 
                 os << "\ngetResearchTech: city: " << narrow(pCity->getName());
@@ -724,6 +1012,7 @@ namespace AltAI
                             (*li)->getProjection().getOutput() - (*li)->getBaseProjection().getOutput();
 
                         os << "\ngetResearchTech: adding imp delta: " << (*li)->getProjection().getOutput() - (*li)->getBaseProjection().getOutput()
+                           << " %age: " << asPercentageOf((*li)->getProjection().getOutput() - (*li)->getBaseProjection().getOutput(), (*li)->getBaseProjection().getOutput())
                            << " for tech(s): ";
                         for (size_t j = 0, depItemCount = thisDepItems.size(); j < depItemCount; ++j)
                         {

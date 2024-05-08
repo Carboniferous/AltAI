@@ -56,7 +56,7 @@ namespace AltAI
         os << " cost = " << node.cost;
         for (size_t i = 0, count = node.buildConditions.size(); i < count; ++i)
         {
-            if (i == 0) os << " build conditions = ";
+            if (i == 0) os << " build conditions:";
             else os << " AND ";
             os << node.buildConditions[i];
         }
@@ -65,7 +65,6 @@ namespace AltAI
         {
             os << " base happy = " << node.happy;
         }
-
         if (node.health != 0)
         {
             os << " base health = " << node.health;
@@ -73,7 +72,13 @@ namespace AltAI
 
         if (node.productionModifier != 0)
         {
-            os << " production modifier = " << node.productionModifier;
+            ShowPos showpos(os);
+            os << " production modifier = " << node.productionModifier << '%';
+        }
+        if (node.hurryCostModifier != 0)
+        {
+            ShowPos showpos(os);
+            os << " hurry cost modifier change = " << node.hurryCostModifier;
         }
 
         for (size_t i = 0, count = node.techs.size(); i < count; ++i)
@@ -142,6 +147,21 @@ namespace AltAI
             if (i > 0) os << ", ";
             os << gGlobals.getSpecialistInfo(node.specialistTypesAndYields[i].first).getType() << " extra yield = " << node.specialistTypesAndYields[i].second;
         }
+        if (node.generatedGPP.first != 0)
+        {
+            ShowPos showpos(os);
+            os << node.generatedGPP.first << " " << (node.generatedGPP.second != NO_UNITCLASS ? gGlobals.getUnitClassInfo(node.generatedGPP.second).getType() : "NO_UNITCLASS") << " great people points";
+        }
+        if (node.cityGPPRateModifier != 0)
+        {
+            ShowPos showpos(os);
+            os << " " << node.cityGPPRateModifier << "% city great people rate ";
+        }
+        if (node.playerGPPRateModifier != 0)
+        {
+            ShowPos showpos(os);
+            os << " " << node.playerGPPRateModifier << "% civ great people rate ";
+        }
         return os;
     }
 
@@ -172,30 +192,35 @@ namespace AltAI
         os << "\n\t ";
         if (node.extraTradeRoutes != 0)
         {
-            os << node.extraTradeRoutes << " extra trade route(s) ";
+            ShowPos showpos(os);
+            os << node.extraTradeRoutes << " extra trade route" << (node.extraTradeRoutes == 1 ? "" : "s");
         }
         if (node.extraCoastalTradeRoutes != 0)
         {
-            os << node.extraCoastalTradeRoutes << " extra coastal city trade route(s) ";
+            ShowPos showpos(os);
+            os << node.extraCoastalTradeRoutes << " extra coastal city trade route" << (node.extraCoastalTradeRoutes == 1 ? "" : "s");
         }
         if (node.extraGlobalTradeRoutes != 0)
         {
-            os << node.extraGlobalTradeRoutes << " extra trade route(s) globally ";
+            ShowPos showpos(os);
+            os << node.extraGlobalTradeRoutes << " extra trade route" << (node.extraGlobalTradeRoutes == 1 ? "" : "s") << " globally";
         }
         if (node.tradeRouteModifier != 0)
         {
-            os << " trade route modifier = " << node.tradeRouteModifier;
+            ShowPos showpos(os);
+            os << " trade route modifier = " << node.tradeRouteModifier << '%';
         }
         if (node.foreignTradeRouteModifier != 0)
         {
-            os << " foreign trade route modifier = " << node.foreignTradeRouteModifier;
+            ShowPos showpos(os);
+            os << " foreign trade route modifier = " << node.foreignTradeRouteModifier << '%';
         }
         return os;
     }
 
     std::ostream& operator << (std::ostream& os, const BuildingInfo::PowerNode& node)
     {
-        os << "\n\tprovides " << (node.isDirty ? " dirty " : " clean ") << " power ";
+        os << "\n\tprovides" << (node.isDirty ? " dirty" : " clean") << " power";
         if (node.areaCleanPower)
         {
             os << " for all cities in area ";
@@ -209,6 +234,7 @@ namespace AltAI
 
     std::ostream& operator << (std::ostream& os, const BuildingInfo::UnitExpNode& node)
     {
+        ShowPos showpos(os);
         os << "\n\t";
         if (node.freeExperience != 0)
         {
@@ -240,10 +266,12 @@ namespace AltAI
 
     std::ostream& operator << (std::ostream& os, const BuildingInfo::SpecialistSlotNode& node)
     {
+        ShowPos showpos(os);
         os << "\n\t";
         for (size_t i = 0, count = node.specialistTypes.size(); i < count; ++i)
         {
-            os << " gives " << node.specialistTypes[i].second << " slots for type: " << gGlobals.getSpecialistInfo(node.specialistTypes[i].first).getType();
+            os << " gives " << node.specialistTypes[i].second << (node.specialistTypes[i].second == 1 ? " slot" :  " slots")
+                << " for type: " << gGlobals.getSpecialistInfo(node.specialistTypes[i].first).getType();
         }
         for (size_t i = 0, count = node.freeSpecialistTypes.size(); i < count; ++i)
         {
@@ -266,47 +294,65 @@ namespace AltAI
         }
         if (node.happy != 0)
         {
+            ShowPos showpos(os);
             os << " happy change = " << node.happy;
         }
         if (node.health != 0)
         {
+            ShowPos showpos(os);
             os << " health change = " << node.health;
         }
         if (node.prodModifier != 0)
         {
-            os << " production modifier = " << node.prodModifier;
+            ShowPos showpos(os);
+            os << " production modifier = " << node.prodModifier << '%';
+        }
+        if (node.freeBonusCount != 0)
+        {
+            os << "\n\tgenerates " << node.freeBonusCount << " of resource";
+        }
+        if (node.isRemoved)
+        {
+            os << "\n\tremoves access to resource";
         }
         return os;
     }
 
-    std::ostream& operator << (std::ostream& os, const BuildingInfo::FreeBonusNode& node)
-    {
-        return os << "\n\tgenerates " << node.freeBonuses.second << " " << gGlobals.getBonusInfo(node.freeBonuses.first).getType();
-    }
-
-    std::ostream& operator << (std::ostream& os, const BuildingInfo::RemoveBonusNode& node)
-    {
-        return os << "\n\tremoves " << gGlobals.getBonusInfo(node.bonusType).getType();
-    }
-
     std::ostream& operator << (std::ostream& os, const BuildingInfo::CityDefenceNode& node)
     {
+        ShowPos showpos(os);
         os << "\n\t";
         if (node.defenceBonus != 0)
         {
-            os << " city defence bonus = " << node.defenceBonus;
+            os << " city defence bonus = " << node.defenceBonus << '%';
         }
         if (node.globalDefenceBonus != 0)
         {
-            os << " global city defence bonus = " << node.globalDefenceBonus;
+            os << " global city defence bonus = " << node.globalDefenceBonus << '%';
         }
         if (node.bombardRateModifier != 0)
         {
-            os << " city bombard rate modifier = " << node.bombardRateModifier;
+            os << " city bombard rate modifier = " << node.bombardRateModifier << '%';
         }
         if (node.espionageDefence != 0)
         {
-            os << " city espionage defence bonus = " << node.espionageDefence;
+            os << " city espionage defence bonus = " << node.espionageDefence << '%';
+        }
+        if (node.airDefenceModifier != 0)
+        {
+            os << " air defence modifier = " << node.airDefenceModifier << '%';
+        }
+        if (node.nukeDefenceModifier != 0)
+        {
+            os << " nuke damage modifier = " << node.nukeDefenceModifier << '%';
+        }
+        if (node.extraAirUnitCapacity != 0)
+        {
+            os << node.extraAirUnitCapacity << " air unit capacity";
+        }
+        if (node.extraAirLiftCount != 0)
+        {
+            os << " can airlift " << node.extraAirLiftCount << " extra unit" << (node.extraAirLiftCount == 1 ? "" : "s");
         }
         return os;
 
@@ -317,47 +363,56 @@ namespace AltAI
         os << "\n\t";
         if (node.cityMaintenanceModifierChange != 0)
         {
-            os << " city maintenance modifier change = " << node.cityMaintenanceModifierChange;
+            ShowPos showpos(os);
+            os << " city maintenance modifier change = " << node.cityMaintenanceModifierChange << '%';
         }
         if (node.foodKeptPercent != 0)
         {
-            os << " city food kept change = " << node.foodKeptPercent;
+            ShowPos showpos(os);
+            os << " city food kept change = " << node.foodKeptPercent << '%';
         }
         if (node.hurryAngerModifier != 0)
         {
-            os << " hurry anger modifier change = " << node.hurryAngerModifier;
-        }
+            ShowPos showpos(os);
+            os << " hurry anger modifier change = " << node.hurryAngerModifier << '%';
+        }        
         if (node.workerSpeedModifier != 0)
         {
-            os << " workder speed modifier change = " << node.workerSpeedModifier;
+            ShowPos showpos(os);
+            os << " worker speed modifier change = " << node.workerSpeedModifier << '%';
         }
         if (node.globalPopChange != 0)
         {
+            ShowPos showpos(os);
             os << " global pop change = " << node.globalPopChange;
         }
         if (node.nFreeTechs > 0)
         {
-            os << " gives: " << node.nFreeTechs << " free tech" << (node.nFreeTechs > 1 ? "s " : " ");
+            os << " gives: " << node.nFreeTechs << " free tech" << (node.nFreeTechs > 1 ? "s" : "");
         }
         if (node.noUnhealthinessFromBuildings)
         {
-            os << " no unhealthiness from buildings ";
+            os << " no unhealthiness from buildings";
         }
         if (node.noUnhealthinessFromPopulation)
         {
-            os << " no unhealthiness from population ";
+            os << " no unhealthiness from population";
+        }
+        if (node.noUnhappiness)
+        {
+            os << " no unhappines in city";
         }
         if (node.startsGoldenAge)
         {
-            os << " starts golden age ";
+            os << " starts golden age";
         }
         if (node.makesCityCapital)
         {
-            os << " makes city capital ";
+            os << " makes city capital";
         }
         if (node.isGovernmentCenter)
         {
-            os << " is gov. centre ";
+            os << " is gov. centre";
         }
         if (node.freeBuildingType != NO_BUILDING)
         {
@@ -396,8 +451,25 @@ namespace AltAI
         return os;
     }
 
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::HurryNode& node)
+    {
+        os << "\n\t";
+
+        if (node.hurryAngerModifier != 0)
+        {
+            os << " modifies hurry anger duration by " << node.hurryAngerModifier << '%';
+        }
+        if (node.globalHurryCostModifier  != 0)
+        {
+            os << " globally modifies hurry cost by " << node.globalHurryCostModifier << '%';
+        }
+
+        return os;
+    }
+
     std::ostream& operator << (std::ostream& os, const BuildingInfo::AreaEffectNode& node)
     {
+        ShowPos showpos(os);
         os << "\n\t";
         if (node.areaHealth != 0)
         {

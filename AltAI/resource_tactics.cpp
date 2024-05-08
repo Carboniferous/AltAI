@@ -10,6 +10,7 @@
 #include "./bonus_helper.h"
 #include "./civ_helper.h"
 #include "./resource_info_visitors.h"
+#include "./resource_tactics_visitors.h"
 #include "./civ_log.h"
 #include "./helper_fns.h"
 
@@ -25,17 +26,25 @@ namespace AltAI
         techDependency_ = pTechDependency;
     }
 
-    void ResourceTactics::update(const Player& player)
+    void ResourceTactics::update(Player& player)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
         os << "\nUpdating resource tactic for: " << gGlobals.getBonusInfo(bonusType_).getType() << " turn = " << gGlobals.getGame().getGameTurn();
+        /*CityIter cityIter(*player.getCvPlayer());
+        while (CvCity* pCity = cityIter())
+        {   
+            os << "\n\nbase city output: " << narrow(pCity->getName()) << ' ';
+            player.getCity(pCity->getID()).getBaseOutputProjection().debug(os);
+        }
+        os << '\n';*/
 #endif
         for (std::list<IResourceTacticPtr>::const_iterator tacticIter(resourceTactics_.begin()), tacticEndIter(resourceTactics_.end());
             tacticIter != tacticEndIter; ++tacticIter)
         {
             (*tacticIter)->update(shared_from_this(), player);
         }
+
     }
 
     void ResourceTactics::updateDependencies(const Player& player)
@@ -141,6 +150,7 @@ namespace AltAI
             pResourceTactics = ResourceTacticsPtr(new ResourceTactics());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in ResourceTactics::factoryRead");
             break;
         }
 
@@ -155,7 +165,7 @@ namespace AltAI
 #endif
     }
 
-    void EconomicResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, const City& city)
+    void EconomicResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, City& city)
     {
         cityProjections_.erase(city.getCvCity()->getIDInfo());
         if (city.getCvCity()->hasBonus(pResourceTactics->getBonusType()))
@@ -164,48 +174,53 @@ namespace AltAI
         }
 
         PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(city.getCvCity()->getOwner());
+        if (!resourceCanAffectCity(city, pPlayer->getAnalysis()->getResourceInfo(pResourceTactics->getBonusType())))
         {
-            CityDataPtr pCityData = city.getCityData()->clone();
-            pCityData->getBonusHelper()->changeNumBonuses(pResourceTactics->getBonusType(), 1);
-            updateCityData(*pCityData, pPlayer->getAnalysis()->getResourceInfo(pResourceTactics->getBonusType()), true);
-
-            std::vector<IProjectionEventPtr> events;
-            cityProjections_[city.getCvCity()->getIDInfo()] = getProjectedOutput(*pPlayer, pCityData, 30, events, ConstructItem(), __FUNCTION__, false, true);
+            return;
         }
+
+        ProjectionLadder base = gGlobals.getGame().getAltAI()->getPlayer(city.getCvCity()->getOwner())->getCity(city.getID()).getBaseOutputProjection();
+
+        std::vector<IProjectionEventPtr> events;
+        CityDataPtr pCityData = city.getCityData()->clone();
+        pCityData->getBonusHelper()->changeNumBonuses(pResourceTactics->getBonusType(), 1);
+        updateRequestData(*pCityData, pPlayer->getAnalysis()->getResourceInfo(pResourceTactics->getBonusType()), true);
+            
+        ProjectionLadder delta = getProjectedOutput(*pPlayer, pCityData, pPlayer->getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, false, true);
+        cityProjections_[city.getCvCity()->getIDInfo()] = std::make_pair(delta, base);
+
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*pPlayer->getCvPlayer())->getStream();
+        std::map<IDInfo, std::pair<ProjectionLadder, ProjectionLadder> >::const_iterator ci = cityProjections_.find(city.getCvCity()->getIDInfo());
+        os << '\n' << __FUNCTION__ << ' ' << narrow(pPlayer->getCity(ci->first.iID).getCvCity()->getName()) << " = " << ci->second.first.getOutput() - ci->second.second.getOutput();
+#endif
+
     }
 
-    void EconomicResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, const Player& player)
+    void EconomicResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, Player& player)
     {
         cityProjections_.clear();
         CityIter cityIter(*player.getCvPlayer());
         while (CvCity* pCity = cityIter())
         {
-            if (pCity->hasBonus(pResourceTactics->getBonusType()))
-            {
-                continue;
-            }
-
-            {
-                CityDataPtr pCityData = player.getCity(pCity->getID()).getCityData()->clone();
-                pCityData->getBonusHelper()->changeNumBonuses(pResourceTactics->getBonusType(), 1);
-                updateCityData(*pCityData, player.getAnalysis()->getResourceInfo(pResourceTactics->getBonusType()), true);
-
-                std::vector<IProjectionEventPtr> events;
-                cityProjections_[pCity->getIDInfo()] = getProjectedOutput(player, pCityData, 30, events, ConstructItem(), __FUNCTION__, false, true);
-            }
+            update(pResourceTactics, player.getCity(pCity->getID()));
         }
     }
 
     void EconomicResourceTactic::apply(const ResourceTacticsPtr& pResourceTactics, TacticSelectionData& selectionData)
     {
-        for (std::map<IDInfo, ProjectionLadder>::const_iterator ci(cityProjections_.begin()), ciEnd(cityProjections_.end()); ci != ciEnd; ++ci)
+        selectionData.potentialResourceOutputDeltas[pResourceTactics->getBonusType()] = std::make_pair(TotalOutput(), TotalOutput());
+
+        TotalOutput accumulatedBase, accumulatedDelta;
+        for (std::map<IDInfo, std::pair<ProjectionLadder, ProjectionLadder> >::const_iterator ci(cityProjections_.begin()), ciEnd(cityProjections_.end()); ci != ciEnd; ++ci)
         {
             if (!::getCity(ci->first))  // city may have been deleted since update was last called
             {
                 continue;
             }
-            TotalOutput delta = ci->second.getOutput() - gGlobals.getGame().getAltAI()->getPlayer(ci->first.eOwner)->getCity(ci->first.iID).getBaseOutputProjection().getOutput();
-            selectionData.potentialResourceOutputDeltas[pResourceTactics->getBonusType()] += delta;
+
+            accumulatedBase += ci->second.second.getOutput();
+            accumulatedDelta += ci->second.first.getOutput() - ci->second.second.getOutput();
 
             /*if (!isEmpty(delta))
             {
@@ -218,10 +233,13 @@ namespace AltAI
 #endif
             }*/
         }
+        selectionData.potentialResourceOutputDeltas[pResourceTactics->getBonusType()].first += accumulatedDelta;
+        selectionData.potentialResourceOutputDeltas[pResourceTactics->getBonusType()].second += asPercentageOf(accumulatedDelta, accumulatedBase);
     }
 
     void EconomicResourceTactic::write(FDataStreamBase* pStream) const
     {
+        // todo - write projection ladders
         pStream->Write(ID);
     }
 
@@ -232,19 +250,20 @@ namespace AltAI
     void UnitResourceTactic::debug(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
-        os << "\n\tUnit resource tactic ";
+        os << "\n\tUnit resource tactic: " << gGlobals.getUnitInfo(unitType_).getType();
 #endif
     }
 
-    void UnitResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, const City& city)
+    void UnitResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, City& city)
     {
         if (city.getCvCity()->hasBonus(pResourceTactics->getBonusType()))
         {
             return;
         }
+        // else... todo
     }
 
-    void UnitResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, const Player& player)
+    void UnitResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, Player& player)
     {
         CityIter cityIter(*player.getCvPlayer());
         while (CvCity* pCity = cityIter())
@@ -253,11 +272,16 @@ namespace AltAI
             {
                 continue;
             }
-        }
+            // else... todo
+        }        
     }
 
     void UnitResourceTactic::apply(const ResourceTacticsPtr& pResourceTactics, TacticSelectionData& selectionData)
     {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pResourceTactics->getPlayerType()))->getStream();
+        os << "\n\tApplying unit resource tactic for: " << gGlobals.getUnitInfo(unitType_).getType();
+#endif
     }
 
     void UnitResourceTactic::write(FDataStreamBase* pStream) const
@@ -266,6 +290,55 @@ namespace AltAI
     }
 
     void UnitResourceTactic::read(FDataStreamBase* pStream)
+    {
+    }
+
+    void BuildingResourceTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tBuilding resource tactic " << gGlobals.getBuildingInfo(buildingType_).getType();
+#endif
+    }
+
+    void BuildingResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, City& city)
+    {
+        if (city.getCvCity()->hasBonus(pResourceTactics->getBonusType()))
+        {
+            return;
+        }
+        // else... todo
+    }
+
+    void BuildingResourceTactic::update(const ResourceTacticsPtr& pResourceTactics, Player& player)
+    {
+        CityIter cityIter(*player.getCvPlayer());
+        while (CvCity* pCity = cityIter())
+        {
+            if (pCity->hasBonus(pResourceTactics->getBonusType()))
+            {
+                continue;
+            }
+            // else... todo
+        }
+    }
+
+    void BuildingResourceTactic::apply(const ResourceTacticsPtr& pResourceTactics, TacticSelectionData& selectionData)
+    {
+        selectionData.potentialAcceleratedBuildings[pResourceTactics->getBonusType()].push_back(buildingType_);
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pResourceTactics->getPlayerType()))->getStream();
+//        os << " found building: " << gGlobals.getBuildingInfo(buildingType_).getType()
+//            << " accelerated with resource: " << gGlobals.getBonusInfo(pResourceTactics->getBonusType()).getType() << " factor = " << resourceModifier_
+//            << " orig value = ";
+//#endif
+    }
+
+    void BuildingResourceTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+    }
+
+    void BuildingResourceTactic::read(FDataStreamBase* pStream)
     {
     }
 }

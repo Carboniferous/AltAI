@@ -22,9 +22,11 @@ namespace AltAI
     boost::tuple<bool, int, std::set<PromotionTypes> > canGainPromotion(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo, PromotionTypes promotionType, 
         const std::set<PromotionTypes>& existingPromotions);
 
-    bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources);
+    bool couldConstructUnit(const Player& player, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources, bool ignoreRequiredBuildings);
 
-    bool couldConstructUnit(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources);
+    bool couldConstructUnit(const Player& player, const City& city, int lookaheadDepth, const boost::shared_ptr<UnitInfo>& pUnitInfo, bool ignoreRequiredResources, bool ignoreRequiredBuildings);
+
+    bool couldEverConstructUnit(const Player& player, const City& city, const boost::shared_ptr<UnitInfo>& pUnitInfo, int lookAheadDepth);
 
     bool isUnitObsolete(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo);
 

@@ -4,7 +4,6 @@
 #include "./spec_info.h"
 #include "./game.h"
 #include "./player.h"
-#include "./city.h"
 #include "./civ_helper.h"
 #include "./modifiers_helper.h"
 #include "./iters.h"

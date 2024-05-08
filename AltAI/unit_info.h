@@ -184,12 +184,14 @@ namespace AltAI
         struct BaseNode
         {
             explicit BaseNode(UnitTypes unitType_)
-                : unitType(unitType_), domainType(NO_DOMAIN), cost(0), minAreaSize(-1), prereqBuildingType(NO_BUILDING), specialUnitType(NO_SPECIALUNIT) {}
+                : unitType(unitType_), domainType(NO_DOMAIN), cost(0), minAreaSize(-1), requireAreaBonuses(false),
+                  prereqBuildingType(NO_BUILDING), specialUnitType(NO_SPECIALUNIT) {}
 
             UnitTypes unitType;
             DomainTypes domainType;
 
             int cost, minAreaSize;
+            bool requireAreaBonuses;
             std::vector<BonusTypes> andBonusTypes, orBonusTypes;
             std::vector<TechTypes> techTypes;
             BuildingTypes prereqBuildingType;

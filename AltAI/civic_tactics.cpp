@@ -22,7 +22,7 @@ namespace AltAI
         techDependency_ = pTechDependency;
     }
 
-    void CivicTactics::update(const Player& player)
+    void CivicTactics::update(Player& player)
     {
         for (std::list<ICivicTacticPtr>::const_iterator tacticIter(civicTactics_.begin()), tacticEndIter(civicTactics_.end());
             tacticIter != tacticEndIter; ++tacticIter)
@@ -33,7 +33,7 @@ namespace AltAI
         civicCost_ = player.getCvPlayer()->getSingleCivicUpkeep(civicType_);
     }
 
-    void CivicTactics::updateDependencies(const Player& player)
+    void CivicTactics::updateDependencies(Player& player)
     {
         if (IsNotRequired(player)(techDependency_))
         {
@@ -125,6 +125,7 @@ namespace AltAI
             pCivicTactics = CivicTacticsPtr(new CivicTactics());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in CivicTactics::factoryRead");
             break;
         }
 
@@ -146,7 +147,7 @@ namespace AltAI
 #endif
     }
 
-    void EconomicCivicTactic::update(const CivicTacticsPtr& pCivicTactics, const Player& player)
+    void EconomicCivicTactic::update(const CivicTacticsPtr& pCivicTactics, Player& player)
     {
         CivicOptionTypes civicOptionType = (CivicOptionTypes)gGlobals.getCivicInfo(pCivicTactics->getCivicType()).getCivicOptionType();
         CityIter cityIter(*player.getCvPlayer());
@@ -154,8 +155,8 @@ namespace AltAI
         {
             CityDataPtr pCityData = player.getCity(pCity->getID()).getCityData()->clone();
             std::vector<IProjectionEventPtr> events;
-            events.push_back(IProjectionEventPtr(new ProjectionChangeCivicEvent(player.getAnalysis()->getCivicInfo(pCivicTactics->getCivicType()), 0)));
-            cityProjections_[pCity->getIDInfo()] = getProjectedOutput(player, pCityData, 30, events, ConstructItem(), __FUNCTION__, true, true);
+            events.push_back(IProjectionEventPtr(new ProjectionChangeCivicEvent(civicOptionType, pCivicTactics->getCivicType(), 0)));
+            cityProjections_[pCity->getIDInfo()] = getProjectedOutput(player, pCityData, player.getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, true);
             // need to reset civic as CivHelper data is currently shared - probably want to fix this
             // otherwise, when the civic is adopted next time round the civic which is un-applied is probably going to be wrong
             player.getCivHelper()->adoptCivic(player.getCvPlayer()->getCivics(civicOptionType));
@@ -185,6 +186,17 @@ namespace AltAI
     {
     }
 
+    HurryCivicTactic::HurryCivicTactic(HurryTypes hurryType) : 
+            hurryType_(hurryType), productionPerPopulation_(0), goldPerProduction_(0)
+    {
+        if (hurryType_ != NO_HURRY)
+        {
+            const CvHurryInfo& hurryInfo = gGlobals.getHurryInfo(hurryType_);
+            productionPerPopulation_ = hurryInfo.getProductionPerPopulation();
+            goldPerProduction_ = hurryInfo.getGoldPerProduction();
+        }
+    }
+
     void HurryCivicTactic::debug(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
@@ -192,12 +204,49 @@ namespace AltAI
 #endif
     }
 
-    void HurryCivicTactic::update(const CivicTacticsPtr& pCivicTactics, const Player& player)
+    void HurryCivicTactic::update(const CivicTacticsPtr& pCivicTactics, Player& player)
     {
+        CivicOptionTypes civicOptionType = (CivicOptionTypes)gGlobals.getCivicInfo(pCivicTactics->getCivicType()).getCivicOptionType();
+        CityIter cityIter(*player.getCvPlayer());
+        HurryData hurryData(hurryType_);
+        while (CvCity* pCity = cityIter())
+        {
+            ProjectionLadder base = player.getCity(pCity->getID()).getBaseOutputProjection();
+
+            CityDataPtr pCityData = player.getCity(pCity->getID()).getCityData()->clone();
+            std::vector<IProjectionEventPtr> events;
+            events.push_back(IProjectionEventPtr(new ProjectionChangeCivicEvent(civicOptionType, pCivicTactics->getCivicType(), 0)));
+
+            hurryData.hurryPopulation = 2; //  todo - derive dynamically
+            events.push_back(IProjectionEventPtr(new ProjectionHurryEvent(hurryData)));
+            ProjectionLadder delta = getProjectedOutput(player, pCityData, player.getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, true);
+            cityProjections_[pCity->getIDInfo()] = std::make_pair(delta, base);
+
+            // need to reset civic as CivHelper data is currently shared - probably want to fix this
+            // otherwise, when the civic is adopted next time round the civic which is un-applied is probably going to be wrong
+            player.getCivHelper()->adoptCivic(player.getCvPlayer()->getCivics(civicOptionType));
+        }
     }
 
     void HurryCivicTactic::apply(const CivicTacticsPtr& pCivicTactics, TacticSelectionData& selectionData)
     {
+        CivicValue& civicValue = *selectionData.civicValues.rbegin();
+        civicValue.yieldOutputDelta = std::make_pair(TotalOutput(), TotalOutput());
+
+        TotalOutput accumulatedBase, accumulatedDelta;
+        for (std::map<IDInfo, std::pair<ProjectionLadder, ProjectionLadder> >::const_iterator ci(cityProjections_.begin()), ciEnd(cityProjections_.end()); ci != ciEnd; ++ci)
+        {
+            if (!::getCity(ci->first))  // city may have been deleted since update was last called
+            {
+                continue;
+            }
+
+            accumulatedBase += ci->second.second.getOutput();
+            accumulatedDelta += ci->second.first.getOutput() - ci->second.second.getOutput();
+            accumulatedDelta[OUTPUT_PRODUCTION] += ci->second.first.getAccumulatedProduction();
+        }
+        civicValue.yieldOutputDelta.first += accumulatedDelta;
+        civicValue.yieldOutputDelta.second += asPercentageOf(accumulatedDelta, accumulatedBase);
     }
 
     void HurryCivicTactic::write(FDataStreamBase* pStream) const
@@ -208,5 +257,4 @@ namespace AltAI
     void HurryCivicTactic::read(FDataStreamBase* pStream)
     {
     }
-
 }

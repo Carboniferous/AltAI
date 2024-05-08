@@ -21,190 +21,6 @@
 
 namespace AltAI
 {
-    /*class MakeEconomicUnitConditionsVisitor : public boost::static_visitor<>
-    {
-    public:
-        MakeEconomicUnitConditionsVisitor(const Player& player, UnitTypes unitType) : player_(player), constructItem_(unitType)
-        {
-        }
-
-        template <typename T>
-            void operator() (const T&)
-        {
-        }
-
-        void operator() (const UnitInfo::BaseNode& node)
-        {
-            for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
-            {
-                boost::apply_visitor(*this, node.nodes[i]);
-            }
-
-            if (node.domainType != DOMAIN_LAND)
-            {
-                constructItem_.militaryFlags |= MilitaryFlags::Output_Explore;
-            }
-        }
-
-        void operator() (const UnitInfo::BuildNode& node)
-        {
-            for (size_t i = 0, count = node.buildTypes.size(); i < count; ++i)
-            {
-                constructItem_.possibleBuildTypes.insert(std::make_pair(node.buildTypes[i], 0));
-            }
-        }
-
-        void operator() (const UnitInfo::ReligionNode& node)
-        {
-            if (player_.getCvPlayer()->getHasReligionCount(node.prereqReligion) > 0)
-            {
-                if (!node.religionSpreads.empty())
-                {
-                    constructItem_.economicFlags |= EconomicFlags::Output_Culture;
-                    constructItem_.economicFlags |= EconomicFlags::Output_Happy;
-
-                    for (size_t i = 0, count = node.religionSpreads.size(); i < count; ++i)
-                    {
-                        constructItem_.religionTypes.push_back(node.religionSpreads[i].first);
-                    }
-                }
-            }
-        }
-
-        void operator() (const UnitInfo::MiscAbilityNode& node)
-        {
-            if (node.canFoundCity)
-            {
-                constructItem_.economicFlags |= EconomicFlags::Output_Settler;
-            }
-            if (node.betterHutResults)
-            {
-                constructItem_.militaryFlags |= MilitaryFlags::Output_Explore;
-            }
-        }
-
-        ConstructItem getConstructItem() const
-        {
-            return constructItem_.isEmpty() ? ConstructItem(NO_UNIT): constructItem_;
-        }
-
-    private:
-        const Player& player_;
-        ConstructItem constructItem_;
-    };*/
-
-    //class MakeMilitaryExpansionUnitConditionsVisitor : public boost::static_visitor<>
-    //{
-    //public:
-    //    MakeMilitaryExpansionUnitConditionsVisitor(const Player& player, UnitTypes unitType) : player_(player), constructItem_(unitType)
-    //    {
-    //        pUnitAnalysis_ = player_.getAnalysis()->getUnitAnalysis();
-    //    }
-
-    //    template <typename T>
-    //        void operator() (const T&)
-    //    {
-    //    }
-
-    //    void operator() (const UnitInfo::BaseNode& node)
-    //    {
-    //        for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
-    //        {
-    //            boost::apply_visitor(*this, node.nodes[i]);
-    //        }
-
-    //        if (node.domainType != DOMAIN_LAND)
-    //        {
-    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Explore;
-    //        }
-    //    }
-
-    //    void operator() (const UnitInfo::CityCombatNode& node)
-    //    {
-    //        if (node.extraDefence > 0)
-    //        {
-    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Defence;
-    //        }
-    //        if (node.extraAttack > 0)
-    //        {
-    //            constructItem_.militaryFlags |= MilitaryFlags::Output_City_Attack;
-    //        }
-    //    }
-
-    //    void operator() (const UnitInfo::CollateralNode& node)
-    //    {
-    //        constructItem_.militaryFlags |= MilitaryFlags::Output_Collateral;
-    //        constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Collateral,
-    //            std::make_pair(pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType, 1), -1)));
-    //        // TODO: add another entry for field collateral?
-    //    }
-
-    //    void operator() (const UnitInfo::CombatNode& node)
-    //    {
-    //        int attackValue = pUnitAnalysis_->getAttackUnitValue(constructItem_.unitType);
-    //        int defenceValue = pUnitAnalysis_->getDefenceUnitValue(constructItem_.unitType);
-
-    //        if (attackValue > 0)
-    //        {
-    //            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Attack, std::make_pair(attackValue, -1)));
-    //        }
-
-    //        if (defenceValue > 0)
-    //        {
-    //            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_Defence, std::make_pair(defenceValue, -1)));
-    //        }
-
-    //        int cityAttackValue = pUnitAnalysis_->getCityAttackUnitValue(constructItem_.unitType, 1);
-    //        if (cityAttackValue > 0)
-    //        {
-    //            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_City_Attack, std::make_pair(cityAttackValue, -1)));
-    //        }
-
-    //        int cityDefenceValue = pUnitAnalysis_->getCityDefenceUnitValue(constructItem_.unitType);
-    //        if (cityDefenceValue > 0)
-    //        {
-    //            constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_City_Defence, std::make_pair(cityDefenceValue, -1)));
-    //        }
-    //        
-    //        for (int i = 0, count = gGlobals.getNumUnitCombatInfos(); i < count; ++i)
-    //        {
-    //            int counterValue = pUnitAnalysis_->getUnitCounterValue(constructItem_.unitType, (UnitCombatTypes)i);
-    //            if (counterValue > 0)
-    //            {
-    //                constructItem_.militaryFlagValuesMap.insert(std::make_pair(MilitaryFlags::Output_UnitCombat_Counter, std::make_pair(counterValue, (UnitCombatTypes)i)));
-    //            }
-    //        }
-
-    //        if (!constructItem_.militaryFlagValuesMap.empty())
-    //        {
-    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Combat_Unit;
-    //        }
-
-    //        if (node.moves > 1)
-    //        {
-    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Extra_Mobility;
-    //        }
-    //    }
-
-    //    void operator() (const UnitInfo::CargoNode& node)
-    //    {
-    //        if (node.cargoDomain == DOMAIN_LAND)
-    //        {
-    //            constructItem_.militaryFlags |= MilitaryFlags::Output_Unit_Transport;
-    //        }
-    //    }
-
-    //    ConstructItem getConstructItem() const
-    //    {
-    //        return constructItem_.isEmpty() ? ConstructItem(NO_UNIT): constructItem_;
-    //    }
-
-    //private:
-    //    const Player& player_;
-    //    boost::shared_ptr<UnitAnalysis> pUnitAnalysis_;
-    //    ConstructItem constructItem_;
-    //};
-
     class MakeUnitTacticsDependenciesVisitor : public boost::static_visitor<>
     {
     public:
@@ -250,7 +66,7 @@ namespace AltAI
                     techDependencies_.push_back(ResearchTechDependencyPtr(new ResearchTechDependency(node.techTypes[i])));
                 }
             }
-
+            
             bool passedBuildingCheck = node.prereqBuildingType == NO_BUILDING;
             if (!passedBuildingCheck)
             {
@@ -314,7 +130,12 @@ namespace AltAI
             for (size_t i = 0, count = dependentTactics.size(); i < count; ++i)
             {
                 pTactic_->addDependency(dependentTactics[i]);
-            }            
+            }
+            /*const std::vector<ResearchTechDependencyPtr>& techDeps = dependentTacticsVisitor.getTechDependencies();
+            for (size_t i = 0, count = techDeps.size(); i < count; ++i)
+            {
+                pTactic_->addDependency(techDeps[i]);
+            }*/
 
             for (size_t i = 0, count = node.nodes.size(); i < count; ++i)
             {
@@ -517,7 +338,8 @@ namespace AltAI
                     pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CollateralUnitTactic(visitor.getFreePromotions())));
                 }
             }
-            // can include defensive only units here
+            // can include defensive only units here, e.g. machine guns
+            if (unitInfo.isMilitaryHappiness())  // to exclude scouts and explorers
             {
                 /*UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCityDefencePromotions(unitType, maxPromotionLevel);
 
@@ -529,9 +351,7 @@ namespace AltAI
                 UnitData unitData(unitType, levelsAndPromotions.second);*/
                 pCityUnitTactics->addTactic(ICityUnitTacticPtr(new CityDefenceUnitTactic(visitor.getFreePromotions())));
                 pCityUnitTactics->addTactic(ICityUnitTacticPtr(new ThisCityDefenceUnitTactic(visitor.getFreePromotions())));
-            }
-
-            {
+            
                 /*UnitAnalysis::RemainingLevelsAndPromotions levelsAndPromotions = pUnitAnalysis->getCombatPromotions(unitType, maxPromotionLevel);
 
                 UnitData unitData(unitType, levelsAndPromotions.second);*/
@@ -573,7 +393,7 @@ namespace AltAI
     UnitTacticsPtr makeUnitTactics(const Player& player, const boost::shared_ptr<UnitInfo>& pUnitInfo)
     {
         const int lookAheadDepth = 2;
-        if (couldConstructUnit(player, lookAheadDepth, pUnitInfo, true))
+        if (couldConstructUnit(player, lookAheadDepth, pUnitInfo, true, true))
         {
             const UnitTypes unitType = pUnitInfo->getUnitType();
             const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
@@ -584,11 +404,20 @@ namespace AltAI
 
             while (CvCity* pCity = iter())
             {
+                const City& city = player.getCity(pCity);
+                // this does the area check for units which have min area reqs
+                if (!couldEverConstructUnit(player, city, pUnitInfo, lookAheadDepth))
+                {
+#ifdef ALTAI_DEBUG
+                    CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Skipping tactic for unit: " << unitInfo.getType() << " for city: " << narrow(pCity->getName());
+#endif
+                    continue;
+                }
 #ifdef ALTAI_DEBUG
                 CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for unit: " << unitInfo.getType() << " for city: " << narrow(pCity->getName());
 #endif
                 
-                pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, player.getCity(pCity), pUnitInfo));               
+                pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, city, pUnitInfo));               
             }
 
             MakeUnitTacticsDependenciesVisitor dependentTacticsVisitor(player, NULL);

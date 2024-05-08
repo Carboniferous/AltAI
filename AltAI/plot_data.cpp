@@ -195,7 +195,6 @@ namespace AltAI
     PlotData::UpgradeData::Upgrade PlotData::UpgradeData::advanceTurn(int nTurns)
     {
         // can only get one upgrade - should give latest version if we somehow call with a greater interval than the upgrade time for an improvement
-        // this shouldn't happne in practice because this fn is supposed to be called
         Upgrade upgrade;
         PlotData::UpgradeData::UpgradeListIter iter(upgrades.begin()), endIter(upgrades.end());
         
@@ -222,8 +221,7 @@ namespace AltAI
         output.write(pStream);
         actualOutput.write(pStream);
         greatPersonOutput.write(pStream);
-        pStream->Write(coords.iX);
-        pStream->Write(coords.iY);
+        coords.write(pStream);
         pStream->Write(improvementType);
         pStream->Write(featureType);
         pStream->Write(routeType);
@@ -241,8 +239,7 @@ namespace AltAI
         output.read(pStream);
         actualOutput.read(pStream);
         greatPersonOutput.read(pStream);
-        pStream->Read(&coords.iX);
-        pStream->Read(&coords.iY);
+        coords.read(pStream);
         pStream->Read((int*)&improvementType);
         pStream->Read((int*)&featureType);
         pStream->Read((int*)&routeType);

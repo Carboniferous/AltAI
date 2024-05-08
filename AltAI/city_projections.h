@@ -138,7 +138,7 @@ namespace AltAI
     class ProjectionChangeCivicEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionChangeCivicEvent>
     {
     public:
-        ProjectionChangeCivicEvent(const boost::shared_ptr<CivicInfo>& pCivicInfo, int turnsToChange);
+        ProjectionChangeCivicEvent(CivicOptionTypes civicOptionType, CivicTypes civicType, int turnsToChange);
 
         virtual void init(const CityDataPtr& pCityData);
         virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
@@ -151,7 +151,8 @@ namespace AltAI
 
     private:        
         CityDataPtr pCityData_;
-        boost::shared_ptr<CivicInfo> pCivicInfo_;
+        CivicOptionTypes civicOptionType_;
+        CivicTypes civicType_;
         int turnsToChange_;
     };
 
@@ -169,6 +170,26 @@ namespace AltAI
 
     private:
         CityDataPtr pCityData_;
+    };
+
+    class ProjectionHurryEvent : public IProjectionEvent, public boost::enable_shared_from_this<ProjectionHurryEvent>
+    {
+    public:
+        explicit ProjectionHurryEvent(const HurryData& hurryData) : hurryData_(hurryData) {}
+        virtual void init(const CityDataPtr& pCityData);
+        virtual IProjectionEventPtr clone(const CityDataPtr& pCityData) const;
+        virtual void debug(std::ostream& os) const;
+        virtual int getTurnsToEvent() const;
+        virtual bool targetsCity(IDInfo city) const;
+        virtual bool generateComparison() const;
+        virtual void updateCityData(int nTurns);
+        virtual IProjectionEventPtr updateEvent(int nTurns, ProjectionLadder& ladder);
+
+    private:
+        bool havePopulation_() const;
+        bool angryTimerExpired_() const;
+        CityDataPtr pCityData_;
+        HurryData hurryData_;
     };
 
 	struct IProjectionEvent;

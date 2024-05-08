@@ -59,7 +59,8 @@ namespace AltAI
 
     void CityImprovementTactics::update(const Player& player, const CityDataPtr& pCityData)
     {
-        CityDataPtr pBaseCityData(pCityData->clone()), pSimulationCityData(new CityData(pCityData->getCity(), plotData_, true));
+        CityDataPtr pBaseCityData(new CityData(pCityData->getCity(), true)), pSimulationCityData(new CityData(pCityData->getCity(), plotData_, true));
+        
         //ErrorLog::getLog(*player.getCvPlayer())->getStream() << "\nnew CityData at: " << pSimulationCityData.get();
 
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
@@ -70,10 +71,11 @@ namespace AltAI
         ConstructItem constructItem;
 
         std::vector<IProjectionEventPtr> events;
-        base_ = getProjectedOutput(player, pBaseCityData, 30, events, constructItem, __FUNCTION__);
+        const int numSimTurns = player.getAnalysis()->getNumSimTurns();
+        base_ = getProjectedOutput(player, pBaseCityData, numSimTurns, events, constructItem, __FUNCTION__);
 
         events.clear();
-        projection_ = getProjectedOutput(player, pSimulationCityData, 30, events, constructItem, __FUNCTION__);
+        projection_ = getProjectedOutput(player, pSimulationCityData, numSimTurns, events, constructItem, __FUNCTION__);
 
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {
@@ -158,14 +160,14 @@ namespace AltAI
             CityImprovementManager::logImprovement(os, plotData_[i]);
         }
 
-        for (std::list<IWorkerBuildTacticPtr>::const_iterator ci(buildTactics_.begin()), ciEnd(buildTactics_.end()); ci != ciEnd; ++ci)
+        /*for (std::list<IWorkerBuildTacticPtr>::const_iterator ci(buildTactics_.begin()), ciEnd(buildTactics_.end()); ci != ciEnd; ++ci)
         {
             (*ci)->debug(os);
         }
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {
             dependentTactics_[i]->debug(os);
-        }
+        }*/
 #endif
     }
 
@@ -333,8 +335,6 @@ namespace AltAI
 
         if (gGlobals.getGame().countKnownTechNumTeams(techType) == 0)
         {
-            selectionData.getFreeTech = true;
-
             const PlayerTypes playerType = pTechTactics->getPlayer();
             PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
             const CvPlayer& player = CvPlayerAI::getPlayer(playerType);
@@ -348,11 +348,17 @@ namespace AltAI
 
             std::vector<TechTypes> techs = pPlayer->getAnalysis()->getTechsWithDepth(1);
 
+            // repeat of logic in FreeTechBuildingTactic - todo - move to common fn
             int maxCost = 0;
+            TechTypes possibleTechSelection = NO_TECH;
             for (size_t i = 0, count = techs.size(); i < count; ++i)
             {
                 const int thisCost = calculateTechResearchCost(techs[i], playerType);
-                maxCost = std::max<int>(maxCost, thisCost);
+                if (thisCost > maxCost)
+                {
+                    maxCost = thisCost;
+                    possibleTechSelection = techs[i];
+                }
 #ifdef ALTAI_DEBUG
                 os << "\n\tTech: " << gGlobals.getTechInfo(techs[i]).getType() << " has depth = 1 and research cost: " << thisCost;
 #endif
@@ -365,7 +371,7 @@ namespace AltAI
             pPlayer->getCivHelper()->removeTech(techType);
             pPlayer->getAnalysis()->recalcTechDepths();
 
-            selectionData.freeTechValue = maxCost;
+            selectionData.possibleFreeTech = possibleTechSelection;
         }
     }
 
@@ -432,11 +438,12 @@ namespace AltAI
         {
             // get resources in sub areas - then check if they're connected
             std::vector<CvPlot*> resourcePlots = pPlayer->getAnalysis()->getMapAnalysis()->getResourcePlots(accessibleSubAreas[subAreaIndex],
-                std::vector<BonusTypes>(), playerType);
+                std::vector<BonusTypes>(), playerType, pPlayer->getAnalysis()->getTimeHorizon() / 2);
 
             for (size_t plotIndex = 0, plotCount = resourcePlots.size(); plotIndex < plotCount; ++plotIndex)
             {
-                if (resourcePlots[plotIndex]->getRouteType() == NO_ROUTE && !resourcePlots[plotIndex]->isConnectedToCapital(playerType))
+                // don't check connection for unowned plots
+                if (resourcePlots[plotIndex]->getRouteType() == NO_ROUTE && (resourcePlots[plotIndex]->getOwner() != playerType || !resourcePlots[plotIndex]->isConnectedToCapital(playerType)))
                 {
                     selectionData.connectableResources[resourcePlots[plotIndex]->getBonusType()].push_back(resourcePlots[plotIndex]->getCoords());
                 }
@@ -526,24 +533,25 @@ namespace AltAI
         if (ourResourceCount > 0)
         {
             boost::shared_ptr<ResourceInfo> pResourceInfo = pPlayer->getAnalysis()->getResourceInfo(bonusType);
+            const int numSimTurns = pPlayer->getAnalysis()->getNumSimTurns();
             CityIter cityIter(*pPlayer->getCvPlayer());
             while (CvCity* pCity = cityIter())
             {
-                const City& city = pPlayer->getCity(pCity);
+                City& city = pPlayer->getCity(pCity);
                 ProjectionLadder base, comparison;
                 
                 // todo - wrap resource in projection event
                 {
                     CityDataPtr pCityData = city.getCityData()->clone();
                     std::vector<IProjectionEventPtr> events;
-                    base = getProjectedOutput(*pPlayer, pCityData, 30, events, ConstructItem(), __FUNCTION__, false);
+                    base = getProjectedOutput(*pPlayer, pCityData, numSimTurns, events, ConstructItem(), __FUNCTION__, false);
                 }
 
                 {
                     CityDataPtr pCityData = city.getCityData()->clone();
-                    updateCityData(*pCityData, pResourceInfo, true);
+                    updateRequestData(*pCityData, pResourceInfo, true);
                     std::vector<IProjectionEventPtr> events;
-                    comparison = getProjectedOutput(*pPlayer, pCityData, 30, events, ConstructItem(), __FUNCTION__, false);
+                    comparison = getProjectedOutput(*pPlayer, pCityData, numSimTurns, events, ConstructItem(), __FUNCTION__, false);
                 }
 
                 selectionData.resourceOutput += comparison.getOutput() - base.getOutput();
@@ -560,5 +568,43 @@ namespace AltAI
     void ProvidesResourceTechTactic::read(FDataStreamBase* pStream)
     {
         pStream->Read((int*)&bonusType);
+    }
+
+    void EconomicTechTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tGeneral economic tech tactic ";
+#endif
+    }
+
+    void EconomicTechTactic::apply(const ITechTacticsPtr& pTechTactics, TacticSelectionData& selectionData)
+    {
+        PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pTechTactics->getPlayer());
+        CityIter cityIter(*pPlayer->getCvPlayer());
+        TotalOutput baseOutput, newBaselineOutput;
+        while (CvCity* pCity = cityIter())
+        {
+            City& city = pPlayer->getCity(pCity->getID());
+            ProjectionLadder base = city.getBaseOutputProjection();
+            baseOutput += base.getOutput();
+
+            CityDataPtr pCityData = city.getCityData()->clone();
+            updateRequestData(pCity, *pCityData, pPlayer->getAnalysis()->getTechInfo(pTechTactics->getTechType()));
+            std::vector<IProjectionEventPtr> events;
+            ProjectionLadder newBaseline = getProjectedOutput(*pPlayer, pCityData, pPlayer->getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, true);
+            newBaselineOutput += newBaseline.getOutput();
+
+            pCityData->getCivHelper()->removeTech(pTechTactics->getTechType());
+        }
+        selectionData.baselineDelta = newBaselineOutput - baseOutput;
+    }
+
+    void EconomicTechTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+    }
+
+    void EconomicTechTactic::read(FDataStreamBase* pStream)
+    {
     }
 }

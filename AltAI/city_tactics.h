@@ -8,5 +8,5 @@ namespace AltAI
     class City;
     struct PlayerTactics;
 
-    ConstructItem getConstructItem(const PlayerTactics& playerTactics, const City& city);
+    ConstructItem getConstructItem(PlayerTactics& playerTactics, City& city);
 }

@@ -41,17 +41,26 @@ namespace AltAI
                 None = 0, CityAttack = (1 << 0), FortifyDefender = (1 << 1)
             };
 
-            CombatDetails() : flags(None), plotIsHills(false), plotTerrain(NO_TERRAIN), plotFeature(NO_FEATURE), cultureDefence(0), buildingDefence(0)
+            CombatDetails() : flags(None), plotIsHills(false), plotTerrain(NO_TERRAIN), plotFeature(NO_FEATURE), cultureDefence(0), buildingDefence(0), plotDefence(0), attackDirection(NO_DIRECTION)
             {
             }
 
             explicit CombatDetails(const CvPlot* pPlot);
 
+            void write(FDataStreamBase* pStream) const;
+            void read(FDataStreamBase* pStream);
+
+            void debug(std::ostream& os) const;
+            DirectionTypes getAttackDirection(const IDInfo& unit) const;
+
             int flags;
             bool plotIsHills;
             TerrainTypes plotTerrain;
             FeatureTypes plotFeature;
-            int cultureDefence, buildingDefence;
+            int cultureDefence, buildingDefence, plotDefence;
+            std::bitset<NUM_DIRECTION_TYPES> isRiverCrossing, isAmphibious;
+            std::map<IDInfo, DirectionTypes> unitAttackDirectionsMap;
+            DirectionTypes attackDirection;
         };
 
         UnitData();
@@ -61,29 +70,60 @@ namespace AltAI
         void UnitData::promote(int level, const Promotions& freePromotions);
         void applyPromotion(PromotionTypes promotionType);
 
-        void debug(std::ostream& os) const;
+        void debugPromotions(std::ostream& os) const;
 
         // calculate our strength as defender
         int calculateStrength(const UnitData& other, const CombatDetails& combatDetails = CombatDetails()) const;
 
         // calculate our strength as attacker
-        int calculateStrength(const CombatDetails& combatDetails = CombatDetails()) const;
+        int calculateStrength() const;
 
-        const CvUnitInfo* pUnitInfo;
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
+
+        const CvUnitInfo* pUnitInfo;  // must be first as ref'd in ctor's init lists
         UnitTypes unitType;
+        IDInfo unitId;
 
+        int moves;
         int hp, maxhp;
         int baseCombat, extraCombat, firstStrikes, chanceFirstStrikes, firePower, combatLimit, withdrawalProb;
         int cityAttackPercent, cityDefencePercent, fortifyPercent;
         int hillsAttackPercent, hillsDefencePercent;
-        bool immuneToFirstStrikes;
+        bool immuneToFirstStrikes, isBlitz, isRiver, isAmphib;
+        bool isBarbarian, isAnimal;
         int extraCollateralDamage, collateralDamageProtection;
         std::map<FeatureTypes, int> unitFeatureAttackModifiers, unitFeatureDefenceModifiers;
         std::map<TerrainTypes, int> unitTerrainAttackModifiers, unitTerrainDefenceModifiers;
         std::map<UnitCombatTypes, int> unitCombatModifiers;
+        std::vector<char> featureDoubleMoves, terrainDoubleMoves;
+        bool hasAttacked;
 
         std::vector<PromotionTypes> promotions;
+
+        int animalModifier, barbModifier;  // level handicap modifiers
     };
+
+    std::vector<UnitData> makeUnitData(const std::set<IDInfo>& units);
+
+    struct CombatData
+    {
+        CombatData() {}
+        explicit CombatData(const CvPlot* pPlot);
+        UnitData::CombatDetails combatDetails;
+        std::vector<UnitData> attackers, defenders;
+
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
+    };
+
+    void debugUnitDataVector(std::ostream& os, const std::vector<UnitData>& units);
+    void debugUnitDataLists(std::ostream& os, const std::vector<std::list<UnitData> >& unitLists);
+
+    bool eraseUnitById(std::vector<UnitData>& units, IDInfo unitId);
+    void updateUnitData(std::vector<UnitData>& units);
+
+    std::vector<PromotionTypes> getAvailablePromotions(const CvUnit* pUnit);
 
     struct UnitTypeP
     {
@@ -93,6 +133,45 @@ namespace AltAI
             return unitData.unitType == unitType;
         }
         UnitTypes unitType;
+    };
+
+    struct UnitDataIDInfoP
+    {
+        explicit UnitDataIDInfoP(IDInfo unitId_) : unitId(unitId_) {}
+        bool operator() (const UnitData& unitData) const
+        {
+            return unitData.unitId == unitId;
+        }
+        IDInfo unitId;
+    };
+
+    struct UnitTypeInList
+    {
+        explicit UnitTypeInList(UnitTypes unitType_) : unitType(unitType_) {}
+        bool operator() (const std::list<UnitData>& unitDataList) const
+        {
+            return std::find_if(unitDataList.begin(), unitDataList.end(), UnitTypeP(unitType)) != unitDataList.end();
+        }
+        UnitTypes unitType;
+    };
+
+    struct UnitMatcher
+    {
+        explicit UnitMatcher(const CvUnit* pUnit_) : pUnit(pUnit_) {}
+
+        bool operator() (const UnitData& unitData) const
+        {
+            // todo match on xp points/promotions/etc...
+            return unitData.unitType == pUnit->getUnitType();
+        }
+
+        bool operator() (const std::list<UnitData>& unitDataList) const
+        {
+            // todo match on xp points/promotions/etc...
+            return UnitTypeInList(pUnit->getUnitType())(unitDataList);
+        }
+
+        const CvUnit* pUnit;
     };
 
     class UnitAnalysis
@@ -109,6 +188,7 @@ namespace AltAI
         int getAttackUnitValue(UnitTypes unitType) const;
         int getDefenceUnitValue(UnitTypes unitType) const;
         int getUnitCounterValue(UnitTypes unitType, UnitCombatTypes unitCombatType) const;
+        int getPromotionDepth(PromotionTypes promotionType) const;
         
         typedef int (CvPromotionInfo::*CvPromotionInfoIntFnPtr)(void) const;
         typedef int (CvPromotionInfo::*CvPromotionInfoUnitCombatIntFnPtr)(int) const;
@@ -146,6 +226,7 @@ namespace AltAI
         static const int maxPromotionSearchDepth_ = 5;
 
         void analysePromotions_();
+        void calculatePromotionDepths_();
         void analyseUnits_();
 
         template <typename ValueF>
@@ -158,16 +239,16 @@ namespace AltAI
         void analyseAsCombatUnit_(UnitTypes unitType);
         void analyseAsCounterUnit_(UnitTypes unitType);
 
-        struct CombatData
+        struct CombatDataOdds
         {
-            CombatData() : attackOdds(0), defenceOdds(0), cityAttackOdds(0), cityDefenceOdds(0)
+            CombatDataOdds() : attackOdds(0), defenceOdds(0), cityAttackOdds(0), cityDefenceOdds(0)
             {
             }
 
             int attackOdds, defenceOdds, cityAttackOdds, cityDefenceOdds;
         };
 
-        typedef std::map<UnitTypes, CombatData> UnitCombatDataMap;
+        typedef std::map<UnitTypes, CombatDataOdds> UnitCombatDataMap;
         typedef std::map<UnitTypes, UnitCombatDataMap> CombatDataMap;
 
         const Player& player_;
@@ -187,5 +268,7 @@ namespace AltAI
         UnitCombatInfoMap attackUnitValues_, defenceUnitValues_;
         UnitCombatInfoMap attackUnitCounterValues_, defenceUnitCounterValues_;
         UnitCombatInfoMap cityAttackUnitValues_, cityDefenceUnitValues_;
+
+        std::vector<int> promotionDepths_;
     };
 }

@@ -28,13 +28,21 @@ namespace AltAI
             std::set<int> borderingAreas;
         };
 
+        struct ResourcePlotData
+        {
+            ResourcePlotData() : coords(-1, -1), owner(NO_PLAYER), imp(NO_IMPROVEMENT) {}
+            ResourcePlotData(XYCoords coords_, PlayerTypes owner_, ImprovementTypes imp_) : coords(coords_), owner(owner_), imp(imp_) {}
+            XYCoords coords;
+            PlayerTypes owner;
+            ImprovementTypes imp;
+        };
+
         struct ResourceData
         {
             ResourceData() : subAreaID(FFreeList::INVALID_INDEX) {}
             explicit ResourceData(int subAreaID_) : subAreaID(subAreaID_) {}
             int subAreaID;
-            typedef std::vector<boost::tuple<XYCoords, PlayerTypes, ImprovementTypes> > ResourcePlotData;
-            std::map<BonusTypes, ResourcePlotData> subAreaResourcesMap;
+            std::map<BonusTypes, std::vector<ResourcePlotData> > subAreaResourcesMap;
         };
 
         struct PlotValues
@@ -59,7 +67,7 @@ namespace AltAI
         void update();
 
         void updatePlotInfo(const CvPlot* pPlot, bool isNew, const std::string& caller);
-        void updatePlotRevealed(const CvPlot* pPlot, bool isNew);
+        bool updatePlotRevealed(const CvPlot* pPlot, bool isNew);
         void updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType);
         void updatePlotImprovement(const CvPlot* pPlot, ImprovementTypes oldImprovementType);
         void updatePlotCulture(const CvPlot* pPlot, PlayerTypes previousRevealedOwner, PlayerTypes newRevealedOwner);
@@ -71,10 +79,16 @@ namespace AltAI
         bool isAreaComplete(int areaID) const;
         bool isSubAreaComplete(int subAreaID) const;
         int getControlledResourceCount(BonusTypes bonusType) const;
-        std::vector<CvPlot*> getResourcePlots(int subArea, const std::vector<BonusTypes>& bonusTypes = std::vector<BonusTypes>(), PlayerTypes playerType = NO_PLAYER) const;
-        const CvPlot* getClosestCity(const CvPlot* pPlot, int subArea, bool includeActsAsCity) const;
+        std::vector<CvPlot*> getResourcePlots(int subArea, const std::vector<BonusTypes>& bonusTypes = std::vector<BonusTypes>(), PlayerTypes playerType = NO_PLAYER, const int lookaheadTurns = 0) const;
+        void getResources(std::set<BonusTypes>& owned, std::set<BonusTypes>& unowned) const;
+        const CvPlot* getClosestCity(const CvPlot* pPlot, int subArea, bool includeActsAsCity, IDInfo& closestCity = IDInfo()) const;
+        bool getTurnsToOwnership(const CvPlot* pPlot, bool includeOtherPlayers, IDInfo& owningCity, int& turns) const;
+        std::vector<XYCoords> getGoodyHuts(int subArea) const;
 
+        const std::map<int /* sub area id */, std::set<XYCoords> >& getBorderMap() const;
         const std::map<int /* sub area id */, std::set<XYCoords> >& getUnrevealedBorderMap() const;
+        int getUnrevealedBorderCount(int subAreaId) const;
+        bool isOurBorderPlot(int subAreaId, XYCoords coords) const;
         std::vector<int /* area id */> getAreasBorderingArea(int areaId) const;
         std::vector<int /* sub area id */ > getSubAreasInArea(int areaId) const;
         std::map<int /* sub area id */, std::vector<IDInfo> > getSubAreaCityMap() const;
@@ -91,6 +105,8 @@ namespace AltAI
         void reassignUnworkedSharedPlots(IDInfo city);
         std::set<XYCoords> getCitySharedPlots(IDInfo city) const;
  
+        bool isSharedPlot(XYCoords coords) const;
+        IDInfo getSharedPlotAssignedCity(XYCoords coords) const;
         IDInfo getSharedPlot(IDInfo city, XYCoords coords) const;
         IDInfo getImprovementOwningCity(IDInfo city, XYCoords coords) const;
         IDInfo setImprovementOwningCity(IDInfo city, XYCoords coords);
@@ -100,7 +116,7 @@ namespace AltAI
         void debugSharedPlots() const;
 
         IDInfo setWorkingCity(const CvPlot* pPlot, const CvCity* pOldCity, const CvCity* pNewCity);
-        const CvCity* getWorkingCity(IDInfo city, XYCoords coords) const;
+        //const CvCity* getWorkingCity(IDInfo city, XYCoords coords) const;
 
         // save/load functions
         void write(FDataStreamBase* pStream) const;
@@ -130,6 +146,8 @@ namespace AltAI
         void updatePlotValueKey_(const CvPlot* pPlot, int oldKey, int newKey);
         void removePlotValuePlot_(const CvPlot* pPlot);
 
+        void updateBorderPlots_(const CvPlot* pPlot, bool isAdding);
+
         void setWorkingCity_(XYCoords coords, IDInfo assignedCity);
 
         bool init_;
@@ -141,7 +159,7 @@ namespace AltAI
 
         std::map<int /* sub area id */, std::set<XYCoords> > impAsCityMap_;
 
-        std::map<int /* sub area id */, std::set<XYCoords> > unrevealedBorderMap_;
+        std::map<int /* sub area id */, std::set<XYCoords> > unrevealedBorderMap_, ourBorderMap_;
         // key = sub area id
         typedef std::map<int, ResourceData> ResourcesMap;
         typedef ResourcesMap::iterator ResourcesMapIter;
@@ -180,7 +198,8 @@ namespace AltAI
         SharedPlots::iterator getSharedPlot_(XYCoords coords);
 
         std::map<IDInfo, XYCoords> seenCities_;
-        std::set<const CvPlot*> updatedPlots_;
+        std::set<XYCoords> goodyHuts_;
+        PlotSet updatedPlots_;
 
         void analyseSharedPlot_(const std::set<XYCoords>& sharedCoords);
     };

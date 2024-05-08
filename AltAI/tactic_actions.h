@@ -78,6 +78,11 @@ namespace AltAI
             return boost::make_tuple(unitType, buildingType, processType, projectType);
         }
 
+        bool isEmpty() const
+        {
+            return buildingType == NO_BUILDING && unitType == NO_UNIT && projectType == NO_PROJECT && improvementType == NO_IMPROVEMENT && processType == NO_PROCESS;
+        }
+
         // save/load functions
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);

@@ -3,6 +3,7 @@
 #include "./player.h"
 #include "./analysis.h"
 #include "./events.h"
+#include "./map_delta.h"
 #include "./tictacs.h"
 
 #include <vector>
@@ -66,6 +67,8 @@ namespace AltAI
             return timeHorizon_;
         }
 
+        int getNumSimTurns() const;
+
         Player& getPlayer()
         {
             return player_;
@@ -78,12 +81,21 @@ namespace AltAI
 
         const boost::shared_ptr<PlayerTactics>& getPlayerTactics() const
         {
+            if (!playerTactics_->isInitialised())
+            {
+                playerTactics_->init();
+            }
             return playerTactics_;
         }
 
         const boost::shared_ptr<UnitAnalysis>& getUnitAnalysis() const
         {
             return pUnitAnalysis_;
+        }
+
+        const boost::shared_ptr<PlotUpdates>& getMapDelta() const
+        {
+            return pMapDelta_;
         }
 
         boost::shared_ptr<UnitInfo> getUnitInfo(UnitTypes unitType) const;
@@ -120,6 +132,7 @@ namespace AltAI
         boost::shared_ptr<MilitaryAnalysis> pMilitaryAnalysis_;
         boost::shared_ptr<WorkerAnalysis> pWorkerAnalysis_;
         boost::shared_ptr<GreatPeopleAnalysis> pGreatPeopleAnalysis_;
+        boost::shared_ptr<PlotUpdates> pMapDelta_;
         int timeHorizon_;
         std::vector<int> techDepths_;
 

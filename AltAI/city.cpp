@@ -36,32 +36,34 @@ namespace AltAI
     City::City(CvCity* pCity)
         : player_(*gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())), pCity_(pCity), 
           pCityImprovementManager_(CityImprovementManagerPtr(new CityImprovementManager(pCity->getIDInfo()))),
-          constructItem_(NO_BUILDING)
+          constructItem_(NO_BUILDING), flags_(0)
     {        
     }
 
     // called when found a new city only
     void City::init()
     {
+        flags_ |= NeedsCityDataCalc;
         flags_ |= NeedsImprovementCalcs;
         flags_ |= NeedsBuildSelection;
         pCity_->AI_setAssignWorkDirty(true);
 
-        pCityData_ = CityDataPtr(new CityData(pCity_));
-        //ErrorLog::getLog(*player_.getCvPlayer())->getStream() << "\nnew CityData at: " << pCityData_.get();
+        updateProjections_();
 
-        //if (!pCityImprovementManager_)
-        //{
-        //    pCityImprovementManager_ = CityImprovementManagerPtr(new CityImprovementManager(pCity_->getIDInfo()));
-        //    //ErrorLog::getLog(*player_.getCvPlayer())->getStream() << "\nnew CityImprovementManager at: " << pCityImprovementManager_.get();
-        //}
+        // set flag to update other cities as maintenance costs will have changed
+        CityIter iter(CvPlayerAI::getPlayer(pCity_->getOwner()));
+        while (CvCity* pCity = iter())
+        {
+            if (pCity->getIDInfo() == pCity_->getIDInfo())
+            {
+                continue;
+            }
+            player_.getCity(pCity).setFlag(NeedsProjectionCalcs | NeedsCityDataCalc);
+        }
     }
 
     void City::doTurn()
     {
-        pCityData_ = CityDataPtr(new CityData(pCity_));
-        //ErrorLog::getLog(*player_.getCvPlayer())->getStream() << "\nnew CityData at: " << pCityData_.get();
-
         if (!pCityImprovementManager_)
         {
             pCityImprovementManager_ = CityImprovementManagerPtr(new CityImprovementManager(pCity_->getIDInfo()));
@@ -69,6 +71,7 @@ namespace AltAI
         }
 
         calcMaxOutputs_();
+        logImprovements();
 
         setFlag(CanReassignSharedPlots);
 
@@ -78,7 +81,7 @@ namespace AltAI
         }
     }
 
-    void City::setFlag(Flags flags)
+    void City::setFlag(int flags)
     {
         flags_ |= flags;
     }
@@ -94,7 +97,7 @@ namespace AltAI
         {
             boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity_);
             std::ostream& os = pCityLog->getStream();
-            os << "\nTurn = " << gGlobals.getGame().getGameTurn();
+            os << "\nTurn = " << gGlobals.getGame().getGameTurn() << __FUNCTION__;
             os << " Building " << (count > 0 ? "built: " : "lost: ") << gGlobals.getBuildingInfo(buildingType).getType();
         }
 #endif
@@ -115,7 +118,7 @@ namespace AltAI
         {
             boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity_);
             std::ostream& os = pCityLog->getStream();
-            os << "\nTurn = " << gGlobals.getGame().getGameTurn();
+            os << "\nTurn = " << gGlobals.getGame().getGameTurn() << __FUNCTION__;
             os << " Unit constructed: " << gGlobals.getUnitInfo(unitType).getType();
         }
 #endif
@@ -181,7 +184,7 @@ namespace AltAI
             }
             else
             {
-                if (!player_.getCvPlayer()->isHuman())
+                //if (!player_.getCvPlayer()->isHuman())
                 {
                     std::vector<TotalOutputPriority> outputPriorities;
                     std::vector<OutputTypes> outputTypes;
@@ -248,7 +251,7 @@ namespace AltAI
 
                     opt.optimise(outputPriorities, mixedSpecialistTypes, false);
                 }
-                else  // isHuman - allow emphasize buttons to do something
+                /*else  // isHuman - allow emphasize buttons to do something
                 {
                     std::vector<OutputTypes> emphasizedOutputTypes;
                     std::vector<TotalOutputPriority> outputPriorities;
@@ -347,7 +350,7 @@ namespace AltAI
                     }
 
                     opt.optimise(outputPriorities, mixedSpecialistTypes, false);
-                }
+                }*/
             }
             //else if (plotAssignmentSettings_.targetFoodYield != Range<>())
             //{
@@ -378,25 +381,22 @@ namespace AltAI
         boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity_);
         std::ostream& os = pCityLog->getStream();
 #endif
-        pCityData_ = CityDataPtr(new CityData(pCity_));
-        //ErrorLog::getLog(*player_.getCvPlayer())->getStream() << "\nnew CityData at: " << pCityData_.get();
-
         calcMaxOutputs_();
 
         plotAssignmentSettings_.growthType = CityOptimiser::Not_Set;
         
+        CityDataPtr pCityData = getCityData();
 
-        CityOptimiser opt(pCityData_, std::make_pair(maxOutputs_, optWeights_));
         checkConstructItem_();
 
-        optimisePlots(pCityData_, constructItem_, true);
+        optimisePlots(pCityData, constructItem_, true);
 
         std::map<SpecialistTypes, int> specCounts;
 
         // city plot is not in plot data list
         pCity_->setWorkingPlot(CITY_HOME_PLOT, pCity_->getPopulation() > 0 && pCity_->canWork(pCity_->getCityIndexPlot(CITY_HOME_PLOT)));
 
-        for (PlotDataListConstIter iter(pCityData_->getPlotOutputs().begin()), endIter(pCityData_->getPlotOutputs().end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(pCityData->getPlotOutputs().begin()), endIter(pCityData->getPlotOutputs().end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -405,14 +405,14 @@ namespace AltAI
                     CvPlot* pPlot = gGlobals.getMap().plot(iter->coords.iX, iter->coords.iY);
 
                     // error check
-                    if (pPlot->getWorkingCity() != pCity_)
+                    if (pPlot->getWorkingCity() != NULL && pPlot->getWorkingCity() != pCity_)
                     {
                         std::ostream& os = ErrorLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
-                        os << "\nPlot: " << iter->coords << " has conflicting working city settings: plot's = " 
-                            << narrow(pPlot->getWorkingCity()->getName()) << " and city is: " << narrow(pCity_->getName()) << ")";
+                        os << "\nTurn: " << gGlobals.getGame().getGameTurn() << " plot: " << iter->coords << " has conflicting working city settings: plot's = " 
+                           << safeGetCityName(pPlot->getWorkingCity()) << " and city is: " << safeGetCityName(pCity_) << ")";
                     }
 
-                    pCity_->setWorkingPlot(pPlot, true);
+                    pCity_->setWorkingPlot(pPlot, true);  // all plots were set to not worked in AI_assignWorkingPlots before this call
                 }
                 else
                 {
@@ -422,7 +422,7 @@ namespace AltAI
             }
         }
 
-        for (PlotDataListConstIter iter(pCityData_->getFreeSpecOutputs().begin()), endIter(pCityData_->getFreeSpecOutputs().end()); iter != endIter; ++iter)
+        for (PlotDataListConstIter iter(pCityData->getFreeSpecOutputs().begin()), endIter(pCityData->getFreeSpecOutputs().end()); iter != endIter; ++iter)
         {
             if (iter->isWorked)
             {
@@ -448,8 +448,6 @@ namespace AltAI
         // update projection
         {
             const PlayerPtr& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
-            
-            //ErrorLog::getLog(CvPlayerAI::getPlayer(pCityData_->getOwner()))->getStream() << "\nnew WorkerBuildEvent at: " << events.rbegin()->get();
 
 #ifdef ALTAI_DEBUG
             {
@@ -458,7 +456,7 @@ namespace AltAI
 
                 os << "\nFound " << player->getNumWorkersTargetingCity(pCity_) << " workers targeting city " << narrow(pCity_->getName());
 
-                /*std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > missions = player->getWorkerMissionsForCity(pCity_);
+                /*std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > > missions = player->getWorkerMissionsForCity(pCity_);
                 for (size_t i = 0, count = missions.size(); i < count; ++i)
                 {
                     os << "\nUnit: " << gGlobals.getUnitInfo(missions[i].first).getType();
@@ -468,25 +466,14 @@ namespace AltAI
                     }
                 }*/
             }
-#endif
-            
+#endif            
             //std::vector<IUnitEventGeneratorPtr> unitEventGenerators = player->getCityUnitEvents(pCity_->getIDInfo());
             //for (size_t unitEventIndex = 0, unitEventCount = unitEventGenerators.size(); unitEventIndex < unitEventCount; ++unitEventIndex)
             //{
-            //    events.push_back(unitEventGenerators[unitEventIndex]->getProjectionEvent(pCityData_));
+            //    events.push_back(unitEventGenerators[unitEventIndex]->getProjectionEvent(pCityData));
             //}
 
-            std::vector<IProjectionEventPtr> events;
-            {                
-                events.push_back(IProjectionEventPtr(new WorkerBuildEvent(player->getWorkerMissionsForCity(pCity_))));
-                pProjectionCityData_ = pCityData_->clone();
-                currentOutputProjection_ = getProjectedOutput(*player, pProjectionCityData_, 30, events, constructItem_, __FUNCTION__, false, true);
-            }
-            {
-                events.clear();
-                pBaseProjectionCityData_ = pCityData_->clone();
-                baseOutputProjection_ = getProjectedOutput(*player, pBaseProjectionCityData_, 30, events, ConstructItem(), __FUNCTION__, false, true);
-            }
+            updateProjections_();
         }
 
 #ifdef ALTAI_DEBUG
@@ -494,10 +481,10 @@ namespace AltAI
             boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()));
             std::ostream& os = pCivLog->getStream();
             os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " Completed assign plots for city: " << narrow(pCity_->getName()) << " angry = " << pCity_->angryPopulation() << " ";
-            pCityData_->debugBasicData(os);
+            pCityData->debugBasicData(os);
             plotAssignmentSettings_.debug(os);
             os << "\nPlots: ";
-            pCityData_->debugSummary(os);
+            pCityData->debugSummary(os);
             os << "\nConstructing: ";
             constructItem_.debug(os);
             os << "\nCurrent output projection: ";
@@ -511,9 +498,29 @@ namespace AltAI
         return plotAssignmentSettings_;
     }
 
+    void City::updateProjections_()
+    {
+        const PlayerPtr& player = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner());
+        const int numSimTurns = player->getAnalysis()->getNumSimTurns();
+        std::vector<IProjectionEventPtr> events;
+
+        CityDataPtr pCityData = getCityData();
+
+        events.push_back(IProjectionEventPtr(new WorkerBuildEvent(player->getWorkerMissionsForCity(pCity_))));
+        pProjectionCityData_ = pCityData->clone();
+        currentOutputProjection_ = getProjectedOutput(*player, pProjectionCityData_, numSimTurns, events, constructItem_, __FUNCTION__, false, true);
+
+        events.clear();
+        pBaseProjectionCityData_ = pCityData->clone();
+        baseOutputProjection_ = getProjectedOutput(*player, pBaseProjectionCityData_, numSimTurns, events, ConstructItem(), __FUNCTION__, false, true);
+
+        flags_ &= ~NeedsProjectionCalcs;
+    }
+
     void City::calcMaxOutputs_()
     {
-        CityOptimiser opt(pCityData_);
+        CityDataPtr pCityData = getCityData();
+        CityOptimiser opt(pCityData);
         opt.optimise(NO_OUTPUT, CityOptimiser::Not_Set, true);
         maxOutputs_[OUTPUT_FOOD] = opt.getMaxFood();
         TotalOutputWeights outputWeights = makeOutputW(1, 4, 3, 3, 1, 1);
@@ -521,7 +528,7 @@ namespace AltAI
         {
             TotalOutputPriority priorities(makeTotalOutputSinglePriority((OutputTypes)i));
             opt.optimise<MixedWeightedTotalOutputOrderFunctor>(priorities, outputWeights, opt.getGrowthType(), false);
-            maxOutputs_[i] = pCityData_->getOutput()[i];
+            maxOutputs_[i] = pCityData->getOutput()[i];
         }
         optWeights_ = makeOutputW(3, 4, 3, 3, 1, 1);//opt.getMaxOutputWeights();
     }
@@ -534,11 +541,13 @@ namespace AltAI
         os << "\nCity::calcImprovements: " << narrow(pCity_->getName()) << " turn = " << gGlobals.getGame().getGameTurn();
         cityStream << "\nCity::calcImprovements" << " turn = " << gGlobals.getGame().getGameTurn();
 #endif
+        // careful - as can update imps before call doTurn() - which would recreate city data - happens when borders expand, incl post conquest
+        CityDataPtr pCityData = getCityData();
         //std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
         //const int targetSize = 3 + std::max<int>(pCity_->getPopulation(), pCity_->getPopulation() + pCity_->happyLevel() - pCity_->unhappyLevel());
 
-        //pCityImprovementManager_->calcImprovements(pCityData_, yieldTypes, targetSize);
-        pCityImprovementManager_->simulateImprovements(pCityData_);
+        //pCityImprovementManager_->calcImprovements(pCityData, yieldTypes, targetSize);
+        pCityImprovementManager_->simulateImprovements(pCityData);
 
 #ifdef ALTAI_DEBUG
         pCityImprovementManager_->logImprovements(os);
@@ -626,7 +635,7 @@ namespace AltAI
             if (constructItem_.pUnitEventGenerator)
             {
                 os << " with projection event: ";
-                constructItem_.pUnitEventGenerator->getProjectionEvent(pCityData_)->debug(os);
+                constructItem_.pUnitEventGenerator->getProjectionEvent(getCityData())->debug(os);
             }
 #endif
             flags_ &= ~NeedsBuildSelection;
@@ -698,14 +707,14 @@ namespace AltAI
             if (!pUnit->atPlot(pPlot))
             {
                 //pGroup->pushMission(MISSION_MOVE_TO, pPlot->getX(), pPlot->getY(), 0, false, false, MISSIONAI_BUILD, pPlot);
-                player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_MOVE_TO, NO_BUILD, 0, false, "City::selectImprovement");
+                player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_MOVE_TO, NO_BUILD, 0, "City::selectImprovement");
             }
 
             std::vector<BuildTypes> additionalBuilds = gGlobals.getGame().getAltAI()->getPlayer(pCity_->getOwner())->addAdditionalPlotBuilds(pPlot, coordsAndBuildType.second);
             for (size_t i = 0, count = additionalBuilds.size(); i < count; ++i)
             {
                 //pGroup->pushMission(MISSION_BUILD, additionalBuilds[i], -1, 0, (pGroup->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot);
-                player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_BUILD, additionalBuilds[i], 0, pGroup->getLengthMissionQueue() > 0, "City::selectImprovement");
+                player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_BUILD, additionalBuilds[i], 0, "City::selectImprovement");
             }
 
             return pGroup->getLengthMissionQueue() > 0;
@@ -740,10 +749,10 @@ namespace AltAI
             pTargetPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
 
 #ifdef ALTAI_DEBUG
-            os << "\n(getBestImprovement) - Checking plot: " << coords << " for worker missions: " << getNumWorkersTargetingPlot(pTargetPlot);
+            os << "\n(getBestImprovement) - Checking plot: " << coords << " for worker missions: " << getNumWorkersTargetingPlot(coords);
 #endif
 
-            if (pTargetPlot->getSubArea() == pUnit->plot()->getSubArea() && getNumWorkersTargetingPlot(pTargetPlot) < 1)
+            if (pTargetPlot->getSubArea() == pUnit->plot()->getSubArea() && getNumWorkersTargetingPlot(coords) < 1)
             {
                 targetPlotHasWorkers = false;
             }
@@ -835,9 +844,9 @@ namespace AltAI
 
 #ifdef ALTAI_DEBUG
             std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
-            os << "\n(getBestBonusImprovement) - Checking plot: " << coords << " for worker missions: " << getNumWorkersTargetingPlot(targetPlot);
+            os << "\n(getBestBonusImprovement) - Checking plot: " << coords << " for worker missions: " << getNumWorkersTargetingPlot(coords);
 #endif
-            if (getNumWorkersTargetingPlot(targetPlot) < 1)
+            if (getNumWorkersTargetingPlot(coords) < 1)
             {
                 targetPlotHasWorkers = false;
             }
@@ -887,7 +896,7 @@ namespace AltAI
         }
     }
 
-    std::pair<XYCoords, BuildTypes> City::getImprovementBuildOrder_(XYCoords coords, ImprovementTypes improvementType) const
+    std::pair<XYCoords, BuildTypes> City::getImprovementBuildOrder_(XYCoords coords, ImprovementTypes improvementType)
     {
         CvPlot* pPlot = gGlobals.getMap().plot(coords.iX, coords.iY);
         BonusTypes bonusType = pPlot->getBonusType(pCity_->getTeam());
@@ -984,7 +993,7 @@ namespace AltAI
                             os << "\n" << gGlobals.getGame().getGameTurn() << " " << narrow(pCity_->getName()) << " - failed to find plot for irrigation path from: " << coords;
                         }
                         // see if can find a substitute improvement, since we can't seem to build an irrigated one and it's not a farmed bonus
-                        return std::make_pair(coords, GameDataAnalysis::getBuildTypeForImprovementType(pCityImprovementManager_->getSubstituteImprovement(pCityData_, coords)));
+                        return std::make_pair(coords, GameDataAnalysis::getBuildTypeForImprovementType(pCityImprovementManager_->getSubstituteImprovement(getCityData(), coords)));
                     }
                 }
                 // todo - why does canBuild not appear to work for unirrigated farms on bonuses?
@@ -1042,9 +1051,9 @@ namespace AltAI
 
 #ifdef ALTAI_DEBUG
                 std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
-                os << "\n(checkResourceConnections) - Checking plot: " << coords << " for worker missions: " << getNumWorkersTargetingPlot(pImprovementPlot);
+                os << "\n(checkResourceConnections) - Checking plot: " << coords << " for worker missions: " << getNumWorkersTargetingPlot(coords);
 #endif
-                if (getNumWorkersTargetingPlot(pImprovementPlot) > 0)
+                if (getNumWorkersTargetingPlot(coords) > 0)
                 {
                     continue;
                 }
@@ -1067,11 +1076,11 @@ namespace AltAI
                         if (!pUnit->atPlot(pImprovementPlot))
                         {
                             //pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pImprovementPlot->getX(), pImprovementPlot->getY(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pImprovementPlot);
-                            player_.pushWorkerMission(pUnit, pCity_, pImprovementPlot, MISSION_MOVE_TO, NO_BUILD, MOVE_SAFE_TERRITORY, false, "City::checkResourceConnections");
+                            player_.pushWorkerMission(pUnit, pCity_, pImprovementPlot, MISSION_MOVE_TO, NO_BUILD, MOVE_SAFE_TERRITORY, "City::checkResourceConnections");
                         }
 
                         //pUnit->getGroup()->pushMission(MISSION_ROUTE_TO, pCity_->getX(), pCity_->getY(), MOVE_SAFE_TERRITORY, (pUnit->getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pImprovementPlot);
-                        player_.pushWorkerMission(pUnit, pCity_, pCity_->plot(), MISSION_ROUTE_TO, buildType, MOVE_SAFE_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, "City::checkResourceConnections");
+                        player_.pushWorkerMission(pUnit, pCity_, pCity_->plot(), MISSION_ROUTE_TO, buildType, MOVE_SAFE_TERRITORY, "City::checkResourceConnections");
 
 #ifdef ALTAI_DEBUG
                         {   // debug
@@ -1188,9 +1197,9 @@ namespace AltAI
                         if (pPlot->getRouteType() != routeType)
                         {
 #ifdef ALTAI_DEBUG
-                            os << "\n(connectCities) - Checking plot: " << pPlot->getCoords() << " for worker missions: " << getNumWorkersTargetingPlot(pPlot);
+                            os << "\n(connectCities) - Checking plot: " << pPlot->getCoords() << " for worker missions: " << getNumWorkersTargetingPlot(pPlot->getCoords());
 #endif
-                            if (getNumWorkersTargetingPlot(pPlot) == 0)
+                            if (getNumWorkersTargetingPlot(pPlot->getCoords()) == 0)
                             {
                                 pTargetPlots.push_back(pPlot);
                             }
@@ -1205,18 +1214,18 @@ namespace AltAI
                             //pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pTargetPlots[i]->getX(), pTargetPlots[0]->getY(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pTargetPlots[0]);
                             for (size_t plotIndex = 0, plotCount = pTargetPlots.size(); plotIndex < plotCount; ++plotIndex)
                             {                            
-                                player_.pushWorkerMission(pUnit, getCity(ci->second), pTargetPlots[plotCount - plotIndex - 1], MISSION_MOVE_TO, NO_BUILD, MOVE_NO_ENEMY_TERRITORY, false, "City::connectCities");
+                                player_.pushWorkerMission(pUnit, getCity(ci->second), pTargetPlots[plotCount - plotIndex - 1], MISSION_MOVE_TO, NO_BUILD, MOVE_NO_ENEMY_TERRITORY, "City::connectCities");
                             }
                         }
 
-                        //pUnit->getGroup()->pushMission(MISSION_ROUTE_TO, pTargetPlots[0]->getX(), pTargetPlots[0]->getY(), MOVE_SAFE_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, false, MISSIONAI_BUILD, pTargetPlots[0]);
+                        //pUnit->getGroup()->pushMission(MISSION_ROUTE_TO, pTargetPlots[0]->getX(), pTargetPlots[0]->getY(), MOVE_SAFE_TERRITORY, false, MISSIONAI_BUILD, pTargetPlots[0]);
                         BuildTypes buildType = GameDataAnalysis::getBuildTypeForRouteType(pUnit->getGroup()->getBestBuildRoute(pTargetPlots[0]));
                         for (size_t plotIndex = 1, plotCount = pTargetPlots.size(); plotIndex < plotCount; ++plotIndex)
                         {
                             //player_.pushWorkerMission(pUnit, getCity(ci->second), pTargetCityPlot, MISSION_ROUTE_TO, buildType, MOVE_NO_ENEMY_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, "City::connectCities");
-                            player_.pushWorkerMission(pUnit, getCity(ci->second), pTargetPlots[plotIndex], MISSION_ROUTE_TO, buildType, MOVE_NO_ENEMY_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, "City::connectCities");
+                            player_.pushWorkerMission(pUnit, getCity(ci->second), pTargetPlots[plotIndex], MISSION_ROUTE_TO, buildType, MOVE_NO_ENEMY_TERRITORY, "City::connectCities");
                         }
-                        player_.pushWorkerMission(pUnit, getCity(ci->second), pTargetCityPlot, MISSION_ROUTE_TO, buildType, MOVE_NO_ENEMY_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, "City::connectCities");
+                        player_.pushWorkerMission(pUnit, getCity(ci->second), pTargetCityPlot, MISSION_ROUTE_TO, buildType, MOVE_NO_ENEMY_TERRITORY, "City::connectCities");
 #ifdef ALTAI_DEBUG
                         {   // debug
                             RouteTypes currentRouteType = pTargetPlots[0]->getRouteType();
@@ -1323,9 +1332,9 @@ namespace AltAI
                     if (pPlot->getRouteType() != routeType)
                     {
 #ifdef ALTAI_DEBUG
-                        os << "\n(connectCity) - Checking plot: " << pPlot->getCoords() << " for worker missions: " << getNumWorkersTargetingPlot(pPlot);
+                        os << "\n(connectCity) - Checking plot: " << pPlot->getCoords() << " for worker missions: " << getNumWorkersTargetingPlot(pPlot->getCoords());
 #endif
-                        if (getNumWorkersTargetingPlot(pPlot) == 0)
+                        if (getNumWorkersTargetingPlot(pPlot->getCoords()) == 0)
                         {
                             pTargetPlots.push_back(pPlot);
                         }
@@ -1338,12 +1347,12 @@ namespace AltAI
                     if (!pUnit->atPlot(pTargetPlots[0]))
                     {
                         //pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pTargetPlots[i]->getX(), pTargetPlots[0]->getY(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pTargetPlots[0]);
-                        player_.pushWorkerMission(pUnit, pDestCity, pTargetPlots[0], MISSION_MOVE_TO, NO_BUILD, MOVE_SAFE_TERRITORY, false, "City::connectCities");
+                        player_.pushWorkerMission(pUnit, pDestCity, pTargetPlots[0], MISSION_MOVE_TO, NO_BUILD, MOVE_SAFE_TERRITORY, "City::connectCities");
                     }
 
                     //pUnit->getGroup()->pushMission(MISSION_ROUTE_TO, pTargetPlots[0]->getX(), pTargetPlots[0]->getY(), MOVE_SAFE_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, false, MISSIONAI_BUILD, pTargetPlots[0]);
                     BuildTypes buildType = GameDataAnalysis::getBuildTypeForRouteType(pUnit->getGroup()->getBestBuildRoute(pTargetPlots[0]));
-                    player_.pushWorkerMission(pUnit, pDestCity, pTargetCityPlot, MISSION_ROUTE_TO, buildType, MOVE_SAFE_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, "City::connectCities");
+                    player_.pushWorkerMission(pUnit, pDestCity, pTargetCityPlot, MISSION_ROUTE_TO, buildType, MOVE_SAFE_TERRITORY, "City::connectCities");
 #ifdef ALTAI_DEBUG
                     {   // debug
                         RouteTypes currentRouteType = pTargetPlots[0]->getRouteType();
@@ -1384,9 +1393,9 @@ namespace AltAI
 
 #ifdef ALTAI_DEBUG
                 std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
-                os << "\n(checkBadImprovementFeatures) - Checking plot: " << pPlot->getCoords() << " for worker missions: " << getNumWorkersTargetingPlot(pPlot);
+                os << "\n(checkBadImprovementFeatures) - Checking plot: " << pPlot->getCoords() << " for worker missions: " << getNumWorkersTargetingPlot(coords);
 #endif
-                if (getNumWorkersTargetingPlot(pPlot) > 0)
+                if (getNumWorkersTargetingPlot(coords) > 0)
                 {
                     continue;
                 }
@@ -1397,14 +1406,14 @@ namespace AltAI
                     if (pUnit->atPlot(pPlot))
                     {
                         //pUnit->getGroup()->pushMission(MISSION_BUILD, buildType, -1, 0, false, false, MISSIONAI_BUILD, pPlot);
-                        player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_BUILD, buildType, 0, false, "City::checkBadImprovementFeatures");
+                        player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_BUILD, buildType, 0, "City::checkBadImprovementFeatures");
                     }
                     else
                     {
                         //pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pPlot->getX(), pPlot->getY(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pPlot);
                         //pUnit->getGroup()->pushMission(MISSION_BUILD, buildType, -1, 0, (pUnit->getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot);
-                        player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_MOVE_TO, NO_BUILD, 0, false, "City::checkBadImprovementFeatures");
-                        player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_BUILD, buildType, 0, pUnit->getGroup()->getLengthMissionQueue() > 0, "City::checkBadImprovementFeatures");
+                        player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_MOVE_TO, NO_BUILD, 0, "City::checkBadImprovementFeatures");
+                        player_.pushWorkerMission(pUnit, pCity_, pPlot, MISSION_BUILD, buildType, 0, "City::checkBadImprovementFeatures");
                     }
 
 #ifdef ALTAI_DEBUG
@@ -1427,7 +1436,7 @@ namespace AltAI
         return false;
     }
 
-    bool City::checkIrrigation(CvUnitAI* pUnit, bool onlyForResources) const
+    bool City::checkIrrigation(CvUnitAI* pUnit, bool onlyForResources)
     {
         //boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()));
         //std::ostream& os = pCivLog->getStream();
@@ -1455,9 +1464,9 @@ namespace AltAI
                     CvPlot* pBuildPlot = gGlobals.getMap().plot(coordsAndBuildType.first.iX, coordsAndBuildType.first.iY);
 #ifdef ALTAI_DEBUG
                     std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity_->getOwner()))->getStream();
-                    os << "\n(checkIrrigation) - Checking plot: " << coordsAndBuildType.first << " for worker missions: " << getNumWorkersTargetingPlot(pBuildPlot);
+                    os << "\n(checkIrrigation) - Checking plot: " << coordsAndBuildType.first << " for worker missions: " << getNumWorkersTargetingPlot(coordsAndBuildType.first);
 #endif
-                    if (getNumWorkersTargetingPlot(pBuildPlot) > 1)  // irrigation chains can take some work - so allow up to two workers
+                    if (getNumWorkersTargetingPlot(coordsAndBuildType.first) > 1)  // irrigation chains can take some work - so allow up to two workers
                     {
                         continue;
                     }
@@ -1467,14 +1476,14 @@ namespace AltAI
                         if (pUnit->atPlot(pBuildPlot))
                         {
                             //pUnit->getGroup()->pushMission(MISSION_BUILD, coordsAndBuildType.second, -1, 0, false, false, MISSIONAI_BUILD, pBuildPlot);
-                            player_.pushWorkerMission(pUnit, pCity_, pBuildPlot, MISSION_BUILD, coordsAndBuildType.second, 0, false, "City::checkIrrigation");
+                            player_.pushWorkerMission(pUnit, pCity_, pBuildPlot, MISSION_BUILD, coordsAndBuildType.second, 0, "City::checkIrrigation");
                         }
                         else
                         {
                             //pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pBuildPlot->getX(), pBuildPlot->getY(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pBuildPlot);
                             //pUnit->getGroup()->pushMission(MISSION_BUILD, coordsAndBuildType.second, -1, 0, (pUnit->getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pBuildPlot);
-                            player_.pushWorkerMission(pUnit, pCity_, pBuildPlot, MISSION_MOVE_TO, NO_BUILD, MOVE_SAFE_TERRITORY, false, "City::checkIrrigation");
-                            player_.pushWorkerMission(pUnit, pCity_, pBuildPlot, MISSION_BUILD, coordsAndBuildType.second, 0, false, "City::checkIrrigation");
+                            player_.pushWorkerMission(pUnit, pCity_, pBuildPlot, MISSION_MOVE_TO, NO_BUILD, MOVE_SAFE_TERRITORY, "City::checkIrrigation");
+                            player_.pushWorkerMission(pUnit, pCity_, pBuildPlot, MISSION_BUILD, coordsAndBuildType.second, 0, "City::checkIrrigation");
                         }
 
 #ifdef ALTAI_DEBUG
@@ -1515,9 +1524,9 @@ namespace AltAI
         return player_.getNumWorkersTargetingCity(pCity_);
     }
 
-    int City::getNumWorkersTargetingPlot(const CvPlot* pTargetPlot) const
+    int City::getNumWorkersTargetingPlot(XYCoords targetCoords) const
     {
-        return player_.getNumWorkersTargetingPlot(pTargetPlot);
+        return player_.getNumWorkersTargetingPlot(targetCoords);
     }
 
     TotalOutput City::getMaxOutputs() const
@@ -1530,8 +1539,13 @@ namespace AltAI
         return optWeights_;
     }
 
-    const CityDataPtr& City::getCityData() const
+    const CityDataPtr& City::getCityData()
     {
+        if (flags_ & NeedsCityDataCalc)
+        {
+            pCityData_ = CityDataPtr(new CityData(pCity_));
+            flags_ &= ~NeedsCityDataCalc;
+        }
         return pCityData_;
     }
 
@@ -1540,23 +1554,39 @@ namespace AltAI
         return pCityImprovementManager_;
     }
 
-    const ProjectionLadder& City::getCurrentOutputProjection() const
+    const ProjectionLadder& City::getCurrentOutputProjection()
     {
+        if (flags_ & NeedsProjectionCalcs)
+        {
+            updateProjections_();
+        }
         return currentOutputProjection_;
     }
 
-    const ProjectionLadder& City::getBaseOutputProjection() const
+    const ProjectionLadder& City::getBaseOutputProjection()
     {
+        if (flags_ & NeedsProjectionCalcs)
+        {
+            updateProjections_();
+        }
         return baseOutputProjection_;
     }
 
-    const CityDataPtr& City::getProjectionCityData() const
+    const CityDataPtr& City::getProjectionCityData()
     {
+        if (flags_ & NeedsProjectionCalcs)
+        {
+            updateProjections_();
+        }
         return pProjectionCityData_;
     }
 
-    const CityDataPtr& City::getBaseProjectionCityData() const
+    const CityDataPtr& City::getBaseProjectionCityData()
     {
+        if (flags_ & NeedsProjectionCalcs)
+        {
+            updateProjections_();
+        }
         return pBaseProjectionCityData_;
     }
 
@@ -1582,9 +1612,9 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         boost::shared_ptr<CityLog> pCityLog = CityLog::getLog(pCity_);
-        CityOptimiser opt(pCityData_);
+        CityOptimiser opt(getCityData());
 
-        std::set<UnitTypes> unitTypes = pCityData_->getAvailableGPTypes();
+        std::set<UnitTypes> unitTypes = getCityData()->getAvailableGPTypes();
         for (std::set<UnitTypes>::const_iterator ci(unitTypes.begin()), ciEnd(unitTypes.end()); ci != ciEnd; ++ci)
         {
             opt.optimise(*ci, CityOptimiser::FlatGrowth);

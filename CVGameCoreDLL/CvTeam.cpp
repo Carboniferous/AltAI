@@ -26,7 +26,6 @@
 #include "game.h"
 #include "player.h"
 #include "team.h"
-#include "city.h"
 #include "iters.h"
 
 // Public Functions...
@@ -3325,6 +3324,16 @@ void CvTeam::makeHasMet(TeamTypes eIndex, bool bNewDiplo)
 	if (!isHasMet(eIndex))
 	{
 		m_abHasMet[eIndex] = true;
+
+        // AltAI
+        AltAI::PlayerIter playerIter(getID());
+        while (const CvPlayerAI* player = playerIter())
+        {
+            if (player->isUsingAltAI())
+            {
+                GC.getGame().getAltAI()->getPlayer(player->getID())->meetTeam(eIndex);
+            }
+        }
 
 		updateTechShare();
 

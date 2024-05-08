@@ -52,14 +52,14 @@ namespace AltAI
         int getFlatHurryAngryLength() const;
         int getAngryTimer() const;
 
-        std::pair<bool, HurryData> canHurry(const CityData& data, HurryTypes hurryType) const;
+        std::pair<bool, HurryData> canHurry(const CityData& data, HurryTypes hurryType, bool ignoreBuildQueue = false) const;
 
         void advanceTurns(int nTurns);
 
     private:
         void updateFlatHurryAngerLength_();
         int calcHurryPercentAnger_() const;
-        HurryData getHurryCosts_(const CityData& data, HurryTypes hurryType) const;
+        HurryData getHurryCosts_(const CityData& data, HurryTypes hurryType, bool ignoreBuildQueue) const;
         int getHurryCostModifier_(int baseHurryCostModifier, bool isNew) const;
 
         int globalHurryCostModifier_;

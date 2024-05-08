@@ -47,6 +47,10 @@ namespace AltAI
 
             void operator() (const BuildingInfo::BaseNode& node) const
             {
+                if (node.hurryCostModifier != 0)
+                {
+                    data_.getHurryHelper()->changeCostModifier(node.hurryCostModifier);
+                }
                 // add any base happy/health
                 if (node.happy > 0)
                 {
@@ -147,6 +151,14 @@ namespace AltAI
                         }
                     }
                 }
+
+                // change city gpp rate
+                if (node.cityGPPRateModifier != 0)
+                {
+                    data_.getSpecialistHelper()->changeCityGPPModifier(node.cityGPPRateModifier);
+                }
+
+                // node.generatedGPP - data added in calcCityOutput_() for this building
             }
 
             void operator() (const BuildingInfo::CommerceNode& node) const
@@ -293,20 +305,21 @@ namespace AltAI
                         }
                         data_.getModifiersHelper()->changeBonusYieldModifier(node.yieldModifier);
                     }
+
+                    // process new bonus
+                    if (node.freeBonusCount > 0)
+                    {
+                        data_.getBonusHelper()->changeNumBonuses(node.bonusType, node.freeBonusCount);
+                        updateRequestData(data_, pPlayer_->getAnalysis()->getResourceInfo(node.bonusType), true); 
+                    }
+
+                    // remove access to bonus for this city
+                    if (node.isRemoved)
+                    {
+                        data_.getBonusHelper()->allowOrDenyBonus(node.bonusType, false);                
+                        updateRequestData(data_, pPlayer_->getAnalysis()->getResourceInfo(node.bonusType), false);
+                    }
                 }
-            }
-
-            void operator() (const BuildingInfo::FreeBonusNode& node) const
-            {
-                data_.getBonusHelper()->changeNumBonuses(node.freeBonuses.first, node.freeBonuses.second);
-                updateCityData(data_, pPlayer_->getAnalysis()->getResourceInfo(node.freeBonuses.first), true); // process new bonus
-            }
-
-            void operator() (const BuildingInfo::RemoveBonusNode& node) const
-            {
-                data_.getBonusHelper()->allowOrDenyBonus(node.bonusType, false);
-                
-                updateCityData(data_, pPlayer_->getAnalysis()->getResourceInfo(node.bonusType), false);
             }
 
             void operator() (const BuildingInfo::CityDefenceNode& node) const
@@ -337,6 +350,18 @@ namespace AltAI
                     {
                         data_.getBuildingsHelper()->changeBuildingCommerceChange(getBuildingClass(buildingType_), commerceChange);
                     }
+                }
+            }
+
+            void operator() (const BuildingInfo::HurryNode& node) const
+            {
+                if (node.hurryAngerModifier != 0)
+                {
+                    data_.getHurryHelper()->changeModifier(node.hurryAngerModifier);
+                }
+                if (node.globalHurryCostModifier != 0)
+                {
+                    data_.getHurryHelper()->changeCostModifier(node.globalHurryCostModifier);
                 }
             }
 
@@ -407,6 +432,11 @@ namespace AltAI
                 {
                     data_.getHealthHelper()->setNoUnhealthinessFromPopulation();
                 }
+
+                if (node.noUnhappiness)
+                {
+                    data_.getHappyHelper()->setNoUnhappiness(true);
+                }
             }
 
         private:
@@ -456,6 +486,13 @@ namespace AltAI
                         }
                     }
                 }
+
+                // change global gpp rate
+                if (node.playerGPPRateModifier != 0)
+                {
+                    pCityData_->getSpecialistHelper()->changePlayerGPPModifier(node.playerGPPRateModifier);
+                }
+
             }
 
             void operator() (const BuildingInfo::YieldNode& node) const
@@ -541,10 +578,13 @@ namespace AltAI
                 }
             }
 
-            void operator() (const BuildingInfo::FreeBonusNode& node) const
+            void operator() (const BuildingInfo::BonusNode& node) const
             {
-                pCityData_->getBonusHelper()->changeNumBonuses(node.freeBonuses.first, node.freeBonuses.second);
-                updateCityData(*pCityData_, pPlayer_->getAnalysis()->getResourceInfo(node.freeBonuses.first), true); // process new bonus
+                if (node.freeBonusCount > 0)
+                {
+                    pCityData_->getBonusHelper()->changeNumBonuses(node.bonusType, node.freeBonusCount);
+                    updateRequestData(*pCityData_, pPlayer_->getAnalysis()->getResourceInfo(node.bonusType), true); 
+                }
             }
 
             void operator() (const BuildingInfo::PowerNode& node) const
@@ -585,6 +625,19 @@ namespace AltAI
                 if (node.globalHappy != 0)
                 {
                     pCityData_->getHappyHelper()->changePlayerBuildingHappiness(node.globalHappy);
+                }
+            }
+
+            void operator() (const BuildingInfo::ReligionNode& node) const
+            {
+                // todo
+            }
+
+            void operator() (const BuildingInfo::HurryNode& node) const
+            {
+                if (node.globalHurryCostModifier != 0)
+                {
+                    pCityData_->getHurryHelper()->changeCostModifier(node.globalHurryCostModifier);
                 }
             }
 
@@ -632,6 +685,7 @@ namespace AltAI
         boost::apply_visitor(CityGlobalOutputUpdater(pCityData, pBuiltCity), pBuildingInfo->getInfo());
         pCityData->recalcOutputs();
 #ifdef ALTAI_DEBUG
+        os << "\n\toutput after: ";
         pCityData->debugBasicData(os);
 #endif
     }
@@ -713,10 +767,10 @@ namespace AltAI
         }
     };
 
-    BuildingInfo::BaseNode getBadNodes(const BuildingInfo::BuildingInfoNode& node)
+    /*BuildingInfo::BaseNode getBadNodes(const BuildingInfo::BuildingInfoNode& node)
     {
         return boost::get<BuildingInfo::BaseNode>(boost::apply_visitor(BadBuildingNodeFinder(), node));
-    }
+    }*/
 
     class CommerceFinder : public boost::static_visitor<Commerce>
     {
@@ -920,18 +974,28 @@ namespace AltAI
                 {
                     return true;
                 }
+
+                if (node.freeBonusCount > 0)
+                {
+                    return true;
+                }
+
+                if (node.isRemoved)
+                {
+                    return true;
+                }
             }
             return false;
         }
 
-        result_type operator() (const BuildingInfo::FreeBonusNode& node) const
+        result_type operator() (const BuildingInfo::ReligionNode& node) const
         {
-            return true;
+            return node.prereqReligion != NO_RELIGION && data_.getReligionHelper()->getReligionCount(node.prereqReligion) > 0;
         }
 
-        result_type operator() (const BuildingInfo::RemoveBonusNode& node) const
+        result_type operator() (const BuildingInfo::HurryNode& node) const            
         {
-            return true;
+            return node.globalHurryCostModifier != 0 || node.hurryAngerModifier != 0;
         }
 
         result_type operator() (const BuildingInfo::AreaEffectNode& node) const
@@ -941,15 +1005,7 @@ namespace AltAI
 
         result_type operator() (const BuildingInfo::MiscEffectNode& node) const
         {
-            // currently, this test is effectively the same as just returning true, as we don't create the node unless at least one filed is set to a non-default value
-            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.globalPopChange != 0 || 
-                node.hurryAngerModifier != 0 || node.isGovernmentCenter || node.makesCityCapital ||
-                node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation || node.startsGoldenAge)
-            {
-                return true;
-            }
-
-            return false;
+            return !isEmpty(node);
         }
 
     private:
@@ -1017,34 +1073,24 @@ namespace AltAI
             return true;
         }
 
-        result_type operator() (const BuildingInfo::FreeBonusNode&) const
-        {
-            return true;
-        }
-
-        result_type operator() (const BuildingInfo::RemoveBonusNode&) const
-        {
-            return true;
-        }
-
         result_type operator() (const BuildingInfo::PowerNode&) const
+        {
+            return true;
+        }
+
+        result_type operator() (const BuildingInfo::ReligionNode& node) const
+        {
+            return true;
+        }
+
+        result_type operator() (const BuildingInfo::HurryNode& node)
         {
             return true;
         }
 
         result_type operator() (const BuildingInfo::MiscEffectNode& node) const
         {
-            // currently, this test is effectively the same as just returning true, as we don't create the node unless at least one filed is set to a non-default value
-            if (node.cityMaintenanceModifierChange != 0 || node.foodKeptPercent != 0 || node.globalPopChange != 0 || 
-                node.hurryAngerModifier != 0 || node.isGovernmentCenter || node.makesCityCapital ||
-                node.noUnhealthinessFromBuildings || node.noUnhealthinessFromPopulation || node.startsGoldenAge)
-            {
-                return true;
-            }
-
-            return false;
-
-            return false;
+            return !isEmpty(node);
         }
     };
 
@@ -1088,11 +1134,16 @@ namespace AltAI
             return true;
         }
     
-        result_type operator() (const BuildingInfo::FreeBonusNode& node) const
+        result_type operator() (const BuildingInfo::BonusNode& node) const
         {
-            PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
+            std::pair<int, int> militaryUnitCounts;
 
-            std::pair<int, int> militaryUnitCounts = getResourceMilitaryUnitCount(pPlayer->getAnalysis()->getResourceInfo(node.freeBonuses.first));
+            if (node.freeBonusCount > 0)
+            {
+                PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
+
+                std::pair<int, int> militaryUnitCounts = getResourceMilitaryUnitCount(pPlayer->getAnalysis()->getResourceInfo(node.bonusType));
+            }
 
             return militaryUnitCounts.first > 0 || militaryUnitCounts.second > 0;
         }
@@ -1307,7 +1358,8 @@ namespace AltAI
     }
 
     std::map<XYCoords, PlotYield> getExtraConditionalYield(const std::pair<XYCoords, std::map<int, std::set<XYCoords> > >& plotData,
-        const std::vector<ConditionalPlotYieldEnchancingBuilding>& conditionalYieldEnchancingBuildings, PlayerTypes playerType, int lookaheadDepth)
+        const std::vector<ConditionalPlotYieldEnchancingBuilding>& conditionalYieldEnchancingBuildings, PlayerTypes playerType, int lookaheadDepth,
+        std::map<BuildingTypes, PlotYield>& requiredBuildings)
     {
         std::map<XYCoords, PlotYield> extraYieldsMap;
         for (size_t i = 0, count = conditionalYieldEnchancingBuildings.size(); i < count; ++i)
@@ -1347,6 +1399,7 @@ namespace AltAI
                     if ((pPlot->*(conditionalYieldEnchancingBuildings[i].conditionalYieldChanges[j].first))())
                     {
                         extraYieldsMap[plotData.first] += conditionalYieldEnchancingBuildings[i].conditionalYieldChanges[j].second;
+                        requiredBuildings[conditionalYieldEnchancingBuildings[i].buildingType] += conditionalYieldEnchancingBuildings[i].conditionalYieldChanges[j].second;
                     }
 
                     for (std::map<int, std::set<XYCoords> >::const_iterator ci(plotData.second.begin()), ciEnd(plotData.second.end()); ci != ciEnd; ++ci)
@@ -1358,6 +1411,7 @@ namespace AltAI
                             if ((pPlot->*(conditionalYieldEnchancingBuildings[i].conditionalYieldChanges[j].first))())
                             {
                                 extraYieldsMap[*si] += conditionalYieldEnchancingBuildings[i].conditionalYieldChanges[j].second;
+                                requiredBuildings[conditionalYieldEnchancingBuildings[i].buildingType] += conditionalYieldEnchancingBuildings[i].conditionalYieldChanges[j].second;
                             }
                         }
                     }
@@ -1485,11 +1539,12 @@ namespace AltAI
 
         bool operator() (const BuildingInfo::ReligionNode& node) const
         {
-            return node.prereqReligion == NO_RELIGION ? true : player_.getCvPlayer()->getHasReligionCount(node.prereqReligion) > 0;
+            return node.prereqReligion == NO_RELIGION || player_.getCvPlayer()->getHasReligionCount(node.prereqReligion) > 0;
         }
 
         bool operator() (const BuildingInfo::MiscEffectNode& node) const
         {
+            // can't build buildings which make city a gov centre if city is already a gov centre
             return !(node.isGovernmentCenter && pCity_ && pCity_->isGovernmentCenter());
         }
 

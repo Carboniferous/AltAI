@@ -14,7 +14,6 @@
 // AltAI headers
 #include "game.h"
 #include "player.h"
-#include "city.h"
 
 // Public Functions...
 
@@ -78,7 +77,7 @@ void CvSelectionGroupAI::AI_separate()
 		pLoopUnit->joinGroup(NULL);
 		if (pLoopUnit->plot()->getTeam() == getTeam())
 		{
-			pLoopUnit->getGroup()->pushMission(MISSION_SKIP);
+			pLoopUnit->getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 		}
 	}
 }
@@ -99,7 +98,7 @@ void CvSelectionGroupAI::AI_seperateNonAI(UnitAITypes eUnitAI)
 			pLoopUnit->joinGroup(NULL);
 			if (pLoopUnit->plot()->getTeam() == getTeam())
 			{
-				pLoopUnit->getGroup()->pushMission(MISSION_SKIP);
+				pLoopUnit->getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			}
 		}
 	}
@@ -121,7 +120,7 @@ void CvSelectionGroupAI::AI_seperateAI(UnitAITypes eUnitAI)
 			pLoopUnit->joinGroup(NULL);
 			if (plot()->getTeam() == getTeam())
 			{
-				pLoopUnit->getGroup()->pushMission(MISSION_SKIP);
+				pLoopUnit->getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			}
 		}
 	}
@@ -274,7 +273,7 @@ bool CvSelectionGroupAI::AI_update()
 			{
 				if (!bFollow && readyToMove(true))
 				{
-					pushMission(MISSION_SKIP);
+					pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 				}
 			}
 		}

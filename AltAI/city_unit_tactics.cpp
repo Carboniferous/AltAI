@@ -39,7 +39,7 @@ namespace AltAI
         return dependentTactics_;
     }
 
-    void CityUnitTactics::update(const Player& player, const CityDataPtr& pCityData)
+    void CityUnitTactics::update(Player& player, const CityDataPtr& pCityData)
     {
         if (gGlobals.getUnitInfo(unitType_).isFoodProduction())
         {
@@ -48,7 +48,7 @@ namespace AltAI
             std::vector<IProjectionEventPtr> events;
             events.push_back(IProjectionEventPtr(new ProjectionUnitEvent(pCityData_->getCity(), player.getAnalysis()->getUnitInfo(unitType_))));
             ConstructItem constructItem(unitType_);
-            projection_ = getProjectedOutput(player, pCityData_, 30, events, constructItem, __FUNCTION__);
+            projection_ = getProjectedOutput(player, pCityData_, player.getAnalysis()->getNumSimTurns(), events, constructItem, __FUNCTION__);
         }
         else
         {
@@ -100,7 +100,7 @@ namespace AltAI
             const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner);
 #ifdef ALTAI_DEBUG
             std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-            os << "\n\tCityUnitTactics::apply: ignore flags = " << ignoreFlags;
+            os << "\n\tCityUnitTactics::apply: ignore flags = " << ignoreFlagToString(ignoreFlags);
             debug(os);
 #endif
             apply_(selectionData);
@@ -196,6 +196,7 @@ namespace AltAI
             pCityUnitTactics = CityUnitTacticsPtr(new CityUnitTactics());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in CityUnitTactics::factoryRead");
             break;
         }
 
@@ -263,6 +264,7 @@ namespace AltAI
             pUnitTactics = UnitTacticsPtr(new UnitTactics());
             break;
         default:
+            FAssertMsg(true, "Unexpected ID in UnitTactics::factoryRead");
             break;
         }
 
@@ -300,13 +302,13 @@ namespace AltAI
         techDependencies_.push_back(pTechDependency);
     }
 
-    void UnitTactics::update(const Player& player)
+    void UnitTactics::update(Player& player)
     {
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
             if (getCity(iter->first))
             {
-                const City& city = player.getCity(iter->first.iID);
+                City& city = player.getCity(iter->first.iID);
                 iter->second->update(player, city.getCityData());
             }
         }
@@ -344,7 +346,7 @@ namespace AltAI
 
     bool UnitTactics::areDependenciesSatisfied(const Player& player, int ignoreFlags) const
     {
-        if (!areTechDependenciesSatisfied(player))
+        if (!(ignoreFlags & IDependentTactic::Ignore_Techs) && !areTechDependenciesSatisfied(player))
         {
             return false;
         }
@@ -357,7 +359,7 @@ namespace AltAI
             }
         }
 
-        return false;
+        return cityTactics_.empty();  // if we pass the tech test and city tactics are empty - treat as deps are satisfied (so we know what we can build before we actually build our first city)
     }
 
     bool UnitTactics::areTechDependenciesSatisfied(const Player& player) const
@@ -412,6 +414,8 @@ namespace AltAI
 
                     for (size_t j = 0, depItemCount = thisDepBonusItems.size(); j < depItemCount; ++j)
                     {
+                        // todo - maybe use Ignore_Resource_Techs flag instead to allow 
+                        // finer distinction between needing the tech for the unit and the tech(s) for (a) required resource(s)
                         TechTypes resourceRevealTech = getTechForResourceReveal(pPlayer->getAnalysis()->getResourceInfo((BonusTypes)thisDepBonusItems[j].second));
                         if (resourceRevealTech != NO_TECH && pPlayer->getAnalysis()->getTechResearchDepth(resourceRevealTech) > 0)
                         {

@@ -15,7 +15,7 @@ namespace AltAI
         void addTactic(const ICityUnitTacticPtr& pBuildingTactic);
         void addDependency(const IDependentTacticPtr& pDependentTactic);
         const std::vector<IDependentTacticPtr>& getDependencies() const;
-        void update(const Player& player, const CityDataPtr& pCityData);
+        void update(Player& player, const CityDataPtr& pCityData);
         void updateDependencies(const Player& player, const CvCity* pCity);
         bool areDependenciesSatisfied(int ignoreFlags) const;
         void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
@@ -59,7 +59,7 @@ namespace AltAI
         void addTactic(const ICityUnitTacticPtr& pBuildingTactic);
         void addDependency(const IDependentTacticPtr& pDependentTactic);
         void addTechDependency(const ResearchTechDependencyPtr& pTechDependency);
-        void update(const Player& player);
+        void update(Player& player);
         void updateDependencies(const Player& player);
         void addCityTactic(IDInfo city, const CityUnitTacticsPtr& pCityTactic);
         CityUnitTacticsPtr getCityTactics(IDInfo city) const;

@@ -10,7 +10,6 @@
 #include "./player.h"
 #include "./player_analysis.h"
 #include "./maintenance_helper.h"
-#include "./city.h"
 
 #include "boost/lexical_cast.hpp"
 
@@ -298,6 +297,10 @@ namespace AltAI
 
             results.buildingResults.push_back(simulationResults);
         }
+    }
+
+    void CitySimulation::simulateMultipleHurries(int nTurns, HurryTypes hurryType)
+    {
     }
 
     void CitySimulation::simulateHurry_(BuildingSimulationResults::BuildingResult& buildingResult, const HurryData& hurryData, int nTurns)

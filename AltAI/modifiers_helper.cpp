@@ -7,7 +7,6 @@
 #include "./city_data.h"
 #include "./game.h"
 #include "./player.h"
-#include "./city.h"
 #include "./player_analysis.h"
 
 namespace AltAI

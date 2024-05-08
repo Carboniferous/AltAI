@@ -40,15 +40,15 @@ namespace AltAI
 
         struct Entry
         {
-            Entry() : pop(0), turns(0), cost(0), foodKeptPercent(0), accumulatedProduction(0) {}
+            Entry() : pop(0), turns(0), cost(0), storedFood(0), accumulatedProduction(0) {}
             Entry(int pop_, int turns_, int foodKeptPercent_, int accumulatedProduction_, 
                   TotalOutput output_, TotalOutput processOutput_, int cost_, const GreatPersonOutputMap& gpp_)
-                : pop(pop_), turns(turns_), foodKeptPercent(foodKeptPercent_), accumulatedProduction(accumulatedProduction_),
+                : pop(pop_), turns(turns_), storedFood(foodKeptPercent_), accumulatedProduction(accumulatedProduction_),
                   output(output_), processOutput(processOutput_), cost(cost_), gpp(gpp_)
             {
             }
             int pop, turns, cost;
-            int foodKeptPercent;
+            int storedFood;
             int accumulatedProduction;
             TotalOutput output, processOutput;
             PlotDataList workedPlots;
@@ -65,6 +65,7 @@ namespace AltAI
 
         TotalOutput getOutput() const;
         TotalOutput getProcessOutput() const;
+        int getAccumulatedProduction() const;
         //TotalOutput getOutputAfter(int turn) const;
         int getGPPTotal() const;
 

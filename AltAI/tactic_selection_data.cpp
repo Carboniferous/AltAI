@@ -85,6 +85,35 @@ namespace AltAI
                 }
             }
         }
+
+        template <typename TacticValueT>
+            struct IsCityTactic
+        {
+            explicit IsCityTactic(IDInfo city_) : city(city_) {}
+
+            bool operator() (const TacticValueT& tacticValue) const
+            {
+                return tacticValue.city == city;
+            }
+
+            IDInfo city;
+        };
+
+        template <typename TacticValueContainer>
+            void eraseCityTacticValues(TacticValueContainer& container, IDInfo city)
+            {
+                for (TacticValueContainer::iterator iter(container.begin()); iter != container.end();)
+                {
+                    if (iter->city == city)
+                    {
+                        container.erase(iter++);
+                    }
+                    else
+                    {
+                        ++iter;
+                    }
+                }
+            }
     }
 
     void TacticSelectionData::merge(const TacticSelectionData& other)
@@ -98,23 +127,41 @@ namespace AltAI
         // dependentBuildings
         // economicWonders, nationalWonders
         militaryBuildings.insert(other.militaryBuildings.begin(), other.militaryBuildings.end());
-        // cityDefenceUnits, cityAttackUnits, collateralUnits, scoutUnits
+
+        cityDefenceUnits.insert(other.cityDefenceUnits.begin(), other.cityDefenceUnits.end());
+        thisCityDefenceUnits.insert(other.thisCityDefenceUnits.begin(), other.thisCityDefenceUnits.end());
+        cityAttackUnits.insert(other.cityAttackUnits.begin(), other.cityAttackUnits.end());
+        collateralUnits.insert(other.collateralUnits.begin(), other.collateralUnits.end());
+        scoutUnits.insert(other.scoutUnits.begin(), other.scoutUnits.end());
+
         // workerUnits, settlerUnits, connectableResources
+
         std::copy(other.cultureSources.begin(), other.cultureSources.end(), std::back_inserter(cultureSources));
         // exclusions
         cityImprovementsDelta += other.cityImprovementsDelta;
-        getFreeTech = getFreeTech || other.getFreeTech;
-        freeTechValue += other.freeTechValue;
+        possibleFreeTech = other.possibleFreeTech == NO_TECH ? possibleFreeTech : other.possibleFreeTech;  // not ideal
         resourceOutput += other.resourceOutput;
         // processOutputsMap
     }
 
     bool CultureBuildingValue::operator < (const CultureBuildingValue& other) const
     {
+        if (city == other.city)
+        {
+            return buildingType < other.buildingType;
+        }
+        else
+        {
+            return city < other.city;
+        }
+    }
+
+    bool CultureBuildingTacticValueComp::operator () (const CultureBuildingValue& first, const CultureBuildingValue& second) const
+    {
         TotalOutputWeights weights = makeOutputW(1, 1, 1, 1, 20, 1);
         TotalOutputValueFunctor valueF(weights);
 
-        return valueF(output) / std::max<int>(1, nTurns) > valueF(other.output) / std::max<int>(1, other.nTurns);
+        return valueF(first.output) / std::max<int>(1, first.nTurns) > valueF(second.output) / std::max<int>(1, second.nTurns);
     }
 
     void CultureBuildingValue::debug(std::ostream& os) const
@@ -124,10 +171,22 @@ namespace AltAI
 
     bool EconomicBuildingValue::operator < (const EconomicBuildingValue& other) const
     {
+        if (city == other.city)
+        {
+            return buildingType < other.buildingType;
+        }
+        else
+        {
+            return city < other.city;
+        }
+    }
+
+    bool EconomicBuildingTacticValueComp::operator () (const EconomicBuildingValue& first, const EconomicBuildingValue& second) const
+    {
         TotalOutputWeights weights = makeOutputW(10, 10, 10, 10, 1, 1);
         TotalOutputValueFunctor valueF(weights);
 
-        return valueF(output) / std::max<int>(1, nTurns) > valueF(other.output) / std::max<int>(1, other.nTurns);
+        return valueF(first.output) / std::max<int>(1, first.nTurns) > valueF(second.output) / std::max<int>(1, second.nTurns);
     }
 
     void EconomicBuildingValue::debug(std::ostream& os) const
@@ -280,12 +339,43 @@ namespace AltAI
     {
         os << " civic: " << (civicType == NO_CIVIC ? " none " : gGlobals.getCivicInfo(civicType).getType())
             << " delta = " << outputDelta << ", cost = " << cost;
+
+        if (!isEmpty(yieldOutputDelta.first))
+        {
+            os << "\n\tPossible civic yield output delta: " << " delta = " << yieldOutputDelta.first << ", %age = " << yieldOutputDelta.second;
+        }
+
+        os << " Possible output % incr = " << outputRateDelta;
     }
 
     bool UnitTacticValue::operator < (const UnitTacticValue& other) const
     {
-        return unitAnalysisValue / std::max<int>(1, nTurns) > other.unitAnalysisValue / std::max<int>(1, other.nTurns);
+        if (city == other.city)
+        {
+            return unitType < other.unitType;
+        }
+        else
+        {
+            return city < other.city;
+        }
     }
+
+    bool UnitTacticValueComp::operator () (const UnitTacticValue& first, const UnitTacticValue& second) const
+    {
+        return first.unitAnalysisValue / std::max<int>(1, first.nTurns) > second.unitAnalysisValue / std::max<int>(1, second.nTurns);
+    }
+
+    bool UnitTacticTypeLevelComp::operator () (const UnitTacticValue& first, const UnitTacticValue& second) const
+    {
+        if (first.unitType == second.unitType)
+        {
+            return first.level < second.level;
+        }
+        else
+        {
+            return first.unitType < second.unitType;
+        }
+    }    
 
     void UnitTacticValue::debug(std::ostream& os) const
     {
@@ -568,7 +658,7 @@ namespace AltAI
         }
         else
         {
-            for (std::multiset<EconomicBuildingValue>::const_iterator ci(economicBuildings.begin()), ciEnd(economicBuildings.end()); ci != ciEnd; ++ci)
+            for (std::set<EconomicBuildingValue>::const_iterator ci(economicBuildings.begin()), ciEnd(economicBuildings.end()); ci != ciEnd; ++ci)
             {
                 if (ci->buildingType == buildingType)
                 {
@@ -580,18 +670,85 @@ namespace AltAI
         return output;
     }
 
-    bool TacticSelectionData::isSignificantTacticItem(const EconomicBuildingValue& tacticItemValue, TotalOutput currentOutput, const std::vector<OutputTypes>& outputTypes)
+    void TacticSelectionData::eraseCityEntries(IDInfo city)
+    {
+        eraseCityTacticValues(smallCultureBuildings, city);
+        eraseCityTacticValues(largeCultureBuildings, city);
+        eraseCityTacticValues(economicBuildings, city);
+        eraseCityTacticValues(cityDefenceUnits, city);
+        eraseCityTacticValues(thisCityDefenceUnits, city);
+        eraseCityTacticValues(cityAttackUnits, city);
+        eraseCityTacticValues(fieldAttackUnits, city);
+        eraseCityTacticValues(fieldDefenceUnits, city);
+        eraseCityTacticValues(collateralUnits, city);
+        eraseCityTacticValues(scoutUnits, city);
+        eraseCityTacticValues(seaCombatUnits, city);
+    }
+
+    bool TacticSelectionData::isSignificantTacticItem(const EconomicBuildingValue& tacticItemValue, TotalOutput currentOutput, const int numTurns, const std::vector<OutputTypes>& outputTypes)
     {
         bool isSignificant = false;
         for (int i = 0, count = outputTypes.size(); i < count; ++i)
         {
-            if (tacticItemValue.output[outputTypes[i]] > currentOutput[outputTypes[i]] * 30 / 50) // > 2% current total
+            if (tacticItemValue.output[outputTypes[i]] > currentOutput[outputTypes[i]] * numTurns / 50) // > 2% current total
             {
                 isSignificant = true;
                 break;
             }
         }
         return isSignificant;
+    }
+
+    int TacticSelectionData::getUnitTacticValue(const std::set<UnitTacticValue>& unitValues)
+    {
+        int value = 0;
+        for (std::set<UnitTacticValue>::const_iterator ci(unitValues.begin()), ciEnd(unitValues.end()); ci != ciEnd; ++ci)
+        {
+            value += ci->unitAnalysisValue;
+        }
+        return value;
+    }
+
+    std::set<UnitTacticValue>::const_iterator TacticSelectionData::getBestUnitTactic(const std::set<UnitTacticValue>& unitValues)
+    {
+        std::set<UnitTacticValue>::const_iterator mIter(unitValues.begin());
+        for (std::set<UnitTacticValue>::const_iterator ci(++mIter), ciEnd(unitValues.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->unitAnalysisValue > mIter->unitAnalysisValue)
+            {
+                mIter = ci;
+            }
+        }
+        return mIter;
+    }
+
+    std::list<std::pair<IDInfo, size_t> > TacticSelectionData::getCityBuildTimes(const std::set<UnitTacticValue>& unitValues, UnitTypes unitType)
+    {
+        std::list<std::pair<IDInfo, size_t> > buildTimes;
+        for (std::set<UnitTacticValue>::const_iterator ci(unitValues.begin()), ciEnd(unitValues.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->unitType == unitType && ci->nTurns >= 0)
+            {
+                buildTimes.push_back(std::make_pair(ci->city, ci->nTurns));
+            }
+        }
+        return buildTimes;
+    }
+
+    std::list<std::pair<UnitTypes, int> > TacticSelectionData::getUnitValueDiffs(const std::set<UnitTacticValue>& tacticUnitValues, const std::set<UnitTacticValue>& refUnitValues)
+    {
+        std::list<std::pair<UnitTypes, int> > unitValueDiffs;
+
+        for (std::set<UnitTacticValue>::const_iterator ui(tacticUnitValues.begin()), uiEnd(tacticUnitValues.end()); ui != uiEnd; ++ui)
+        {
+            std::set<UnitTacticValue>::const_iterator baseIter = refUnitValues.find(*ui);
+            if (baseIter != refUnitValues.end())
+            {
+                unitValueDiffs.push_back(std::make_pair(baseIter->unitType, asPercentageOf(ui->unitAnalysisValue - baseIter->unitAnalysisValue, baseIter->unitAnalysisValue)));
+            }
+        }
+
+        return unitValueDiffs;
     }
 
     void TacticSelectionData::debug(std::ostream& os) const
@@ -601,7 +758,7 @@ namespace AltAI
         {
             os << "\n\tSmall culture buildings: ";
         }
-        for (std::multiset<CultureBuildingValue>::const_iterator ci(smallCultureBuildings.begin()), ciEnd(smallCultureBuildings.end());
+        for (std::set<CultureBuildingValue>::const_iterator ci(smallCultureBuildings.begin()), ciEnd(smallCultureBuildings.end());
             ci != ciEnd; ++ci)
         {
             os << "\n\t";
@@ -612,7 +769,7 @@ namespace AltAI
         {
             os << "\n\tLarge culture buildings: ";
         }
-        for (std::multiset<CultureBuildingValue>::const_iterator ci(largeCultureBuildings.begin()), ciEnd(largeCultureBuildings.end());
+        for (std::set<CultureBuildingValue>::const_iterator ci(largeCultureBuildings.begin()), ciEnd(largeCultureBuildings.end());
             ci != ciEnd; ++ci)
         {
             os << "\n\t";
@@ -623,7 +780,7 @@ namespace AltAI
         {
             os << "\n\tEconomic buildings: ";
         }
-        for (std::multiset<EconomicBuildingValue>::const_iterator ci(economicBuildings.begin()), ciEnd(economicBuildings.end());
+        for (std::set<EconomicBuildingValue>::const_iterator ci(economicBuildings.begin()), ciEnd(economicBuildings.end());
             ci != ciEnd; ++ci)
         {
             os << "\n\t";
@@ -734,10 +891,24 @@ namespace AltAI
         {
             os << "\n\tPotential resources: ";
         }
-        for (std::map<BonusTypes, TotalOutput>::const_iterator ci(potentialResourceOutputDeltas.begin()), ciEnd(potentialResourceOutputDeltas.end());
+        for (std::map<BonusTypes, std::pair<TotalOutput, TotalOutput> >::const_iterator ci(potentialResourceOutputDeltas.begin()), ciEnd(potentialResourceOutputDeltas.end());
             ci != ciEnd; ++ci)
         {
-            os << " " << gGlobals.getBonusInfo(ci->first).getType() << " delta = " << ci->second;
+            os << " " << gGlobals.getBonusInfo(ci->first).getType() << " delta = " << ci->second.first << ", %age = " << ci->second.second;
+        }
+
+        if (!potentialAcceleratedBuildings.empty())
+        {
+            os << "\n\tPotentially accelerated buildings: ";
+        }
+        for (std::map<BonusTypes, std::vector<BuildingTypes> >::const_iterator ci(potentialAcceleratedBuildings.begin()), ciEnd(potentialAcceleratedBuildings.end());
+            ci != ciEnd; ++ci)
+        {
+            os << " for resource: " << gGlobals.getBonusInfo(ci->first).getType() << " - buildings: ";
+            for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+            {
+                os << " " << gGlobals.getBuildingInfo(ci->second[i]).getType();
+            }
         }
 
         for (size_t i = 0, count = cultureSources.size(); i < count; ++i)
@@ -765,9 +936,14 @@ namespace AltAI
             os << "\n\tProcess: " << gGlobals.getProcessInfo(ci->first).getType() << " output = " << ci->second;
         }
 
-        if (getFreeTech)
+        if (possibleFreeTech != NO_TECH)
         {
-            os << "\n\tGives free tech, value = " << freeTechValue;
+            os << "\n\tGives free tech, possible choice = " << gGlobals.getTechInfo(possibleFreeTech).getType(); 
+        }
+
+        if (!isEmpty(baselineDelta))
+        {
+            os << "\n\tBaseline delta output = " << baselineDelta;
         }
 
         if (!isEmpty(resourceOutput))

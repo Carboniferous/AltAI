@@ -30,7 +30,6 @@
 // Alt-AI
 #include "game.h"
 #include "player.h"
-#include "city.h"
 #include "iters.h"
 
 // Public Functions...
@@ -88,7 +87,7 @@ void CvUnit::reloadEntity()
 }
 
 
-void CvUnit::init(int iID, UnitTypes eUnit, UnitAITypes eUnitAI, PlayerTypes eOwner, int iX, int iY, DirectionTypes eFacingDirection)
+void CvUnit::init(int iID, UnitTypes eUnit, UnitAITypes eUnitAI, PlayerTypes eOwner, int iX, int iY, DirectionTypes eFacingDirection, const CvUnit* pUpgradingUnit)
 {
 	CvWString szBuffer;
 	int iUnitName;
@@ -257,12 +256,6 @@ void CvUnit::init(int iID, UnitTypes eUnit, UnitAITypes eUnitAI, PlayerTypes eOw
     CvEventReporter::getInstance().unitCreated(this);
 
     // AltAI
-    if (GET_PLAYER(m_eOwner).isUsingAltAI())
-    {
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->addUnit((CvUnitAI*)this);
-    }
-
-    // AltAI
     AltAI::PlayerIter playerIter;
     while (const CvPlayerAI* player = playerIter())
     {
@@ -271,7 +264,11 @@ void CvUnit::init(int iID, UnitTypes eUnit, UnitAITypes eUnitAI, PlayerTypes eOw
             TeamTypes teamType = player->getTeam();
             bool unitPlotVisible = plot()->isVisible(teamType, false);
 
-            if (unitPlotVisible)
+            if (eOwner == player->getID())
+            {
+                GC.getGame().getAltAI()->getPlayer(player->getID())->addOurUnit((CvUnitAI*)this, pUpgradingUnit);
+            }
+            else if (unitPlotVisible)
             {
                 GC.getGame().getAltAI()->getPlayer(player->getID())->addPlayerUnit((CvUnitAI*)this, plot());
             }
@@ -651,19 +648,16 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer)
         if (player->isUsingAltAI())
         {
             TeamTypes teamType = player->getTeam();
-            bool unitPlotVisible = pPlot->isVisible(teamType, false);
 
-            if (unitPlotVisible)
+            if (getOwnerINLINE() == player->getID())
+            {
+                GC.getGame().getAltAI()->getPlayer(player->getID())->deleteOurUnit(this, pPlot);
+            }
+            else if (pPlot->isVisible(teamType, false))
             {
                 GC.getGame().getAltAI()->getPlayer(player->getID())->deletePlayerUnit((CvUnitAI*)this, pPlot);
             }
         }
-    }
-
-    // AltAI
-    if (GET_PLAYER(m_eOwner).isUsingAltAI())
-    {
-        GC.getGame().getAltAI()->getPlayer(eOwner)->deleteUnit(this);
     }
 
 	GET_PLAYER(getOwnerINLINE()).deleteUnit(getID());
@@ -690,7 +684,8 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer)
 
 				pkCapturedUnit->finishMoves();
 
-				if (!GET_PLAYER(eCapturingPlayer).isHuman())
+                // add extra check to avoid AltAI automatically disbanding captured units
+                if (!GET_PLAYER(eCapturingPlayer).isHuman() && !GET_PLAYER(eCapturingPlayer).isUsingAltAI())
 				{
 					CvPlot* pPlot = pkCapturedUnit->plot();
 					if (pPlot && !pPlot->isCity(false))
@@ -837,7 +832,7 @@ void CvUnit::updateAirStrike(CvPlot* pPlot, bool bQuick, bool bFinish)
 	setCombatUnit(NULL);
 	setAttackPlot(NULL, false);
 
-	getGroup()->clearMissionQueue();
+	getGroup()->clearMissionQueue(__FUNCTION__);
 
 	if (isSuicide() && !isDead())
 	{
@@ -971,7 +966,7 @@ void CvUnit::updateAirCombat(bool bQuick)
 		setAttackPlot(NULL, false);
 		setCombatUnit(NULL);
 
-		getGroup()->clearMissionQueue();
+		getGroup()->clearMissionQueue(__FUNCTION__);
 
 		return;
 	}
@@ -1279,7 +1274,7 @@ void CvUnit::updateCombat(bool bQuick)
 
 		getGroup()->groupMove(pPlot, true, ((canAdvance(pPlot, 0)) ? this : NULL));
 
-		getGroup()->clearMissionQueue();
+		getGroup()->clearMissionQueue(__FUNCTION__);
 
 		return;
 	}
@@ -1321,7 +1316,7 @@ void CvUnit::updateCombat(bool bQuick)
 			setCombatUnit(pDefender, true);
 			pDefender->setCombatUnit(this, false);
 
-			pDefender->getGroup()->clearMissionQueue();
+			pDefender->getGroup()->clearMissionQueue(__FUNCTION__);
 
 			bool bFocused = (bVisible && isCombatFocus() && gDLL->getInterfaceIFace()->isCombatFocus());
 
@@ -1539,9 +1534,9 @@ void CvUnit::updateCombat(bool bQuick)
 				getGroup()->groupMove(pPlot, true, ((bAdvance) ? this : NULL));
 			}
 
-			// This is is put before the plot advancement, the unit will always try to walk back
+			// (if?) This is is put before the plot advancement, the unit will always try to walk back
 			// to the square that they came from, before advancing.
-			getGroup()->clearMissionQueue();
+			getGroup()->clearMissionQueue(__FUNCTION__);
 		}
 		else
 		{
@@ -1553,7 +1548,17 @@ void CvUnit::updateCombat(bool bQuick)
 			changeMoves(std::max(GC.getMOVE_DENOMINATOR(), pPlot->movementCost(this, plot())));
 			checkRemoveSelectionAfterAttack();
 
-			getGroup()->clearMissionQueue();
+			getGroup()->clearMissionQueue(__FUNCTION__);
+
+            if (CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI())
+            {
+                GC.getGame().getAltAI()->getPlayer(m_eOwner)->withdrawOurUnit((CvUnitAI*)this, pDefender->plot());
+            }
+
+            if (CvPlayerAI::getPlayer(pDefender->m_eOwner).isUsingAltAI())
+            {
+                GC.getGame().getAltAI()->getPlayer(pDefender->m_eOwner)->withdrawPlayerUnit((CvUnitAI*)pDefender, plot());
+            }
 		}
 	}
 }
@@ -2099,7 +2104,7 @@ void CvUnit::doCommand(CommandTypes eCommand, int iData1, int iData2)
 			break;
 
 		case COMMAND_CANCEL_ALL:
-			getGroup()->clearMissionQueue();
+			getGroup()->clearMissionQueue(__FUNCTION__);
 			break;
 
 		case COMMAND_STOP_AUTOMATION:
@@ -2692,7 +2697,7 @@ void CvUnit::attackForDamage(CvUnit *pDefender, int attackerDamageChange, int de
 		setCombatUnit(pDefender, true);
 		pDefender->setCombatUnit(this, false);
 
-		pDefender->getGroup()->clearMissionQueue();
+		pDefender->getGroup()->clearMissionQueue(__FUNCTION__);
 
 		bool bFocused = (bVisible && isCombatFocus() && gDLL->getInterfaceIFace()->isCombatFocus());
 
@@ -2774,36 +2779,8 @@ void CvUnit::move(CvPlot* pPlot, bool bShow)
 	changeMoves(pPlot->movementCost(this, plot()));
 
 	setXY(pPlot->getX_INLINE(), pPlot->getY_INLINE(), true, true, bShow && pPlot->isVisibleToWatchingHuman(), bShow);
-
     // AltAI
-    /*if (GET_PLAYER(m_eOwner).isUsingAltAI())
-    {
-        GC.getGame().getAltAI()->getPlayer(m_eOwner)->moveUnit((CvUnitAI*)this, pOldPlot, pPlot);
-    }*/
-
-    if (!m_pUnitInfo->isInvisible())
-    {
-        // AltAI
-        AltAI::PlayerIter playerIter;
-        while (const CvPlayerAI* player = playerIter())
-        {
-            if (player->isUsingAltAI())
-            {
-                TeamTypes teamType = player->getTeam();
-                bool sourcePlotVisible = pOldPlot->isVisible(teamType, false);
-                bool destPlotVisible = pPlot->isVisible(teamType, false);
-
-                if (destPlotVisible)
-                {
-                    GC.getGame().getAltAI()->getPlayer(player->getID())->movePlayerUnit((CvUnitAI*)this, sourcePlotVisible ? pOldPlot : (CvPlot*)0, pPlot);
-                }
-                else if (sourcePlotVisible)
-                {
-                    GC.getGame().getAltAI()->getPlayer(player->getID())->hidePlayerUnit((CvUnitAI*)this, pOldPlot);
-                }
-            }
-        }
-    }
+    notifyMove(pOldPlot, pPlot);
 
 	//change feature
 	FeatureTypes featureType = pPlot->getFeatureType();
@@ -2854,6 +2831,8 @@ bool CvUnit::jumpToNearestValidPlot()
 
 	FAssertMsg(!isAttacking(), "isAttacking did not return false as expected");
 	FAssertMsg(!isFighting(), "isFighting did not return false as expected");
+
+    const CvPlot* pCurrentPlot = plot();
 
 	pNearestCity = GC.getMapINLINE().findCity(getX_INLINE(), getY_INLINE(), getOwnerINLINE());
 
@@ -2914,6 +2893,8 @@ bool CvUnit::jumpToNearestValidPlot()
 	if (pBestPlot != NULL)
 	{
 		setXY(pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE());
+        // AltAI
+        notifyMove(pCurrentPlot, pBestPlot);
 	}
 	else
 	{
@@ -3774,6 +3755,8 @@ bool CvUnit::airlift(int iX, int iY)
 	finishMoves();
 
 	setXY(pTargetPlot->getX_INLINE(), pTargetPlot->getY_INLINE());
+    // AltAI
+    notifyMove(pCity->plot(), pTargetPlot);
 
 	return true;
 }
@@ -4193,12 +4176,16 @@ bool CvUnit::paradrop(int iX, int iY)
 		return false;
 	}
 
+    const CvPlot* pCurrentPlot = plot();
+
 	CvPlot* pPlot = GC.getMapINLINE().plotINLINE(iX, iY);
 
 	changeMoves(GC.getMOVE_DENOMINATOR() / 2);
 	setMadeAttack(true);
 
 	setXY(pPlot->getX_INLINE(), pPlot->getY_INLINE());
+    // AltAI
+    notifyMove(pCurrentPlot, pPlot);
 
 	//check if intercepted
 	if(interceptTest(pPlot))
@@ -6251,7 +6238,10 @@ bool CvUnit::espionage(EspionageMissionTypes eMission, int iData)
 				CvCity* pCapital = GET_PLAYER(getOwnerINLINE()).getCapitalCity();
 				if (NULL != pCapital)
 				{
+                    const CvPlot* pCurrentPlot = plot();
 					setXY(pCapital->getX_INLINE(), pCapital->getY_INLINE(), false, false, false);
+                    // AltAI
+                    notifyMove(pCurrentPlot, pCapital->plot());
 
 					CvWString szBuffer = gDLL->getText("TXT_KEY_ESPIONAGE_SPY_SUCCESS", getNameKey(), pCapital->getNameKey());
 					gDLL->getInterfaceIFace()->addMessage(getOwnerINLINE(), true, GC.getEVENT_MESSAGE_TIME(), szBuffer, "AS2D_POSITIVE_DINK", MESSAGE_TYPE_INFO, getButton(), (ColorTypes)GC.getInfoTypeForString("COLOR_WHITE"), pCapital->getX_INLINE(), pCapital->getY_INLINE(), true, true);
@@ -6466,10 +6456,10 @@ bool CvUnit::build(BuildTypes eBuild)
 
 	bFinished = plot()->changeBuildProgress(eBuild, workRate(false), getTeam());
 
-    if (GET_PLAYER(m_eOwner).isUsingAltAI())
+    /*if (GET_PLAYER(m_eOwner).isUsingAltAI())
     {
         GC.getGame().getAltAI()->getPlayer(m_eOwner)->updateWorkerMission((CvUnitAI*)this, eBuild);
-    }
+    }*/
 
 	finishMoves(); // needs to be at bottom because movesLeft() can affect workRate()...
 
@@ -7086,7 +7076,8 @@ void CvUnit::upgrade(UnitTypes eUnit)
 
 	GET_PLAYER(getOwnerINLINE()).changeGold(-(upgradePrice(eUnit)));
 
-	pUpgradeUnit = GET_PLAYER(getOwnerINLINE()).initUnit(eUnit, getX_INLINE(), getY_INLINE(), AI_getUnitAIType());
+    // AltAI - pass this unit's pointer to initUnit for upgraded unit so easier to update associated mission data
+	pUpgradeUnit = GET_PLAYER(getOwnerINLINE()).initUnit(eUnit, getX_INLINE(), getY_INLINE(), AI_getUnitAIType(), NO_DIRECTION, this);
 
 	FAssertMsg(pUpgradeUnit != NULL, "UpgradeUnit is not assigned a valid value");
 
@@ -8934,6 +8925,7 @@ bool CvUnit::canJoinGroup(const CvPlot* pPlot, CvSelectionGroup* pSelectionGroup
 		return false;
 	}
 	
+    // can't join group if we're not the owner (can you ever have a group with no owner?
 	if (pSelectionGroup->getOwnerINLINE() == NO_PLAYER)
 	{
 		pHeadUnit = pSelectionGroup->getHeadUnit();
@@ -8945,6 +8937,7 @@ bool CvUnit::canJoinGroup(const CvPlot* pPlot, CvSelectionGroup* pSelectionGroup
 				return false;
 			}
 		}
+        // lack of an else here means that a group with no owner and no headunit can be joined?!
 	}
 	else
 	{
@@ -8953,7 +8946,7 @@ bool CvUnit::canJoinGroup(const CvPlot* pPlot, CvSelectionGroup* pSelectionGroup
 			return false;
 		}
 	}
-
+    // group must be at the designated plot
 	if (pSelectionGroup->getNumUnits() > 0)
 	{
 		if (!(pSelectionGroup->atPlot(pPlot)))
@@ -8977,30 +8970,32 @@ void CvUnit::joinGroup(CvSelectionGroup* pSelectionGroup, bool bRemoveSelected, 
 	CvSelectionGroup* pNewSelectionGroup;
 	CvPlot* pPlot;
 
+    // this unit's current group
 	pOldSelectionGroup = GET_PLAYER(getOwnerINLINE()).getSelectionGroup(getGroupID());
 
+    // do nothing unless being asked to join a different group (or passed a null group pointer)
 	if ((pSelectionGroup != pOldSelectionGroup) || (pOldSelectionGroup == NULL))
 	{
 		pPlot = plot();
 
 		if (pSelectionGroup != NULL)
 		{
-			pNewSelectionGroup = pSelectionGroup;
+			pNewSelectionGroup = pSelectionGroup;  // use group we were passed
 		}
 		else
 		{
-			if (bRejoin)
+			if (bRejoin) // create a new group if pSelectionGroup is null and bRejoin is true
 			{
 				pNewSelectionGroup = GET_PLAYER(getOwnerINLINE()).addSelectionGroup();
 				pNewSelectionGroup->init(pNewSelectionGroup->getID(), getOwnerINLINE());
 			}
 			else
 			{
-				pNewSelectionGroup = NULL;
+				pNewSelectionGroup = NULL;  // pSelectionGroup is null, bRejoin = false
 			}
 		}
 
-		if ((pNewSelectionGroup == NULL) || canJoinGroup(pPlot, pNewSelectionGroup))
+		if ((pNewSelectionGroup == NULL) || canJoinGroup(pPlot, pNewSelectionGroup))  // legal group to join (ours, same unit domain, same plot), or null new group
 		{
 			if (pOldSelectionGroup != NULL)
 			{
@@ -9009,7 +9004,7 @@ void CvUnit::joinGroup(CvSelectionGroup* pSelectionGroup, bool bRemoveSelected, 
 				{
 					if (pOldSelectionGroup->getNumUnits() > 1)
 					{
-						if (pOldSelectionGroup->getHeadUnit() == this)
+						if (pOldSelectionGroup->getHeadUnit() == this)  // was head of multi-unit group
 						{
 							bWasHead = true;
 						}
@@ -9029,6 +9024,7 @@ void CvUnit::joinGroup(CvSelectionGroup* pSelectionGroup, bool bRemoveSelected, 
 				}
 			}
 
+            // if we have a group, add ourselves to it
 			if ((pNewSelectionGroup != NULL) && pNewSelectionGroup->addUnit(this, false))
 			{
 				m_iGroupID = pNewSelectionGroup->getID();
@@ -9042,11 +9038,11 @@ void CvUnit::joinGroup(CvSelectionGroup* pSelectionGroup, bool bRemoveSelected, 
 			{
 				if (getGroup()->getNumUnits() > 1)
 				{
-					getGroup()->setActivityType(ACTIVITY_AWAKE);
+					getGroup()->setActivityType(ACTIVITY_AWAKE);  // wake up group, if it's multi-unit
 				}
 				else
 				{
-					GET_PLAYER(getOwnerINLINE()).updateGroupCycle(this);
+					GET_PLAYER(getOwnerINLINE()).updateGroupCycle(this);  // update cycle order
 				}
 			}
 
@@ -9064,7 +9060,7 @@ void CvUnit::joinGroup(CvSelectionGroup* pSelectionGroup, bool bRemoveSelected, 
 			}
 		}
 
-		if (bRemoveSelected)
+		if (bRemoveSelected)  // gui - remove from selection
 		{
 			if (IsSelected())
 			{
@@ -10532,7 +10528,7 @@ void CvUnit::setPromotionReady(bool bNewValue)
 		if (m_bPromotionReady)
 		{
 			getGroup()->setAutomateType(NO_AUTOMATE);
-			getGroup()->clearMissionQueue();
+			getGroup()->clearMissionQueue(__FUNCTION__);
 			getGroup()->setActivityType(ACTIVITY_AWAKE);
 		}
 
@@ -12772,4 +12768,33 @@ int CvUnit::getSelectionSoundScript() const
 		iScriptId = GC.getCivilizationInfo(getCivilizationType()).getSelectionSoundScriptId();
 	}
 	return iScriptId;
+}
+
+// AltAI
+void CvUnit::notifyMove(const CvPlot* pFromPlot, const CvPlot* pToPlot) const
+{
+    // AltAI
+    AltAI::PlayerIter playerIter;
+    while (const CvPlayerAI* player = playerIter())
+    {
+        if (player->isUsingAltAI())
+        {
+            bool isUnitOwner = m_eOwner == player->getID();
+            if (!m_pUnitInfo->isInvisible() || isUnitOwner)  // can other team members see invisible units?
+            {
+                TeamTypes teamType = player->getTeam();
+                bool sourcePlotVisible = isUnitOwner || pFromPlot->isVisible(teamType, false);
+                bool destPlotVisible = pToPlot->isVisible(teamType, false);
+
+                if (destPlotVisible)
+                {
+                    GC.getGame().getAltAI()->getPlayer(player->getID())->movePlayerUnit((CvUnitAI*)this, sourcePlotVisible ? pFromPlot : (CvPlot*)0, pToPlot);
+                }
+                else if (sourcePlotVisible)
+                {
+                    GC.getGame().getAltAI()->getPlayer(player->getID())->hidePlayerUnit((CvUnitAI*)this, pFromPlot, true);
+                }
+            }
+        }
+    }
 }

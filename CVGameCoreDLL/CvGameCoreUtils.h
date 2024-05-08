@@ -350,6 +350,17 @@ int subAreaValid(FAStarNode* parent, FAStarNode* node, int data, const void* poi
 // AltAI
 int irrigatableAreaValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 // AltAI
+struct RouteStepFinderData
+{
+    RouteStepFinderData() : routeType(NO_ROUTE), routeBuildType(NO_BUILD), playerType(NO_PLAYER), hasBridgeBuilding(false) {}
+    RouteStepFinderData(RouteTypes routeType_, BuildTypes routeBuildType_, PlayerTypes playerType_, bool hasBridgeBuilding_)
+        : routeType(routeType_), routeBuildType(routeBuildType_), playerType(playerType_), hasBridgeBuilding(hasBridgeBuilding_) {}
+    RouteTypes routeType;
+    BuildTypes routeBuildType;
+    PlayerTypes playerType;
+    bool hasBridgeBuilding;
+};
+// AltAI
 int routeStepCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 // AltAI
 int irrigationStepCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
@@ -361,6 +372,13 @@ int joinArea(FAStarNode* parent, FAStarNode* node, int data, const void* pointer
 int joinSubArea(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 // AltAI
 int joinIrrigatableArea(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+// AltAI
+int unitDataPathDestValid(int iToX, int iToY, const void* pointer, FAStar* finder);
+// AltAI
+int unitDataPathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+// AltAI
+int unitDataPathAdd(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+
 int plotGroupValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 int countPlotGroup(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 // AltAI

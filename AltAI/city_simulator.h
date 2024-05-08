@@ -149,6 +149,7 @@ namespace AltAI
 
         void simulate(BuildingSimulationResults& results, int nTurns);
         void simulate(BuildingSimulationResults& results, int nTurns, HurryTypes hurryType);
+        void simulateMultipleHurries(int nTurns, HurryTypes hurryType);
 
         void optimisePlots();
         void setNeedsOpt() { needsOpt_ = true; }

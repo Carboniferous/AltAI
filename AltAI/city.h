@@ -18,7 +18,8 @@ namespace AltAI
     public:
         enum Flags
         {
-            NoCalc = 0, NeedsBuildingCalcs = (1 << 0), NeedsBuildSelection = (1 << 2), NeedsImprovementCalcs = (1 << 3), CanReassignSharedPlots = (1 << 4)
+            NoCalc = 0, NeedsBuildingCalcs = (1 << 0), NeedsBuildSelection = (1 << 1), NeedsImprovementCalcs = (1 << 2), 
+            CanReassignSharedPlots = (1 << 3), NeedsProjectionCalcs = (1 << 4), NeedsCityDataCalc = (1 << 5)
         };
 
         explicit City(CvCity* pCity);
@@ -44,11 +45,11 @@ namespace AltAI
 
         bool checkResourceConnections(CvUnitAI* pUnit) const;
         bool checkBadImprovementFeatures(CvUnitAI* pUnit) const;
-        bool checkIrrigation(CvUnitAI* pUnit, bool onlyForResources) const;
+        bool checkIrrigation(CvUnitAI* pUnit, bool onlyForResources);
 
         int getNumReqdWorkers() const;
         int getNumWorkers() const;
-        int getNumWorkersTargetingPlot(const CvPlot* pTargetPlot) const;
+        int getNumWorkersTargetingPlot(XYCoords targetCoords) const;
 
         TotalOutput getMaxOutputs() const;
         TotalOutputWeights getMaxOutputWeights() const;
@@ -60,7 +61,7 @@ namespace AltAI
 
         void logImprovements() const;
 
-        void setFlag(Flags flags);
+        void setFlag(int flags);
         int getFlags() const;
 
         void assignPlots();
@@ -69,25 +70,26 @@ namespace AltAI
 
         PlotAssignmentSettings getPlotAssignmentSettings() const;
 
-        const CityDataPtr& getCityData() const;
+        const CityDataPtr& getCityData();
         const CityImprovementManagerPtr getCityImprovementManager() const;
-        const ProjectionLadder& getCurrentOutputProjection() const;
-        const ProjectionLadder& getBaseOutputProjection() const;
-        const CityDataPtr& getProjectionCityData() const;
-        const CityDataPtr& getBaseProjectionCityData() const;
+        const ProjectionLadder& getCurrentOutputProjection();
+        const ProjectionLadder& getBaseOutputProjection();
+        const CityDataPtr& getProjectionCityData();
+        const CityDataPtr& getBaseProjectionCityData();
 
         // save/load functions
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
 
     private:
-        void calcMaxOutputs_();        
+        void updateProjections_();
+        void calcMaxOutputs_();
 
         //bool sanityCheckBuilding_(BuildingTypes buildingType) const;
         //bool sanityCheckUnit_(UnitTypes unitType) const;
         void checkConstructItem_();
 
-        std::pair<XYCoords, BuildTypes> getImprovementBuildOrder_(XYCoords coords, ImprovementTypes improvementType) const;
+        std::pair<XYCoords, BuildTypes> getImprovementBuildOrder_(XYCoords coords, ImprovementTypes improvementType);
 
         Player& player_;
         CvCity* pCity_;

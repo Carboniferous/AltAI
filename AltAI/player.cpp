@@ -11,8 +11,10 @@
 #include "./plot_info.h"
 #include "./gamedata_analysis.h"
 #include "./player_analysis.h"
+#include "./opponents.h"
 #include "./map_analysis.h"
 #include "./military_tactics.h"
+#include "./unit_tactics.h"
 #include "./worker_tactics.h"
 #include "./great_people_tactics.h"
 #include "./resource_tactics.h"
@@ -44,9 +46,11 @@ namespace AltAI
         // set these based on starting the game with 100% research rate (need a non-zero value for tech rate initial city site maintenance calcs)
         maxGold_ = maxGoldWithProcesses_ = 0;
         maxRate_ = maxRateWithProcesses_ = 100;
+        goldAndResearchOutputsByCommerceRate_ = std::vector<std::pair<int, int> >(11, std::make_pair(0, 0));
         pPlayerAnalysis_ = boost::shared_ptr<PlayerAnalysis>(new PlayerAnalysis(*this));
+        pOpponentsAnalysis_ = boost::shared_ptr<OpponentsAnalysis>(new OpponentsAnalysis(*this));
         pCivHelper_ = boost::shared_ptr<CivHelper>(new CivHelper(*this));
-        pSettlerManager_ = boost::shared_ptr<SettlerManager>(new SettlerManager(pPlayerAnalysis_->getMapAnalysis()));
+        pSettlerManager_ = boost::shared_ptr<SettlerManager>(new SettlerManager(*this));
     }
 
     void Player::init()
@@ -71,10 +75,7 @@ namespace AltAI
         std::ostream& os = pCivLog->getStream();
 #endif
         
-        GameDataAnalysis::getInstance()->analyseForPlayer(*this);
-
-        //pPlayerAnalysis_->getMapAnalysis()->analyseSharedPlots();
-        pSettlerManager_->analysePlotValues();
+        GameDataAnalysis::getInstance()->analyseForPlayer(*this);        
 
 #ifdef ALTAI_DEBUG
         pPlayerAnalysis_->getMapAnalysis()->debug(os);
@@ -84,20 +85,23 @@ namespace AltAI
         for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
         {
             // initialise city
-            iter->second.init();
-            setCityDirty(iter->second.getCvCity()->getIDInfo());
+            iter->second->init();
+            setCityDirty(iter->second->getCvCity()->getIDInfo());
 
 #ifdef ALTAI_DEBUG
-            os << "\n" << narrow(iter->second.getCvCity()->getName()) << ":\n";
-            os << "Max outputs = " << iter->second.getMaxOutputs() << " weights = " << iter->second.getMaxOutputWeights() << "\n";
+            os << "\n" << narrow(iter->second->getCvCity()->getName()) << ":\n";
+            os << "Max outputs = " << iter->second->getMaxOutputs() << " weights = " << iter->second->getMaxOutputWeights() << "\n";
 
-            iter->second.logImprovements();
+            iter->second->logImprovements();
 #endif
         }
 
         citiesToInit_.clear();
 
         pPlayerAnalysis_->postCityInit();
+
+        //pPlayerAnalysis_->getMapAnalysis()->analyseSharedPlots();
+        pSettlerManager_->analysePlotValues();
 
         //calcCivics_();
     }
@@ -115,7 +119,7 @@ namespace AltAI
 
             for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
             {
-                iter->second.doTurn();
+                iter->second->doTurn();
             }
 
 #ifdef ALTAI_DEBUG
@@ -123,8 +127,8 @@ namespace AltAI
                 std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
                 for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
                 {
-                    std::pair<int, int> rank = getCityRank(iter->second.getCvCity()->getIDInfo(), OUTPUT_PRODUCTION);
-                    os << "\n" << narrow(iter->second.getCvCity()->getName()) << " rank = " << rank.first << " output (prod) = " << rank.second;
+                    std::pair<int, int> rank = getCityRank(iter->second->getCvCity()->getIDInfo(), OUTPUT_PRODUCTION);
+                    os << "\n" << narrow(iter->second->getCvCity()->getName()) << " rank = " << rank.first << " output (prod) = " << rank.second;
                 }
             }
 #endif
@@ -137,7 +141,7 @@ namespace AltAI
             {
                 boost::shared_ptr<UnitLog> pUnitLog = UnitLog::getLog(*pPlayer_);
                 std::ostream& os = pUnitLog->getStream();
-                os << "\nTurn = " << gGlobals.getGame().getGameTurn();
+                os << "\nTurn = " << gGlobals.getGame().getGameTurn() << __FUNCTION__;
                 pUnitLog->logSelectionGroups();
             }
 
@@ -149,17 +153,19 @@ namespace AltAI
     // called from load game and init game
     void Player::addCity(CvCity* pCity)
     {
-        CityMap::iterator cityIter = cities_.insert(std::make_pair(pCity->getID(), City(pCity))).first;
+        CityPtr ptrCity(new City(pCity));
+        CityMap::iterator cityIter = cities_.insert(std::make_pair(pCity->getID(), ptrCity)).first;
 
         // updates shared plot data (if not init yet - init() above will call MapAnalysis)
         if (gGlobals.getGame().getAltAI()->isInit() && pPlayer_->isUsingAltAI())
         {
             // specialist analysis uses a city if available - so if started a new game,
             // this needs to update when first city is founded (clunky - todo - improve)
-            if (cities_.size() == 1)
+            /*if (cities_.size() == 1)
             {
                 pPlayerAnalysis_->analyseSpecialists();
-            }            
+            }*/
+            pPlayerAnalysis_->getMilitaryAnalysis()->addCity(pCity);
         }
 
         citiesToInit_.insert(pCity->getID());
@@ -167,10 +173,32 @@ namespace AltAI
 
     void Player::deleteCity(CvCity* pCity)
     {
+#ifdef ALTAI_DEBUG
+        boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*pPlayer_);
+        std::ostream& os = pCivLog->getStream();
+        os << "\nDeleting city: " << safeGetCityName(pCity);
+#endif
         pPlayerAnalysis_->getMapAnalysis()->deleteCity(pCity);
-        pPlayerAnalysis_->getPlayerTactics()->deleteCity(pCity);
-        pPlayerAnalysis_->getWorkerAnalysis()->updateCity(pCity, true);
-        pPlayerAnalysis_->getGreatPeopleAnalysis()->updateCity(pCity, true);
+        
+        if (pPlayer_->isUsingAltAI())
+        {
+            pPlayerAnalysis_->getPlayerTactics()->deleteCity(pCity);
+            pPlayerAnalysis_->getMilitaryAnalysis()->deleteCity(pCity);
+            pPlayerAnalysis_->getWorkerAnalysis()->updateCity(pCity, true);
+            pPlayerAnalysis_->getGreatPeopleAnalysis()->updateCity(pCity, true);
+        }
+
+        // set flag to update other cities as maintenance costs will have changed
+        CityIter iter(CvPlayerAI::getPlayer(pCity->getOwner()));
+        while (CvCity* pLoopCity = iter())
+        {
+            if (pLoopCity->getIDInfo() == pCity->getIDInfo())
+            {
+                continue;
+            }
+            getCity(pLoopCity).setFlag(City::NeedsProjectionCalcs | City::NeedsCityDataCalc);
+        }
+
         cities_.erase(pCity->getID());
     }
 
@@ -181,8 +209,9 @@ namespace AltAI
             CityMap::iterator iter(cities_.find(*ci));
             if (iter != cities_.end())
             {
-                iter->second.init();
-                const CvCity* pCity = iter->second.getCvCity();
+                iter->second->init();
+                const CvCity* pCity = iter->second->getCvCity();
+                pPlayerAnalysis_->analyseSpecialists();  // only call after we've initialised at least one city
                 pPlayerAnalysis_->getPlayerTactics()->addNewCityBuildingTactics(pCity->getIDInfo());
                 pPlayerAnalysis_->getPlayerTactics()->addNewCityUnitTactics(pCity->getIDInfo());
                 pPlayerAnalysis_->getPlayerTactics()->addCityImprovementTactics(pCity->getIDInfo());
@@ -209,15 +238,21 @@ namespace AltAI
         return getCity(pCity->getID());
     }
 
+    bool Player::isCity(const int ID) const
+    {
+        return cities_.find(ID) != cities_.end();
+    }
+
     City& Player::getCity(const int ID)
     {
         CityMap::iterator iter = cities_.find(ID);
         if (iter != cities_.end())
         {
-            return iter->second;
+            return *iter->second;
         }
 
         {
+            FAssertMsg(false, "Failed to find city entry");
             boost::shared_ptr<ErrorLog> pErrorLog = ErrorLog::getLog(*pPlayer_);
             std::ostream& os = pErrorLog->getStream();
 
@@ -233,7 +268,7 @@ namespace AltAI
         CityMap::const_iterator iter = cities_.find(ID);
         if (iter != cities_.end())
         {
-            return iter->second;
+            return *iter->second;
         }
 
         {
@@ -247,7 +282,7 @@ namespace AltAI
         }
     }
 
-    std::vector<IUnitEventGeneratorPtr> Player::getCityUnitEvents(IDInfo city) const
+    std::vector<IUnitEventGeneratorPtr> Player::getCityUnitEvents(IDInfo city)
     {
         std::vector<IUnitEventGeneratorPtr> unitEvents;
         const CityDataPtr& pCityData = getCity(city.iID).getCityData();
@@ -264,9 +299,11 @@ namespace AltAI
         return unitEvents;
     }
 
-    void Player::addUnit(CvUnitAI* pUnit, bool loading)
+    void Player::addOurUnit(CvUnitAI* pUnit, const CvUnit* pUpgradingUnit, bool loading)
     {
         Unit unit(pUnit);
+        units_.insert(std::make_pair(pUnit->getIDInfo(), unit));
+
         if (!loading)
         {
             unit.setAction(pPlayerAnalysis_->getPlayerTactics()->getConstructedUnitAction(pUnit));
@@ -284,7 +321,7 @@ namespace AltAI
             // can add a unit before we have a city - if we capture workers, for example - todo fix this problem
             if (pCity && cities_.find(pCity->getID()) != cities_.end())
             {
-                const City& city = getCity(pCity->getID());
+                City& city = getCity(pCity->getID());
                 if (city.getConstructItem().pUnitEventGenerator)
                 {
                     unit.setUnitEventGenerator(city.getConstructItem().pUnitEventGenerator);
@@ -293,16 +330,14 @@ namespace AltAI
 #endif
                 }
             }
+
+            pPlayerAnalysis_->getMilitaryAnalysis()->addOurUnit(pUnit, pUpgradingUnit);
         }
-
-        units_.insert(std::make_pair(pUnit->getIDInfo(), unit));
-
-        pPlayerAnalysis_->getMilitaryAnalysis()->addUnit(pUnit);
     }
 
-    void Player::deleteUnit(CvUnit* pUnit)
+    void Player::deleteOurUnit(CvUnit* pUnit, const CvPlot* pPlot)
     {
-        pPlayerAnalysis_->getMilitaryAnalysis()->deleteUnit(pUnit);
+        pPlayerAnalysis_->getMilitaryAnalysis()->deleteOurUnit(pUnit, pPlot);
         pPlayerAnalysis_->getWorkerAnalysis()->deleteUnit(pUnit);
 
         units_.erase(pUnit->getIDInfo());
@@ -315,20 +350,30 @@ namespace AltAI
 #endif
     }
 
-    Unit Player::getUnit(CvUnitAI* pUnit) const
+    Unit& Player::getOurUnit(CvUnitAI* pUnit)
     {
-		UnitsCIter ci(units_.find(pUnit->getIDInfo()));
-        if (ci != units_.end())
+        return getOurUnit(pUnit->getIDInfo());
+    }
+
+    Unit& Player::getOurUnit(IDInfo unit)
+    {
+		UnitsIter iter(units_.find(unit));
+        if (iter != units_.end())
         {
-            return ci->second;
+            return iter->second;
         }
         else
         {
-            return Unit(pUnit);
+            FAssertMsg(false, "Failed to find unit entry");
+            boost::shared_ptr<ErrorLog> pErrorLog = ErrorLog::getLog(*pPlayer_);
+            std::ostream& os = pErrorLog->getStream();
+            os << "\nFailed to find unit: " << unit << " added back to map...";
+            addOurUnit((CvUnitAI*)::getUnit(unit));
+            return getOurUnit(unit);
         }
     }
 
-    void Player::moveUnit(CvUnitAI* pUnit, const CvPlot* pFromPlot, const CvPlot* pToPlot)
+    void Player::moveOurUnit(CvUnitAI* pUnit, const CvPlot* pFromPlot, const CvPlot* pToPlot)
     {
 #ifdef ALTAI_DEBUG
         UnitsCIter ci(units_.find(pUnit->getIDInfo()));
@@ -342,6 +387,21 @@ namespace AltAI
 #endif
     }
 
+    void Player::withdrawOurUnit(CvUnitAI* pUnit, const CvPlot* pAttackPlot)
+    {
+        pPlayerAnalysis_->getMilitaryAnalysis()->withdrawOurUnit(pUnit, pAttackPlot);
+    }
+
+    CvUnit* Player::getNextAttackUnit()
+    {
+        return getAnalysis()->getMilitaryAnalysis()->getNextAttackUnit();
+    }
+
+    std::pair<IDInfo, UnitTypes> Player::getPriorityUnitBuild(IDInfo city)
+    {
+        return getAnalysis()->getMilitaryAnalysis()->getPriorityUnitBuild(city);
+    }
+
     void Player::updateMilitaryAnalysis()
     {
         AltAI::updateMilitaryAnalysis(*this);
@@ -353,44 +413,31 @@ namespace AltAI
     }
 
     void Player::pushWorkerMission(CvUnitAI* pUnit, const CvCity* pCity, const CvPlot* pTargetPlot, 
-        MissionTypes missionType, BuildTypes buildType, int iFlags, bool bAppend, const std::string& caller)
+        MissionTypes missionType, BuildTypes buildType, int iFlags, const std::string& caller)
     {
 #ifdef ALTAI_DEBUG
         CvWString missionTypeString;
         getMissionTypeString(missionTypeString, missionType);
 
         std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pPlayer_->getID()))->getStream();
-        os << "\nPush worker mission for unit: " << pUnit->getID()
+        os << "\nPush worker mission for unit: " << pUnit->getID() << " at: " << pUnit->plot()->getCoords()
            << " targeting plot: " << pTargetPlot->getCoords()
            << " turn = " << gGlobals.getGame().getGameTurn()
            << " caller = " << caller
            << " mission = " << narrow(missionTypeString)
            << " build = " << (buildType == NO_BUILD ? " none " : gGlobals.getBuildInfo(buildType).getType())
-           << " append = " << (bAppend ? " true" : " false");
+           << " flags = " << iFlags;
 #endif
 
         UnitsIter iter(units_.find(pUnit->getIDInfo()));
 
         if (iter != units_.end())
         {
-            iter->second.pushWorkerMission(gGlobals.getGame().getGameTurn(), pCity, pTargetPlot, missionType, buildType);
-        }
-
-        if (missionType == MISSION_ROUTE_TO || missionType == MISSION_MOVE_TO)
-        {
-            pUnit->getGroup()->pushMission(missionType, pTargetPlot->getX(), pTargetPlot->getY(), iFlags, bAppend, false, MISSIONAI_BUILD, (CvPlot *)pTargetPlot);
-        }
-        else if (missionType == MISSION_BUILD)
-        {
-            pUnit->getGroup()->pushMission(missionType, buildType, -1, iFlags, bAppend, false, MISSIONAI_BUILD, (CvPlot *)pTargetPlot);
-        }
-        else if (missionType == MISSION_SKIP)
-        {
-            pUnit->getGroup()->pushMission(missionType);
+            iter->second.pushWorkerMission(gGlobals.getGame().getGameTurn(), pCity, pTargetPlot, missionType, buildType, iFlags);
         }
     }
 
-    void Player::updateWorkerMission(CvUnitAI* pUnit, BuildTypes buildType)
+    /*void Player::updateWorkerMission(CvUnitAI* pUnit, BuildTypes buildType)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pPlayer_->getID()))->getStream();
@@ -418,34 +465,7 @@ namespace AltAI
             }
 #endif
         }
-    }
-
-    void Player::updateMission(CvUnitAI* pUnit, CvPlot* pOldPlot, CvPlot* pNewPlot)
-    {
-        UnitsIter iter(units_.find(pUnit->getIDInfo()));
-
-        if (iter != units_.end())
-        {
-#ifdef ALTAI_DEBUG
-            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pPlayer_->getID()))->getStream();
-            os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " Updating unit mission, from " << pOldPlot->getCoords() << " to "
-               << pNewPlot->getCoords() << "\n\tmission before = ";
-            for (size_t i = 0, count = iter->second.getWorkerMissions().size(); i < count; ++i)
-            {
-                iter->second.getWorkerMissions()[i].debug(os);
-            }
-#endif
-            iter->second.updateMission(pOldPlot, pNewPlot);
-
-#ifdef ALTAI_DEBUG
-            os << "\n\tmission after = ";
-            for (size_t i = 0, count = iter->second.getWorkerMissions().size(); i < count; ++i)
-            {
-                iter->second.getWorkerMissions()[i].debug(os);
-            }
-#endif
-        }
-    }
+    }*/
 
     void Player::clearWorkerMission(CvUnitAI* pUnit)
     {
@@ -454,6 +474,33 @@ namespace AltAI
         if (iter != units_.end())
         {
             iter->second.clearMission(gGlobals.getGame().getGameTurn());
+        }
+    }
+
+    void Player::updateMission(CvUnitAI* pUnit, CvPlot* pOldPlot, CvPlot* pNewPlot)
+    {
+        UnitsIter iter(units_.find(pUnit->getIDInfo()));
+
+        if (iter != units_.end())
+        {
+//#ifdef ALTAI_DEBUG
+//            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pPlayer_->getID()))->getStream();
+//            os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " Updating unit: " << pUnit->getIDInfo() << ", from " << pOldPlot->getCoords() << " to "
+//               << pNewPlot->getCoords() << "\n\tmission before = ";
+//            for (size_t i = 0, count = iter->second.getWorkerMissions().size(); i < count; ++i)
+//            {
+//                iter->second.getWorkerMissions()[i].debug(os);
+//            }
+//#endif
+            iter->second.updateMission(pOldPlot, pNewPlot);
+
+//#ifdef ALTAI_DEBUG
+//            os << "\n\tmission after = ";
+//            for (size_t i = 0, count = iter->second.getWorkerMissions().size(); i < count; ++i)
+//            {
+//                iter->second.getWorkerMissions()[i].debug(os);
+//            }
+//#endif
         }
     }
 
@@ -495,13 +542,18 @@ namespace AltAI
         return false;
     }
 
-    int Player::getNumWorkersTargetingPlot(const CvPlot* pTargetPlot) const
+    PromotionTypes Player::promoteUnit(CvUnitAI* pUnit)
+    {
+        return pPlayerAnalysis_->getMilitaryAnalysis()->promoteUnit(pUnit);
+    }
+
+    int Player::getNumWorkersTargetingPlot(XYCoords targetCoords) const
     {
         int count = 0;
 
         for (UnitsCIter ci(units_.begin()), ciEnd(units_.end()); ci != ciEnd; ++ci)
         {
-            if (ci->second.hasWorkerMissionAt(pTargetPlot))
+            if (ci->second.hasWorkerMissionAt(targetCoords))
             {
                 ++count;
             }
@@ -571,9 +623,9 @@ namespace AltAI
         return pNextCity;
     }
 
-    std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > Player::getWorkerMissionsForCity(const CvCity* pCity) const
+    std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > > Player::getWorkerMissionsForCity(const CvCity* pCity) const
     {
-        std::vector<std::pair<UnitTypes, std::vector<Unit::Mission> > > missions;
+        std::vector<std::pair<UnitTypes, std::vector<Unit::WorkerMission> > > missions;
 
         for (UnitsCIter ci(units_.begin()), ciEnd(units_.end()); ci != ciEnd; ++ci)
         {
@@ -585,9 +637,9 @@ namespace AltAI
         return missions;
     }
 
-    std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::Mission> > > Player::getWorkerMissions() const
+    std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::WorkerMission> > > Player::getWorkerMissions() const
     {
-        std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::Mission> > > missions;
+        std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::WorkerMission> > > missions;
 
         for (UnitsCIter ci(units_.begin()), ciEnd(units_.end()); ci != ciEnd; ++ci)
         {
@@ -600,7 +652,7 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         os <<  "\nWorker Missions: ";
-        std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::Mission> > > missions = getWorkerMissions();
+        std::vector<std::pair<std::pair<int, UnitTypes>, std::vector<Unit::WorkerMission> > > missions = getWorkerMissions();
         os << " size = " << missions.size();
         for (size_t i = 0, count = missions.size(); i < count; ++i)
         {
@@ -625,7 +677,8 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*pPlayer_)->getStream();
-        os << "\nPlayer: " << pUnit->getOwner() << " - unit added: " << pUnit->getUnitInfo().getType() << " at: " << pPlot->getCoords();
+        os << "\nTurn: " << gGlobals.getGame().getGameTurn() << " Player: " << pUnit->getOwner() << " - unit added: " << pUnit->getID() << " "
+            << pUnit->getUnitInfo().getType() << " at: " << pPlot->getCoords();
 #endif
         pPlayerAnalysis_->getMilitaryAnalysis()->addPlayerUnit(pUnit, pPlot);
     }
@@ -634,7 +687,8 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*pPlayer_)->getStream();
-        os << "\nPlayer: " << pUnit->getOwner() << " - unit deleted: " << pUnit->getUnitInfo().getType() << " at: " << pPlot->getCoords();
+        os << "\nPlayer: " << pUnit->getOwner() << " - unit deleted: " << pUnit->getID() << " " 
+            << pUnit->getUnitInfo().getType() << " at: " << pPlot->getCoords();
 #endif
         pPlayerAnalysis_->getMilitaryAnalysis()->deletePlayerUnit(pUnit, pPlot);
     }
@@ -644,7 +698,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*pPlayer_)->getStream();
 
-        os << "\nPlayer: " << pUnit->getOwner() << " moves unit: " << pUnit->getUnitInfo().getType();
+        os << "\nTurn: " << gGlobals.getGame().getGameTurn() << " Player: " << pUnit->getOwner() << " moves unit: " << pUnit->getID() << " " << pUnit->getUnitInfo().getType();
         if (pFromPlot)
         {
             os << " " << pFromPlot->getCoords();
@@ -658,15 +712,28 @@ namespace AltAI
         pPlayerAnalysis_->getMilitaryAnalysis()->movePlayerUnit(pUnit, pFromPlot, pToPlot);
     }
 
-    void Player::hidePlayerUnit(CvUnitAI* pUnit, const CvPlot* pOldPlot)
+    void Player::hidePlayerUnit(CvUnitAI* pUnit, const CvPlot* pOldPlot, bool moved)
     {        
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*pPlayer_)->getStream();
 
-        os << "\nPlayer: " << pUnit->getOwner() << " moves unit: " << pUnit->getUnitInfo().getType()
-            << " at: " << pOldPlot->getCoords() << " out of view";
+        os << "\nTurn: " << gGlobals.getGame().getGameTurn() << (moved ? " Player moves unit out of view: " : " Lost sight of player unit: ") << pUnit->getIDInfo() << " " << pUnit->getUnitInfo().getType()
+            << " at: " << pOldPlot->getCoords() << " visible = " << pOldPlot->isVisible(getTeamID(), false);
+        if (pUnit->getTeam() == getTeamID())
+        {
+            os << " team unit? ";
+        }
+
 #endif
-        pPlayerAnalysis_->getMilitaryAnalysis()->hidePlayerUnit(pUnit, pOldPlot);
+        if (pUnit->getTeam() != getTeamID())
+        {
+            pPlayerAnalysis_->getMilitaryAnalysis()->hidePlayerUnit(pUnit, pOldPlot, moved);
+        }
+    }
+
+    void Player::withdrawPlayerUnit(CvUnitAI* pUnit, const CvPlot* pAttackPlot)
+    {
+        pPlayerAnalysis_->getMilitaryAnalysis()->withdrawPlayerUnit(pUnit, pAttackPlot);
     }
 
     const CvPlayer* Player::getCvPlayer() const
@@ -784,7 +851,7 @@ namespace AltAI
 		UnitsIter iter(units_.find(pUnit->getIDInfo()));
         if (iter != units_.end())
         {
-            if (iter->second.hasWorkerMissionAt(pPlot))
+            if (iter->second.hasWorkerMissionAt(pPlot->getCoords()))
             {
                 ownTarget = true;
             }
@@ -792,12 +859,12 @@ namespace AltAI
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pPlayer_->getID()))->getStream();
-        os << "\nChecking plot: " << pPlot->getCoords() << " for worker missions: " << getNumWorkersTargetingPlot(pPlot)
+        os << "\nChecking plot: " << pPlot->getCoords() << " for worker missions: " << getNumWorkersTargetingPlot(pPlot->getCoords())
             << " at plot: " << (pUnit->atPlot(pPlot) ? "true" : "false")
             << " own target = " << (ownTarget ? "true" : "false");
 #endif                        
 
-        if (!ownTarget && getNumWorkersTargetingPlot(pPlot) > 0)
+        if (!ownTarget && getNumWorkersTargetingPlot(pPlot->getCoords()) > 0)
         {
             return false;
         }
@@ -829,7 +896,7 @@ namespace AltAI
                 if (pUnit->generatePath(pPlot, MOVE_SAFE_TERRITORY, false))
                 {
                     //pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pPlot->getX(), pPlot->getY(), MOVE_SAFE_TERRITORY, false, false, MISSIONAI_BUILD, pPlot);
-                    pushWorkerMission(pUnit, NULL, pPlot, MISSION_MOVE_TO, NO_BUILD, MOVE_SAFE_TERRITORY, false, "Player::checkResourcesOutsideCities");
+                    pushWorkerMission(pUnit, NULL, pPlot, MISSION_MOVE_TO, NO_BUILD, MOVE_SAFE_TERRITORY, "Player::checkResourcesOutsideCities");
                 }
                 else
                 {
@@ -838,7 +905,7 @@ namespace AltAI
             }
 
             //pUnit->getGroup()->pushMission(MISSION_BUILD, buildType, -1, 0, (pUnit->getGroup()->getLengthMissionQueue() > 0), false, MISSIONAI_BUILD, pPlot);
-            pushWorkerMission(pUnit, NULL, pPlot, MISSION_BUILD, buildType, 0, pUnit->getGroup()->getLengthMissionQueue() > 0, "Player::checkResourcesOutsideCities");
+            pushWorkerMission(pUnit, NULL, pPlot, MISSION_BUILD, buildType, 0, "Player::checkResourcesOutsideCities");
 
             if (pBestCity && pUnit->canBuildRoute())
             {
@@ -846,7 +913,7 @@ namespace AltAI
                 BuildTypes routeBuildType = GameDataAnalysis::getBuildTypeForRouteType(pUnit->getGroup()->getBestBuildRoute((CvPlot *)pPlot));
                 if (routeBuildType != NO_BUILD)
                 {
-                    pushWorkerMission(pUnit, pBestCity, pBestCity->plot(), MISSION_ROUTE_TO, routeBuildType, MOVE_SAFE_TERRITORY, pUnit->getGroup()->getLengthMissionQueue() > 0, "Player::checkResourcesOutsideCities");
+                    pushWorkerMission(pUnit, pBestCity, pBestCity->plot(), MISSION_ROUTE_TO, routeBuildType, MOVE_SAFE_TERRITORY, "Player::checkResourcesOutsideCities");
                 }
             }
 #ifdef ALTAI_DEBUG
@@ -917,9 +984,9 @@ namespace AltAI
 
         for (CityMap::const_iterator ci(cities_.begin()), ciEnd(cities_.end()); ci != ciEnd; ++ci)
         {
-            if (ci->second.getConstructItem().unitType == unitType && ci->second.getConstructItem().buildTarget == buildTarget)
+            if (ci->second->getConstructItem().unitType == unitType && ci->second->getConstructItem().buildTarget == buildTarget)
             {
-                cities.push_back(ci->second.getCvCity()->getIDInfo());
+                cities.push_back(ci->second->getCvCity()->getIDInfo());
             }
         }
 
@@ -1041,7 +1108,7 @@ namespace AltAI
         return additionalBuilds;
     }
 
-    CvPlot* Player::getBestPlot(CvUnitAI* pUnit, int subAreaID) const
+    CvPlot* Player::getBestPlot(CvUnit* pUnit, int subAreaID) const
     {
         CvPlot* pPlot = pSettlerManager_->getBestPlot(pUnit, subAreaID);
 
@@ -1079,11 +1146,13 @@ namespace AltAI
         return commercePercentages;
     }
 
-    int Player::getMaxResearchRate(std::pair<int, int> fixedIncomeAndExpenses) const
+    // called from CvPlayerAI::AI_getMinFoundValue
+    int Player::getMaxResearchPercent(std::pair<int, int> fixedIncomeAndExpenses) const
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
 #endif
+        // don't bother to store the results for this version
         std::vector<std::pair<int, int> > outputs(11, std::make_pair(0, 0));
         int processGold = 0;
 
@@ -1143,11 +1212,11 @@ namespace AltAI
         }
 
 #ifdef ALTAI_DEBUG
-        for (int i = 0; i <= 10; ++i)
-        {
-            //os << "\nResearch = " << (100 - 10 * i) << "%, city gold total = " << outputs[i].first << ", research total = " << outputs[i].second;
-        }
-        os << "\nMax research rate = " << maxRate << "%, max rate with processes= " << maxRateWithProcesses;
+        //for (int i = 0; i <= 10; ++i)
+        //{
+        //    //os << "\nResearch = " << (100 - 10 * i) << "%, city gold total = " << outputs[i].first << ", research total = " << outputs[i].second;
+        //}
+        os << "\n(min found value) max research rate = " << maxRate << "%, max rate with processes= " << maxRateWithProcesses;
 #endif
         return maxRate;
     }
@@ -1166,6 +1235,7 @@ namespace AltAI
             os << "\nAnarchy - max research rate = 0";
 #endif
             maxGold_ = maxGoldWithProcesses_ = maxRate_ = maxRateWithProcesses_ = 0;
+            goldAndResearchOutputsByCommerceRate_ = std::vector<std::pair<int, int> >(11, std::make_pair(0, 0));
             return;
         }
 
@@ -1176,7 +1246,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         os << "\nFixed income = " << fixedIncome << ", fixed expenses = " << fixedExpenses;
 #endif
-        std::vector<std::pair<int, int> > outputs(11, std::make_pair(0, 0));
+        goldAndResearchOutputsByCommerceRate_ = std::vector<std::pair<int, int> >(11, std::make_pair(0, 0));
 
         CityIter cityIter(*pPlayer_);
         CvCity* pCity;
@@ -1202,15 +1272,15 @@ namespace AltAI
                 opt.optimise(NO_OUTPUT, CityOptimiser::Not_Set);
 
                 TotalOutput output = pCityData->getOutput();
-                outputs[i].first += output[OUTPUT_GOLD];
-                outputs[i].second += output[OUTPUT_RESEARCH];
+                goldAndResearchOutputsByCommerceRate_[i].first += output[OUTPUT_GOLD];
+                goldAndResearchOutputsByCommerceRate_[i].second += output[OUTPUT_RESEARCH];
             }
         }
 
         int maxRate = 0, maxRateWithProcesses = 0, maxGold = 0, maxGoldWithProcesses = 0;
         for (int i = 10; i >= 0; --i)
         {
-            const int thisRatesGoldTotal = outputs[i].first + fixedIncome - fixedExpenses;
+            const int thisRatesGoldTotal = goldAndResearchOutputsByCommerceRate_[i].first + fixedIncome - fixedExpenses;
             if (thisRatesGoldTotal >= 0)
             {
                 maxRate = 100 - 10 * i;
@@ -1218,7 +1288,7 @@ namespace AltAI
             }
 
             const int thisRatesGoldTotalInclProcesses = thisRatesGoldTotal + processGold;
-            if (outputs[i].first + fixedIncome + processGold - fixedExpenses >= 0)
+            if (goldAndResearchOutputsByCommerceRate_[i].first + fixedIncome + processGold - fixedExpenses >= 0)
             {
                 maxRateWithProcesses = 100 - 10 * i;
                 maxGoldWithProcesses = std::max<int>(thisRatesGoldTotalInclProcesses, maxGoldWithProcesses);
@@ -1229,7 +1299,8 @@ namespace AltAI
         os << "\nProcess gold = " << processGold;
         for (int i = 0; i <= 10; ++i)
         {
-            os << "\nResearch = " << (100 - 10 * i) << "%, city gold total = " << outputs[i].first << ", research total = " << outputs[i].second;
+            os << "\nResearch = " << (100 - 10 * i) << "%, city gold total = " 
+                << goldAndResearchOutputsByCommerceRate_[i].first << ", research total = " << goldAndResearchOutputsByCommerceRate_[i].second;
         }
         os << "\nMax research rate = " << maxRate << "%, max research rate with process = " << maxRateWithProcesses;
         os << "\nMax gold = " << maxGold << ", with processes = " << maxGoldWithProcesses;
@@ -1241,27 +1312,56 @@ namespace AltAI
         maxGoldWithProcesses_ = maxGoldWithProcesses;
     }
 
-    int Player::getMaxResearchRate() const
+    int Player::getMaxResearchPercent() const
     {
         return maxRate_;
     }
 
-    int Player::getMaxResearchRateWithProcesses() const
+    int Player::getMaxResearchPercentWithProcesses() const
     {
         return maxRateWithProcesses_;
     }
 
-    int Player::getMaxGold() const
+    int Player::getMaxGoldRate() const
     {
         return maxGold_;
     }
 
-    int Player::getMaxGoldWithProcesses() const
+    int Player::getMaxGoldRateWithProcesses() const
     {
         return maxGoldWithProcesses_;
     }
 
-    void Player::logMission(CvSelectionGroup* pGroup, MissionData missionData, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit) const
+    const std::vector<std::pair<int, int> >& Player::getGoldAndResearchRates() const
+    {
+        return goldAndResearchOutputsByCommerceRate_;
+    }
+
+    TotalOutput Player::getCurrentOutput()
+    {
+        TotalOutput currentOutput;
+        CityIter cityIter(*pPlayer_);
+        while (CvCity* pCity = cityIter())
+        {
+            City& city = getCity(pCity);
+            currentOutput += city.getCityData()->getOutput();
+        }
+        return currentOutput;
+    }
+
+    TotalOutput Player::getCurrentProjectedOutput()
+    {
+        TotalOutput currentProjectedOutput;
+        CityIter cityIter(*pPlayer_);
+        while (CvCity* pCity = cityIter())
+        {
+            City& city = getCity(pCity);
+            currentProjectedOutput += city.getBaseOutputProjection().getOutput();
+        }
+        return currentProjectedOutput;
+    }
+
+    void Player::logMission(CvSelectionGroup* pGroup, MissionData missionData, MissionAITypes eMissionAI, CvPlot* pMissionAIPlot, CvUnit* pMissionAIUnit, const char* callingFunction) const
     {
 #ifdef ALTAI_DEBUG
         boost::shared_ptr<CivLog> pCivLog = CivLog::getLog(*pPlayer_);
@@ -1278,10 +1378,14 @@ namespace AltAI
            << " to plot: " << (pMissionAIPlot ? pMissionAIPlot->getCoords() : XYCoords(-1, -1))
            << " for unit: " << (pMissionAIUnit ? gGlobals.getUnitInfo(pMissionAIUnit->getUnitType()).getType() : "NO_UNIT")
            << " (iData1 = " << missionData.iData1 << ", iData2 = " << missionData.iData2 << ", iFlags = " << missionData.iFlags << ")";
+        if (callingFunction)
+        {
+            os << " caller = " << callingFunction;
+        }
 
         boost::shared_ptr<UnitLog> pUnitLog = UnitLog::getLog(*pPlayer_);
         std::ostream& osUnit = pUnitLog->getStream();
-        osUnit << "\nTurn = " << gGlobals.getGame().getGameTurn();
+        osUnit << "\nTurn = " << gGlobals.getGame().getGameTurn() << " " << __FUNCTION__;
         pUnitLog->logSelectionGroup(pGroup);
 #endif
     }
@@ -1393,7 +1497,7 @@ namespace AltAI
         {
             for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
             {
-                iter->second.setFlag(City::NeedsBuildingCalcs);
+                iter->second->setFlag(City::NeedsBuildingCalcs);
             }            
         }
 
@@ -1410,7 +1514,7 @@ namespace AltAI
         {
             for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
             {
-                iter->second.setFlag(City::NeedsImprovementCalcs);
+                iter->second->setFlag(City::NeedsImprovementCalcs);
             }
         }
 
@@ -1424,11 +1528,24 @@ namespace AltAI
         pPlayerAnalysis_->update(pEvent);
     }
 
-    void Player::gaveTech(TechTypes techType, PlayerTypes toPlayer)
+    void Player::gaveTech(TechTypes techType, PlayerTypes fromPlayer, PlayerTypes toPlayer)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
-        os << "\nTech shared: " << gGlobals.getTechInfo(techType).getType() << " turn = " << gGlobals.getGame().getGameTurn() << " to player: " << narrow(CvPlayerAI::getPlayer(toPlayer).getName());
+        os << "\nTech shared: " << gGlobals.getTechInfo(techType).getType() << " turn = " << gGlobals.getGame().getGameTurn()
+           << " from player: " << narrow(CvPlayerAI::getPlayer(fromPlayer).getName()) << " to player: " << narrow(CvPlayerAI::getPlayer(toPlayer).getName());
+#endif
+    }
+
+    void Player::meetTeam(TeamTypes teamType)
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
+        PlayerIter playerIter(teamType);
+        while (const CvPlayerAI* player = playerIter())
+        {
+            os << "\nMet team: " << teamType << " player: " << narrow(player->getName());
+        }        
 #endif
     }
 
@@ -1442,22 +1559,30 @@ namespace AltAI
         getAnalysis()->getMapAnalysis()->updatePlotInfo(pPlot, isNew, caller);
     }
 
-    /*void Player::pushPlotEvent(const boost::shared_ptr<IPlotEvent>& pPlotEvent)
+    void Player::updatePlotRevealed(const CvPlot* pPlot, bool isNew, bool isRevealed)
     {
-        getAnalysis()->getMapAnalysis()->pushPlotEvent(pPlotEvent);
-        getAnalysis()->getWorkerAnalysis()->pushPlotEvent(pPlotEvent);
-    }*/
-
-    void Player::updatePlotRevealed(const CvPlot* pPlot, bool isNew)
-    {
-        getAnalysis()->getMapAnalysis()->updatePlotRevealed(pPlot, isNew);
+        if (isRevealed)
+        {
+            bool isNewSubArea = getAnalysis()->getMapAnalysis()->updatePlotRevealed(pPlot, isNew);
+            if (isNewSubArea)
+            {
+                pPlayerAnalysis_->getMilitaryAnalysis()->addNewSubArea(pPlot->getSubArea());
+            }
+        }
 
         UnitPlotIter unitIter(pPlot);
         while (CvUnit* pUnit = unitIter())
         {
             if (!pUnit->isInvisible(getTeamID(), false))
             {
-                addPlayerUnit((CvUnitAI*)pUnit, pPlot);
+                if (isRevealed)
+                {
+                    addPlayerUnit((CvUnitAI*)pUnit, pPlot);
+                }
+                else
+                {
+                    hidePlayerUnit((CvUnitAI*)pUnit, pPlot, false);
+                }
             }
         }
     }
@@ -1466,6 +1591,7 @@ namespace AltAI
     {
         getAnalysis()->getMapAnalysis()->updatePlotBonus(pPlot, revealedBonusType);
         getAnalysis()->getWorkerAnalysis()->updatePlotBonus(pPlot, revealedBonusType);
+        getAnalysis()->getMapDelta()->updatePlotBonus(pPlot, revealedBonusType);
     }
 
     void Player::updatePlotFeature(const CvPlot* pPlot, FeatureTypes oldFeatureType)
@@ -1476,13 +1602,17 @@ namespace AltAI
     void Player::updatePlotImprovement(const CvPlot* pPlot, ImprovementTypes oldImprovementType)
     {
         getAnalysis()->getMapAnalysis()->updatePlotImprovement(pPlot, oldImprovementType);
-        getAnalysis()->getWorkerAnalysis()->updateOwnedPlotImprovement(pPlot, oldImprovementType);
+        if (pPlot->getOwner() == pPlayer_->getID())
+        {
+            getAnalysis()->getWorkerAnalysis()->updateOwnedPlotImprovement(pPlot, oldImprovementType);
+        }        
     }
 
     void Player::updatePlotCulture(const CvPlot* pPlot, PlayerTypes previousRevealedOwner, PlayerTypes newRevealedOwner)
     {
         getAnalysis()->getMapAnalysis()->updatePlotCulture(pPlot, previousRevealedOwner, newRevealedOwner);
         getAnalysis()->getWorkerAnalysis()->updatePlotOwner(pPlot, previousRevealedOwner, newRevealedOwner);
+        getAnalysis()->getMapDelta()->updatePlotOwner(pPlot, previousRevealedOwner, newRevealedOwner);
     }
 
     void Player::updateCityBonusCount(const CvCity* pCity, BonusTypes bonusType, int delta)
@@ -1512,6 +1642,14 @@ namespace AltAI
         os << "\nNotifying religion founded: " << gGlobals.getReligionInfo(religionType).getType() << (isOurs ? " by us " : " by someone else ");
 #endif
         //getAnalysis()->getPlayerTactics()->unselectTechReligionTactics((TechTypes)(gGlobals.getReligionInfo(religionType).getTechPrereq()));
+    }
+
+    void Player::notifyCommerceRateChanged(CommerceTypes commerceType)
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
+        os << "\nCommerce rate: " << gGlobals.getCommerceInfo(commerceType).getType() << " changed to: " << pPlayer_->getCommercePercent(commerceType);
+#endif
     }
 
     void Player::notifyFirstToTechDiscovered(TeamTypes teamType, TechTypes techType)
@@ -1551,25 +1689,32 @@ namespace AltAI
 
         getAnalysis()->getMapAnalysis()->analyseSharedPlots(cityFlags_);
 
-        std::set<BonusTypes> unownedBonusTypes;
+        std::set<BonusTypes> possiblyReachableBonusTypes;
         for (std::set<int>::const_iterator si(subAreas.begin()), siEnd(subAreas.end()); si != siEnd; ++si)
         {
-            std::vector<CvPlot*> unownedResourcePlots = getAnalysis()->getMapAnalysis()->getResourcePlots(*si);
-            for (size_t i = 0, count = unownedResourcePlots .size(); i < count; ++i)
+            std::vector<CvPlot*> subAreaResourcePlots = getAnalysis()->getMapAnalysis()->getResourcePlots(*si);
+            for (size_t i = 0, count = subAreaResourcePlots .size(); i < count; ++i)
             {
-                unownedBonusTypes.insert(unownedResourcePlots[i]->getBonusType(pPlayer_->getTeam()));
+                possiblyReachableBonusTypes.insert(subAreaResourcePlots[i]->getBonusType(pPlayer_->getTeam()));
             }
         }
 
-        //for (std::set<IDInfo>::const_iterator ci(cityFlags_.begin()), ciEnd(cityFlags_.end()); ci != ciEnd; ++ci)
-        //{
-            for (std::set<BonusTypes>::const_iterator bi(unownedBonusTypes.begin()), biEnd(unownedBonusTypes.end()); bi != biEnd; ++bi)
-            {
-                pPlayerAnalysis_->getPlayerTactics()->resourceTacticsMap_[*bi]->update(*this);
-            }
-        //}
+        for (std::set<BonusTypes>::const_iterator bi(possiblyReachableBonusTypes.begin()), biEnd(possiblyReachableBonusTypes.end()); bi != biEnd; ++bi)
+        {
+            pPlayerAnalysis_->getPlayerTactics()->resourceTacticsMap_[*bi]->update(*this);
+        }
 
         cityFlags_.clear();
+    }
+
+    bool Player::isSharedPlot(const CvPlot* pPlot) const
+    {
+        return getAnalysis()->getMapAnalysis()->isSharedPlot(pPlot->getCoords());
+    }
+
+    const CvCity* Player::getSharedPlotAssignedCity(const CvPlot* pPlot) const
+    {
+        return ::getCity(getAnalysis()->getMapAnalysis()->getSharedPlotAssignedCity(pPlot->getCoords()));
     }
 
     void Player::setWorkingCityOverride(const CvPlot* pPlot, const CvCity* pOldCity, const CvCity* pNewCity)
@@ -1588,15 +1733,15 @@ namespace AltAI
         return pSettlerManager_;
     }
 
-    std::vector<int> Player::getBestCitySites(int minValue, int count)
+    std::vector<int /* plot num */> Player::getBestCitySites(int minValue, int count)
     {
         return pSettlerManager_->getBestCitySites(minValue, count);
     }
 
-    std::set<BonusTypes> Player::getBonusesForSites(int siteCount) const
+    /*std::set<BonusTypes> Player::getBonusesForSites(int siteCount) const
     {
         return pSettlerManager_->getBonusesForSites(siteCount);
-    }
+    }*/
 
     TechTypes Player::getResearchTech(TechTypes ignoreTechType)
     {
@@ -1622,7 +1767,7 @@ namespace AltAI
         std::multimap<int, IDInfo, std::greater<int> > outputs;
         for (CityMap::const_iterator ci(cities_.begin()), ciEnd(cities_.end()); ci != ciEnd; ++ci)
         {
-            outputs.insert(std::make_pair(ci->second.getMaxOutputs()[outputType], ci->second.getCvCity()->getIDInfo()));
+            outputs.insert(std::make_pair(ci->second->getMaxOutputs()[outputType], ci->second->getCvCity()->getIDInfo()));
         }
 
         int rank = 1;

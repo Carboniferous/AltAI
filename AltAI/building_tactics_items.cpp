@@ -23,7 +23,8 @@ namespace AltAI
     void EconomicBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
         const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
+        City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
+        CityDataPtr pCityData = pCityBuildingTactics->getCityData();
 
         if (pCityBuildingTactics->getComparisonFlag() != ICityBuildingTactics::No_Comparison)
         {
@@ -38,8 +39,8 @@ namespace AltAI
                 economicValue.output = ladder.getOutput() - city.getBaseOutputProjection().getOutput();
                 economicValue.nTurns = ladder.buildings[0].first;
                 /*int estimatedTurns = city.getBaseOutputProjection().getExpectedTurnBuilt(pCityBuildingTactics->getBuildingCost() - pCity->getBuildingProduction(pCityBuildingTactics->getBuildingType()), 
-                    city.getCityData()->getModifiersHelper()->getBuildingProductionModifier(*city.getCityData(), pCityBuildingTactics->getBuildingType()),
-                    city.getCityData()->getModifiersHelper()->getTotalYieldModifier(*city.getCityData())[YIELD_PRODUCTION]);*/
+                    pCityData->getModifiersHelper()->getBuildingProductionModifier(*pCityData, pCityBuildingTactics->getBuildingType()),
+                    pCityData->getModifiersHelper()->getTotalYieldModifier(*pCityData)[YIELD_PRODUCTION]);*/
 
                 /*if (estimatedTurns != economicValue.nTurns)
                 {
@@ -181,12 +182,14 @@ namespace AltAI
     void CultureBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
         const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
+        City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
+        CityDataPtr pCityData = pCityBuildingTactics->getCityData();
 
-        int estimatedTurns = city.getBaseOutputProjection().getExpectedTurnBuilt(pCityBuildingTactics->getBuildingCost() - 
+        int estimatedTurns = city.getBaseOutputProjection().getExpectedTurnBuilt(
+            pCityBuildingTactics->getBuildingCost() - 
                 pCity->getBuildingProduction(pCityBuildingTactics->getBuildingType()), 
-            city.getCityData()->getModifiersHelper()->getBuildingProductionModifier(*city.getCityData(), pCityBuildingTactics->getBuildingType()),
-            city.getCityData()->getModifiersHelper()->getTotalYieldModifier(*city.getCityData())[YIELD_PRODUCTION]);
+            pCityData->getModifiersHelper()->getBuildingProductionModifier(*pCityData, pCityBuildingTactics->getBuildingType()),
+            pCityData->getModifiersHelper()->getTotalYieldModifier(*pCityData)[YIELD_PRODUCTION]);
 
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
@@ -200,7 +203,7 @@ namespace AltAI
             cultureValue.nTurns = estimatedTurns;
 
             bool needCulture = pCity->getCultureLevel() == 1 && pCity->getCommerceRate(COMMERCE_CULTURE) == 0;
-            bool culturePressure = city.getCityData()->getNumUncontrolledPlots(true) > 0;
+            bool culturePressure = pCityData->getNumUncontrolledPlots(true) > 0;
 
             if (needCulture && !isLimitedWonderClass(getBuildingClass(cultureValue.buildingType)))
             {
@@ -332,13 +335,14 @@ namespace AltAI
     void UnitExperienceTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {        
         const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
-        const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
+        City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
+        CityDataPtr pCityData = pCityBuildingTactics->getCityData();
+        Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
 
         int estimatedTurns = city.getBaseOutputProjection().getExpectedTurnBuilt(pCityBuildingTactics->getBuildingCost() - 
                 pCity->getBuildingProduction(pCityBuildingTactics->getBuildingType()), 
-            city.getCityData()->getModifiersHelper()->getBuildingProductionModifier(*city.getCityData(), pCityBuildingTactics->getBuildingType()),
-            city.getCityData()->getModifiersHelper()->getTotalYieldModifier(*city.getCityData())[YIELD_PRODUCTION]);
+            pCityData->getModifiersHelper()->getBuildingProductionModifier(*pCityData, pCityBuildingTactics->getBuildingType()),
+            pCityData->getModifiersHelper()->getTotalYieldModifier(*pCityData)[YIELD_PRODUCTION]);
 
         if (estimatedTurns >= 0)  // building built
         {
@@ -352,7 +356,7 @@ namespace AltAI
             buildingValue.buildingType = pCityBuildingTactics->getBuildingType();
             buildingValue.nTurns = estimatedTurns;
 
-            CityDataPtr pCopyCityData = city.getCityData()->clone();
+            CityDataPtr pCopyCityData = pCityData->clone();
             updateRequestData(*pCopyCityData, player.getAnalysis()->getBuildingInfo(pCityBuildingTactics->getBuildingType()));
 
             TacticSelectionData buildingUnitsData;
@@ -423,13 +427,14 @@ namespace AltAI
     void CityDefenceBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
     {
         const CvCity* pCity = getCity(pCityBuildingTactics->getCity());
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
-        const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
+        City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
+        CityDataPtr pCityData = pCityBuildingTactics->getCityData();
+        Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
 
         int estimatedTurns = city.getBaseOutputProjection().getExpectedTurnBuilt(pCityBuildingTactics->getBuildingCost() - 
                 pCity->getBuildingProduction(pCityBuildingTactics->getBuildingType()), 
-            city.getCityData()->getModifiersHelper()->getBuildingProductionModifier(*city.getCityData(), pCityBuildingTactics->getBuildingType()),
-            city.getCityData()->getModifiersHelper()->getTotalYieldModifier(*city.getCityData())[YIELD_PRODUCTION]);
+            pCityData->getModifiersHelper()->getBuildingProductionModifier(*pCityData, pCityBuildingTactics->getBuildingType()),
+            pCityData->getModifiersHelper()->getTotalYieldModifier(*pCityData)[YIELD_PRODUCTION]);
 
         if (estimatedTurns >= 0)
         {
@@ -442,7 +447,7 @@ namespace AltAI
             buildingValue.buildingType = pCityBuildingTactics->getBuildingType();
             buildingValue.nTurns = estimatedTurns;
 
-            CityDataPtr pCopyCityData = city.getCityData()->clone();
+            CityDataPtr pCopyCityData = pCityData->clone();
             updateRequestData(*pCopyCityData, player.getAnalysis()->getBuildingInfo(pCityBuildingTactics->getBuildingType()));
 
             TacticSelectionData buildingUnitsData;
@@ -506,8 +511,6 @@ namespace AltAI
             return;
         }
 
-        selectionData.getFreeTech = true;
-
         const PlayerTypes playerType = pCityBuildingTactics->getCity().eOwner;
         PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
         const CvPlayer& player = CvPlayerAI::getPlayer(playerType);
@@ -541,10 +544,15 @@ namespace AltAI
         std::vector<TechTypes> techs = pPlayer->getAnalysis()->getTechsWithDepth(1);
 
         int maxCost = 0;
+        TechTypes possibleTechSelection = NO_TECH;
         for (size_t i = 0, count = techs.size(); i < count; ++i)
         {
             const int thisCost = calculateTechResearchCost(techs[i], playerType);
-            maxCost = std::max<int>(maxCost, thisCost);
+            if (thisCost > maxCost)
+            {
+                maxCost = thisCost;
+                possibleTechSelection = techs[i];
+            }
 #ifdef ALTAI_DEBUG
             os << "\n\tTech: " << gGlobals.getTechInfo(techs[i]).getType() << " has depth = 1 and research cost: " << thisCost;
 #endif
@@ -561,8 +569,7 @@ namespace AltAI
             pPlayer->getAnalysis()->recalcTechDepths();
         }        
 
-        selectionData.getFreeTech = true;
-        selectionData.freeTechValue = maxCost;
+        selectionData.possibleFreeTech = possibleTechSelection;
     }
 
     void FreeTechBuildingTactic::debug(std::ostream& os) const

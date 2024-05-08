@@ -22,6 +22,7 @@
 #include "./modifiers_helper.h"
 #include "./culture_helper.h"
 #include "./unit_helper.h"
+#include "./helper_fns.h"
 #include "./civ_log.h"
 #include "./save_utils.h"
 #include "./error_log.h"
@@ -43,7 +44,7 @@ namespace AltAI
             }
         }
 
-        std::pair<TotalOutput, std::vector<PlotImprovementData> > getImprovements(const Player& player, const City& city)
+        std::pair<TotalOutput, std::vector<PlotImprovementData> > getImprovements(const Player& player, City& city)
         {
             std::vector<PlotImprovementData> improvements;
             TotalOutput improvementsDelta;
@@ -80,8 +81,8 @@ namespace AltAI
                 return;
             }
 
-            const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
-            const City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
+            Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
+            City& city = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner())->getCity(pCity);
             UnitTypes unitType = pCityUnitTactics->getUnitType();
             const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
 
@@ -110,6 +111,7 @@ namespace AltAI
                 tacticValue.level = level;
 
                 UnitData ourUnit(pCityUnitTactics->getUnitType());
+                // todo - get any free promotions from city data unit helper
                 player.getAnalysis()->getUnitAnalysis()->promote(ourUnit, combatDetails, isAttacker, level, Promotions());
                 std::vector<int> odds = player.getAnalysis()->getUnitAnalysis()->getOdds(ourUnit, possibleCombatUnits, 0, combatDetails, isAttacker);
 #ifdef ALTAI_DEBUG
@@ -117,11 +119,14 @@ namespace AltAI
                 {
                     std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
                     os << "\n" << unitInfo.getType();
-                    ourUnit.debug(os);
-                    os << "\n\t odds =";
+                    ourUnit.debugPromotions(os);
+                    os << "\n\t " << (isAttacker ? "attack" : "defence") << " odds =";
                     for (size_t i = 0, count = odds.size(); i < count; ++i)
                     {
-                        os << (i > 0 ? ", " : " ") << odds[i] << " v. " << gGlobals.getUnitInfo(possibleCombatUnits[i]).getType();
+                        if (odds[i] > 0)  // don't bother logging stuff with zero odds - just clutters up the log file
+                        {
+                            os << (i > 0 ? ", " : " ") << odds[i] << " v. " << gGlobals.getUnitInfo(possibleCombatUnits[i]).getType();
+                        }
                     }
                 }
 
@@ -144,8 +149,7 @@ namespace AltAI
                 {
 #ifdef ALTAI_DEBUG
                     std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-                    os << " unit: " << unitInfo.getType() << " value: " << tacticValue.unitAnalysisValue << ", exp = " 
-                        << experience << ", level = " << level;
+                    os << " value: " << tacticValue.unitAnalysisValue << ", exp = " << experience << ", level = " << level;
 #endif
                     unitSelectionData.insert(tacticValue);
                 }
@@ -164,7 +168,7 @@ namespace AltAI
         applyCombatTactic(pCityUnitTactics, selectionData.cityDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
     }
 
-    std::vector<XYCoords> CityDefenceUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> CityDefenceUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         // just return this city for now
         const CvCity* pCity = getCity(city);
@@ -204,19 +208,19 @@ namespace AltAI
         }
         
         const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner);
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner)->getCity(cityInfo.iID);
+        const City& city = player.getCity(cityInfo.iID);
 
         UnitData::CombatDetails combatDetails;
         combatDetails.flags = UnitData::CombatDetails::CityAttack;
         combatDetails.plotIsHills = pCity->plot()->isHills();
         combatDetails.plotTerrain = pCity->plot()->getTerrainType();
-        combatDetails.cultureDefence = gGlobals.getCultureLevelInfo(city.getBaseProjectionCityData()->getCultureHelper()->getCultureLevel()).getCityDefenseModifier();
+        combatDetails.cultureDefence = gGlobals.getCultureLevelInfo(pCityUnitTactics->getCityData()->getCultureHelper()->getCultureLevel()).getCityDefenseModifier();
         combatDetails.buildingDefence = pCityUnitTactics->getCityData()->getUnitHelper()->getBuildingDefence();
 
         applyCombatTactic(pCityUnitTactics, selectionData.thisCityDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
     }
 
-    std::vector<XYCoords> ThisCityDefenceUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> ThisCityDefenceUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         // just return this city for now
         const CvCity* pCity = getCity(city);
@@ -253,7 +257,7 @@ namespace AltAI
         applyCombatTactic(pCityUnitTactics, selectionData.cityAttackUnits, pCityUnitTactics->getCity(), combatDetails, true);
     }
 
-    std::vector<XYCoords> CityAttackUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> CityAttackUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         // just return this city for now
         const CvCity* pCity = getCity(city);
@@ -291,7 +295,7 @@ namespace AltAI
         applyCombatTactic(pCityUnitTactics, selectionData.collateralUnits, pCityUnitTactics->getCity(), combatDetails, true);
     }
 
-    std::vector<XYCoords> CollateralUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> CollateralUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         // just return this city for now
         const CvCity* pCity = getCity(city);
@@ -328,7 +332,7 @@ namespace AltAI
         applyCombatTactic(pCityUnitTactics, selectionData.fieldDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
     }
 
-    std::vector<XYCoords> FieldDefenceUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> FieldDefenceUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         // just return this city for now
         const CvCity* pCity = getCity(city);
@@ -365,7 +369,7 @@ namespace AltAI
         applyCombatTactic(pCityUnitTactics, selectionData.fieldAttackUnits, pCityUnitTactics->getCity(), combatDetails, true);
     }
 
-    std::vector<XYCoords> FieldAttackUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> FieldAttackUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         // just return this city for now
         const CvCity* pCity = getCity(city);
@@ -397,8 +401,8 @@ namespace AltAI
         const ProjectionLadder& ladder = pCityUnitTactics->getProjection();
 
         IDInfo cityInfo = pCityUnitTactics->getCity();
-        const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner);
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner)->getCity(cityInfo.iID);
+        Player& player = *gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner);
+        City& city = gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner)->getCity(cityInfo.iID);
         UnitTypes unitType = pCityUnitTactics->getUnitType();
         const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
 
@@ -417,12 +421,6 @@ namespace AltAI
             if (gGlobals.getUnitInfo(pCityUnitTactics->getUnitType()).isFoodProduction())
             {
                 const ProjectionLadder& ladder = pCityUnitTactics->getProjection();
-                //const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCityUnitTactics->getCity().eOwner);
-                //const City& city = player.getCity(pCityUnitTactics->getCity().iID);
-                //CityDataPtr pBaseCityData = city.getCityData()->clone();
-
-                //std::vector<IProjectionEventPtr> events;
-                //ProjectionLadder base = getProjectedOutput(player, pBaseCityData, 30, events, ConstructItem(), __FUNCTION__, false);
                 buildValue.lostOutput = city.getBaseOutputProjection().getOutput() - ladder.getOutput();
             }
 
@@ -440,7 +438,7 @@ namespace AltAI
         }
     }
 
-    std::vector<XYCoords> BuildCityUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> BuildCityUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {        
         const CvCity* pCity = getCity(city);
         const int subAreaID = pCity->plot()->getSubArea();
@@ -541,17 +539,17 @@ namespace AltAI
         IDInfo cityInfo = pCityUnitTactics->getCity();
         PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
         boost::shared_ptr<PlayerTactics> pPlayerTactics = pPlayer->getAnalysis()->getPlayerTactics();
-        const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner);
-        const City& city = gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner)->getCity(cityInfo.iID);
+        Player& player = *gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner);
+        City& city = gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner)->getCity(cityInfo.iID);
 
         int estimatedTurns = city.getBaseOutputProjection().getExpectedTurnBuilt(pPlayer->getCvPlayer()->getProductionNeeded(pCityUnitTactics->getUnitType()), 
             city.getCityData()->getModifiersHelper()->getUnitProductionModifier(pCityUnitTactics->getUnitType()),
             city.getCityData()->getModifiersHelper()->getTotalYieldModifier(*city.getCityData())[YIELD_PRODUCTION]);
 
-//#ifdef ALTAI_DEBUG
-//        std::ostream& os = CivLog::getLog(*pPlayer->getCvPlayer())->getStream();
-//#endif
-
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*pPlayer->getCvPlayer())->getStream();
+#endif
+        // can we build the relevant worker unit?
         if (pCityUnitTactics->areDependenciesSatisfied(IDependentTactic::Ignore_None) && estimatedTurns >= 0)
         {
             std::vector<PlotImprovementData> improvements;
@@ -578,12 +576,16 @@ namespace AltAI
                 {
                     continue;
                 }
-                const City& city = pPlayer->getCity(pCity);
+                City& city = pPlayer->getCity(pCity);
                 std::vector<PlotImprovementData> otherCityImprovements;
                 TotalOutput otherCityImprovementsDelta;
                 boost::tie(otherCityImprovementsDelta, otherCityImprovements) = getImprovements(*pPlayer, city);
 
                 applyBuilds_(unitValue, pCity->getIDInfo(), otherCityImprovements, otherCityImprovementsDelta);
+#ifdef ALTAI_DEBUG
+                os << "\nApplying imp base builds for city: " << safeGetCityName(pCity);
+                unitValue.debug(os);
+#endif
             }
 
             //if (unitValue.buildsMap.empty())
@@ -605,6 +607,16 @@ namespace AltAI
                         TotalOutput delta = (*cityImprovementsTacticsIter)->getProjection().getOutput() - (*cityImprovementsTacticsIter)->getBaseProjection().getOutput();
                         // todo: check tech cost
                         applyBuilds_(unitValue, pCity->getIDInfo(), (*cityImprovementsTacticsIter)->getImprovements(), delta, impTechs);
+#ifdef ALTAI_DEBUG
+                        os << "\nApplying imp builds for city: " << safeGetCityName(pCity);
+
+                        for (size_t i = 0, count = impTechs.size(); i < count; ++i)
+                        {
+                            if (i == 0) os << " imp tech(s): "; else os << ", ";
+                            os << gGlobals.getTechInfo(impTechs[i]).getType();
+                        }
+                        unitValue.debug(os);
+#endif
                     }
                 }
             //}
@@ -644,7 +656,7 @@ namespace AltAI
         }
     }
 
-    std::vector<XYCoords> BuildImprovementsUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> BuildImprovementsUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         std::vector<PlotImprovementData> improvements;
         TotalOutput improvementsDelta;
@@ -697,7 +709,7 @@ namespace AltAI
         applyCombatTactic(pCityUnitTactics, selectionData.seaCombatUnits, pCityUnitTactics->getCity(), combatDetails, true);
     }
 
-    std::vector<XYCoords> SeaAttackUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> SeaAttackUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         // just return this city for now
         const CvCity* pCity = getCity(city);
@@ -736,8 +748,8 @@ namespace AltAI
             return;
         }
 
-        const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
-        const City& city = player.getCity(pCity);
+        Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
+        City& city = player.getCity(pCity);
 
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
@@ -783,7 +795,7 @@ namespace AltAI
         }
     }
 
-    std::vector<XYCoords> ScoutUnitTactic::getPossibleTargets(const Player& player, IDInfo city)
+    std::vector<XYCoords> ScoutUnitTactic::getPossibleTargets(Player& player, IDInfo city)
     {
         // just return this city for now
         const CvCity* pCity = getCity(city);
@@ -824,7 +836,7 @@ namespace AltAI
 
     void BuildSpecialBuildingUnitTactic::apply(const UnitTacticsPtr& pUnitTactics, TacticSelectionData& selectionData)
     {
-        const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pUnitTactics->getPlayerType());
+        Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pUnitTactics->getPlayerType());
         const PlayerTypes playerType = player.getPlayerID();
         std::map<int, ICityBuildingTacticsPtr> cityBuildingTactics = player.getAnalysis()->getPlayerTactics()->getCitySpecialBuildingTactics(buildingType_);
 
@@ -842,7 +854,7 @@ namespace AltAI
 
             if (cityTacticIter != cityBuildingTactics.end())
             {
-                const City& city = gGlobals.getGame().getAltAI()->getPlayer(playerType)->getCity(cityID);
+                City& city = gGlobals.getGame().getAltAI()->getPlayer(playerType)->getCity(cityID);
 
                 cityTacticIter->second->update(player, city.getCityData()->clone());
                 cityTacticIter->second->apply(selectionData);
@@ -880,8 +892,8 @@ namespace AltAI
 
         if (discoverTech != NO_TECH)
         {
-            selectionData.getFreeTech = true;
-            selectionData.freeTechValue = calculateTechResearchCost(discoverTech, pUnitTactics->getPlayerType());
+            selectionData.possibleFreeTech = discoverTech;
+            //selectionData.freeTechValue = calculateTechResearchCost(discoverTech, pUnitTactics->getPlayerType());
         }
     }
 
@@ -953,22 +965,23 @@ namespace AltAI
     {
         const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(pUnitTactics->getPlayerType());
         const PlayerTypes playerType = player.getPlayerID();
+        const int numSimTurns = player.getAnalysis()->getNumSimTurns();
 
         CityIter iter(CvPlayerAI::getPlayer(pUnitTactics->getPlayerType()));
         CvCity* pCity;
         while (pCity = iter())
         {
             const int cityID = pCity->getID();
-            const City& city = gGlobals.getGame().getAltAI()->getPlayer(playerType)->getCity(cityID);
+            City& city = gGlobals.getGame().getAltAI()->getPlayer(playerType)->getCity(cityID);
             CityDataPtr pBaseCityData = city.getCityData()->clone();
             CityDataPtr pCityData = city.getCityData()->clone();
 
             std::vector<IProjectionEventPtr> events;
-            ProjectionLadder base = getProjectedOutput(player, pBaseCityData, 30, events, ConstructItem(), __FUNCTION__, false);
+            ProjectionLadder base = getProjectedOutput(player, pBaseCityData, numSimTurns, events, ConstructItem(), __FUNCTION__, false);
 
             updateRequestData(*pCityData, specType_);
             events.clear();
-            ProjectionLadder ladder = getProjectedOutput(player, pCityData, 30, events, ConstructItem(), __FUNCTION__, false);
+            ProjectionLadder ladder = getProjectedOutput(player, pCityData, numSimTurns, events, ConstructItem(), __FUNCTION__, false);
 
             SettledSpecialistValue value;
             value.city = pCity->getIDInfo();

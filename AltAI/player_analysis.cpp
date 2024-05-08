@@ -55,6 +55,7 @@ namespace AltAI
         int nTurnsLeft = gGlobals.getGame().getMaxTurns() - gGlobals.getGame().getElapsedGameTurns();
         timeHorizon_ = std::min<int>(std::max<int>(gGlobals.getGame().getMaxTurns() / 10, 20), nTurnsLeft);
 
+        pMapDelta_ = boost::shared_ptr<PlotUpdates>(new PlotUpdates(player_));
         playerTactics_ = boost::shared_ptr<PlayerTactics>(new PlayerTactics(player_));
         pWorkerAnalysis_ = boost::shared_ptr<WorkerAnalysis>(new WorkerAnalysis(player));
         pMilitaryAnalysis_ = boost::shared_ptr<MilitaryAnalysis>(new MilitaryAnalysis(player));
@@ -98,14 +99,18 @@ namespace AltAI
                 // skip 'special' units (not built by normal means, such as great people; also excludes barb animals)
                 // need the >= as settlers cost 0 in the xml and have a weird, undocumented mechanism to determine their cost
                 const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+                boost::shared_ptr<UnitInfo> pUnitInfo;
                 if (!unitInfo.isAnimal())
                 {
-                    unitsInfo_.insert(std::make_pair(unitType, makeUnitInfo(unitType, playerType)));
+                    pUnitInfo = makeUnitInfo(unitType, playerType);
+                    unitsInfo_.insert(std::make_pair(unitType, pUnitInfo));
                 }
                 else
                 {
-                    std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-                    os << "\nSkipping unit: " << gGlobals.getUnitInfo(unitType).getType();
+//#ifdef ALTAI_DEBUG
+//                    std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+//                    os << "\nSkipping unit: " << gGlobals.getUnitInfo(unitType).getType();                    
+//#endif
                     continue;
                 }
 
@@ -131,7 +136,7 @@ namespace AltAI
 
                 // UNIT_SCIENTIST -> BUILDING_ACADEMY, BUILDING_CORPORATION_3, BUILDING_CORPORATION_6
                 // UNIT_MERCHANT -> BUILDING_CORPORATION_1, BUILDING_CORPORATION_2, etc...
-                std::vector<BuildingTypes> unitSpecialBuildings = getUnitSpecialBuildings(unitsInfo_[unitType]);
+                std::vector<BuildingTypes> unitSpecialBuildings = getUnitSpecialBuildings(pUnitInfo);
                 for (size_t buildingIndex = 0, buildingCount = unitSpecialBuildings.size(); buildingIndex < buildingCount; ++buildingIndex)
                 {
                     unitSpecialBuildingsMap_[unitSpecialBuildings[buildingIndex]].push_back(unitType);
@@ -141,7 +146,7 @@ namespace AltAI
 
 #ifdef ALTAI_DEBUG
         // debug
-        {
+        /*{
             std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
             for (std::map<UnitTypes, boost::shared_ptr<UnitInfo> >::const_iterator ci(unitsInfo_.begin()), ciEnd(unitsInfo_.end()); ci != ciEnd; ++ci)
             {
@@ -149,7 +154,7 @@ namespace AltAI
                 streamUnitInfo(os, ci->second);
             }
             os << "\n";
-        }
+        }*/
 #endif
     }
 
@@ -194,35 +199,35 @@ namespace AltAI
             }
         }
 
-#ifdef ALTAI_DEBUG
-        // debug
-        {
-            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-            for (std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> >::const_iterator ci(buildingsInfo_.begin()), ciEnd(buildingsInfo_.end()); ci != ciEnd; ++ci)
-            {
-                os << "\n" << gGlobals.getBuildingInfo(ci->first).getType() << ": ";
-                streamBuildingInfo(os, ci->second);
-
-                std::map<BuildingTypes, int>::const_iterator modifiersIter = buildingProductionModifiersMap_.find(ci->first);
-                if (modifiersIter != buildingProductionModifiersMap_.end())
-                {
-                    os << " production modifier = " << modifiersIter->second;
-                }
-            }
-            os << "\n\nSpecial buildings:\n";
-            for (std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> >::const_iterator ci(specialBuildingsInfo_.begin()), ciEnd(specialBuildingsInfo_.end()); ci != ciEnd; ++ci)
-            {
-                os << "\n" << gGlobals.getBuildingInfo(ci->first).getType() << ": ";
-                streamBuildingInfo(os, ci->second);
-
-                std::map<BuildingTypes, int>::const_iterator modifiersIter = buildingProductionModifiersMap_.find(ci->first);
-                if (modifiersIter != buildingProductionModifiersMap_.end())
-                {
-                    os << " production modifier = " << modifiersIter->second;
-                }
-            }
-        }
-#endif
+//#ifdef ALTAI_DEBUG
+//        // debug
+//        {
+//            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+//            for (std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> >::const_iterator ci(buildingsInfo_.begin()), ciEnd(buildingsInfo_.end()); ci != ciEnd; ++ci)
+//            {
+//                os << "\n" << gGlobals.getBuildingInfo(ci->first).getType() << ": ";
+//                streamBuildingInfo(os, ci->second);
+//
+//                std::map<BuildingTypes, int>::const_iterator modifiersIter = buildingProductionModifiersMap_.find(ci->first);
+//                if (modifiersIter != buildingProductionModifiersMap_.end())
+//                {
+//                    os << " production modifier = " << modifiersIter->second;
+//                }
+//            }
+//            os << "\n\nSpecial buildings:\n";
+//            for (std::map<BuildingTypes, boost::shared_ptr<BuildingInfo> >::const_iterator ci(specialBuildingsInfo_.begin()), ciEnd(specialBuildingsInfo_.end()); ci != ciEnd; ++ci)
+//            {
+//                os << "\n" << gGlobals.getBuildingInfo(ci->first).getType() << ": ";
+//                streamBuildingInfo(os, ci->second);
+//
+//                std::map<BuildingTypes, int>::const_iterator modifiersIter = buildingProductionModifiersMap_.find(ci->first);
+//                if (modifiersIter != buildingProductionModifiersMap_.end())
+//                {
+//                    os << " production modifier = " << modifiersIter->second;
+//                }
+//            }
+//        }
+//#endif
     }
 
     void PlayerAnalysis::analyseProjects_()
@@ -255,18 +260,18 @@ namespace AltAI
             techsInfo_.insert(std::make_pair((TechTypes)i, makeTechInfo((TechTypes)i, playerType)));
         }
 
-#ifdef ALTAI_DEBUG
-        // debug
-        {
-            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-            for (std::map<TechTypes, boost::shared_ptr<TechInfo> >::const_iterator ci(techsInfo_.begin()), ciEnd(techsInfo_.end()); ci != ciEnd; ++ci)
-            {
-                os << "\n" << gGlobals.getTechInfo(ci->first).getType() << ": ";
-                streamTechInfo(os, ci->second);
-            }
-            os << "\n";
-        }
-#endif
+//#ifdef ALTAI_DEBUG
+//        // debug
+//        {
+//            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+//            for (std::map<TechTypes, boost::shared_ptr<TechInfo> >::const_iterator ci(techsInfo_.begin()), ciEnd(techsInfo_.end()); ci != ciEnd; ++ci)
+//            {
+//                os << "\n" << gGlobals.getTechInfo(ci->first).getType() << ": ";
+//                streamTechInfo(os, ci->second);
+//            }
+//            os << "\n";
+//        }
+//#endif
     }
 
     void PlayerAnalysis::analyseCivics_()
@@ -276,18 +281,18 @@ namespace AltAI
             civicsInfo_.insert(std::make_pair((CivicTypes)i, makeCivicInfo((CivicTypes)i, playerType)));
         }
 
-#ifdef ALTAI_DEBUG
-        // debug
-        {
-            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-            for (std::map<CivicTypes, boost::shared_ptr<CivicInfo> >::const_iterator ci(civicsInfo_.begin()), ciEnd(civicsInfo_.end()); ci != ciEnd; ++ci)
-            {
-                os << "\n" << gGlobals.getCivicInfo(ci->first).getType() << ": ";
-                streamCivicInfo(os, ci->second);
-            }
-            os << "\n";
-        }
-#endif
+//#ifdef ALTAI_DEBUG
+//        // debug
+//        {
+//            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+//            for (std::map<CivicTypes, boost::shared_ptr<CivicInfo> >::const_iterator ci(civicsInfo_.begin()), ciEnd(civicsInfo_.end()); ci != ciEnd; ++ci)
+//            {
+//                os << "\n" << gGlobals.getCivicInfo(ci->first).getType() << ": ";
+//                streamCivicInfo(os, ci->second);
+//            }
+//            os << "\n";
+//        }
+//#endif
     }
 
     void PlayerAnalysis::analyseResources_()
@@ -298,18 +303,18 @@ namespace AltAI
             resourcesInfo_.insert(std::make_pair((BonusTypes)i, makeResourceInfo((BonusTypes)i, playerType)));
         }
 
-#ifdef ALTAI_DEBUG
-        // debug
-        {
-            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
-            for (std::map<BonusTypes, boost::shared_ptr<ResourceInfo> >::const_iterator ci(resourcesInfo_.begin()), ciEnd(resourcesInfo_.end()); ci != ciEnd; ++ci)
-            {
-                os << "\n" << gGlobals.getBonusInfo(ci->first).getType() << ": ";
-                streamResourceInfo(os, ci->second);
-            }
-            os << "\n";
-        }
-#endif
+//#ifdef ALTAI_DEBUG
+//        // debug
+//        {
+//            std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(player_.getPlayerID()))->getStream();
+//            for (std::map<BonusTypes, boost::shared_ptr<ResourceInfo> >::const_iterator ci(resourcesInfo_.begin()), ciEnd(resourcesInfo_.end()); ci != ciEnd; ++ci)
+//            {
+//                os << "\n" << gGlobals.getBonusInfo(ci->first).getType() << ": ";
+//                streamResourceInfo(os, ci->second);
+//            }
+//            os << "\n";
+//        }
+//#endif
     }
 
     void PlayerAnalysis::analyseExperienceLevels_()
@@ -621,6 +626,12 @@ namespace AltAI
         return techs;
     }
 
+    int PlayerAnalysis::getNumSimTurns() const
+    {
+        // 1500, 750, 500, 330 => 90, 45, 30, 19
+        return (6 * gGlobals.getGame().getMaxTurns()) / 100;
+    }
+
     ResearchTech PlayerAnalysis::getResearchTech(TechTypes ignoreTechType)
     {
         ResearchTech tacticsTech = playerTactics_->getResearchTech(ignoreTechType);
@@ -652,10 +663,10 @@ namespace AltAI
         os << "\nTech = " << gGlobals.getTechInfo(techType).getType() << " cost = " << cost << ", rate = " << rate << ", turns = " << approxTurns;
 #endif
 
-        if (approxTurns > (4 * gGlobals.getGame().getMaxTurns() / 100))
+        /*if (approxTurns > (4 * gGlobals.getGame().getMaxTurns() / 100))
         {
             return false;
-        }
+        }*/
 
         return true;
     }
@@ -697,10 +708,14 @@ namespace AltAI
     void PlayerAnalysis::write(FDataStreamBase* pStream) const
     {
         playerTactics_->write(pStream);
+        pWorkerAnalysis_->write(pStream);
+        pMilitaryAnalysis_->write(pStream);
     }
 
     void PlayerAnalysis::read(FDataStreamBase* pStream)
     {
         playerTactics_->read(pStream);
+        pWorkerAnalysis_->read(pStream);
+        pMilitaryAnalysis_->read(pStream);
     }
 }

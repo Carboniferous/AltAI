@@ -1658,6 +1658,9 @@ void CvPlayer::acquireCity(CvCity* pOldCity, bool bConquest, bool bTrade, bool b
 
 	FAssertMsg(pNewCity != NULL, "NewCity is not assigned a valid value");
 
+    // this stuff is done here as initCity creates a new city as if it's been founded
+    // probably want access to some of this info - esp as we use the city's name to create its logfile
+    // and the city will have the acquiring civ's next city name when it's initialised, not the current city name assigned below!
 	pNewCity->setPreviousOwner(eOldOwner);
 	pNewCity->setOriginalOwner(eOriginalOwner);
 	pNewCity->setGameTurnFounded(iGameTurnFounded);
@@ -1796,6 +1799,13 @@ void CvPlayer::acquireCity(CvCity* pOldCity, bool bConquest, bool bTrade, bool b
 	{
 		GC.getGameINLINE().updatePlotGroups();
 	}
+
+    // AltAI - call after plot has had city set on it
+    GC.getGame().getAltAI()->getPlayer(m_eID)->addCity(pNewCity);
+    if (GET_PLAYER((PlayerTypes)m_eID).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eID)->getCity(pNewCity).init();
+    }
 
 	CvEventReporter::getInstance().cityAcquired(eOldOwner, getID(), pNewCity, bConquest, bTrade);
 
@@ -2017,7 +2027,7 @@ bool CvPlayer::isCityNameValid(CvWString& szName, bool bTestDestroyed) const
 }
 
 
-CvUnit* CvPlayer::initUnit(UnitTypes eUnit, int iX, int iY, UnitAITypes eUnitAI, DirectionTypes eFacingDirection)
+CvUnit* CvPlayer::initUnit(UnitTypes eUnit, int iX, int iY, UnitAITypes eUnitAI, DirectionTypes eFacingDirection, const CvUnit* pUpgradingUnit)
 {
 	PROFILE_FUNC();
 
@@ -2027,7 +2037,7 @@ CvUnit* CvPlayer::initUnit(UnitTypes eUnit, int iX, int iY, UnitAITypes eUnitAI,
 	FAssertMsg(pUnit != NULL, "Unit is not assigned a valid value");
 	if (NULL != pUnit)
 	{
-		pUnit->init(pUnit->getID(), eUnit, ((eUnitAI == NO_UNITAI) ? ((UnitAITypes)(GC.getUnitInfo(eUnit).getDefaultUnitAIType())) : eUnitAI), getID(), iX, iY, eFacingDirection);
+		pUnit->init(pUnit->getID(), eUnit, ((eUnitAI == NO_UNITAI) ? ((UnitAITypes)(GC.getUnitInfo(eUnit).getDefaultUnitAIType())) : eUnitAI), getID(), iX, iY, eFacingDirection, pUpgradingUnit);
 	}
 
 	return pUnit;
@@ -2636,6 +2646,13 @@ void CvPlayer::doTurn()
 
 	GC.getGameINLINE().verifyDeals();
 
+    // AltAI
+    if (m_bUsingAltAI)
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eID)->doTurn();
+        GC.getGame().getAltAI()->getPlayer(m_eID)->updateCityData();  // used for assigning working plots
+    }
+
 	AI_doTurnPre();
 
 	if (getRevolutionTimer() > 0)
@@ -2649,13 +2666,6 @@ void CvPlayer::doTurn()
 	}
 
 	setConscriptCount(0);
-
-    // AltAI
-    if (m_bUsingAltAI)
-    {
-        GC.getGame().getAltAI()->getPlayer(m_eID)->doTurn();
-        GC.getGame().getAltAI()->getPlayer(m_eID)->updateCityData();  // used for assigning working plots
-    }
 
 	AI_assignWorkingPlots();
 
@@ -3151,11 +3161,12 @@ bool CvPlayer::hasBusyUnit() const
 		{
 		    if (pLoopSelectionGroup->getNumUnits() == 0)
 		    {
-                // looks suspect that this has to happen here
+                // looks suspect that this has to happen here (was only added in BTS version)
 		        pLoopSelectionGroup->kill();  
-                // looks like a bug to me - just because this group is empty, doesn't mean there is a later one which is busy and not empty
-		        // return false; // AltAI - think this is wrong
-                continue;  // AltAI - continue iterating over selection groups instead
+                // looks odd - just because this group is empty, doesn't mean there is a later one which is busy and not empty
+                // although the update code which checks this does a second check after setting auto moves on
+		        return false;
+                // continue;  // AltAI - possibly should continue iterating over selection groups instead
 		    }
 
 			return true;
@@ -5270,6 +5281,13 @@ void CvPlayer::found(int iX, int iY)
 			}
 		}
 	}
+
+    // AltAI - call after CvCity set up
+    GC.getGame().getAltAI()->getPlayer(m_eID)->addCity(pCity);
+    if (GET_PLAYER((PlayerTypes)m_eID).isUsingAltAI())
+    {
+        GC.getGame().getAltAI()->getPlayer(m_eID)->getCity(pCity).init();
+    }
 
 	if (isHuman() && getAdvancedStartPoints() < 0)
 	{
@@ -7624,7 +7642,7 @@ void CvPlayer::killGoldenAgeUnits(CvUnit* pUnitAlive)
 			if (pBestUnit->plot()->isActiveVisible(false))
 			{
 				//kill removes bestUnit from any groups
-				pBestUnit->getGroup()->pushMission(MISSION_GOLDEN_AGE, 0);
+				pBestUnit->getGroup()->pushMission(MISSION_GOLDEN_AGE, 0, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
 			}
 		}
 	}
@@ -10640,6 +10658,11 @@ void CvPlayer::setCommercePercent(CommerceTypes eIndex, int iNewValue)
 
 		AI_makeAssignWorkDirty();
 
+        if (m_bUsingAltAI)
+        {
+            GC.getGame().getAltAI()->getPlayer(m_eID)->notifyCommerceRateChanged(eIndex);
+        }
+
 		if (getTeam() == GC.getGameINLINE().getActiveTeam())
 		{
 			gDLL->getInterfaceIFace()->setDirty(GameData_DIRTY_BIT, true);
@@ -11810,6 +11833,7 @@ void CvPlayer::changeImprovementYieldChange(ImprovementTypes eIndex1, YieldTypes
 
 
 // XXX should pUnit be a CvSelectionGroup???
+// called from joinGroup and on creation of new unit
 void CvPlayer::updateGroupCycle(CvUnit* pUnit)
 {
 	CLLNode<IDInfo>* pUnitNode;
@@ -11840,6 +11864,10 @@ void CvPlayer::updateGroupCycle(CvUnit* pUnit)
 
 	pUnitNode = pPlot->headUnitNode();
 
+    // loop over plot's units:
+    // if the loop unit is its group's head unit (and not our unit)
+    // if we are not before (so must be after) the loop unit according to order defined in isBeforeUnitCycle(), set beforeUnit to be this loop unit and break
+    // otherwise, set afterUnit to the loop unit and continue
 	while (pUnitNode != NULL)
 	{
 		pLoopUnit = ::getUnit(pUnitNode->m_data);
@@ -11849,14 +11877,14 @@ void CvPlayer::updateGroupCycle(CvUnit* pUnit)
 		{
 			if (pLoopUnit != pUnit)
 			{
-				if (!isBeforeUnitCycle(pLoopUnit, pUnit))
+				if (!isBeforeUnitCycle(pLoopUnit, pUnit))  // our unit comes after this head unit:
 				{
-					pBeforeUnit = pLoopUnit;
+					pBeforeUnit = pLoopUnit;  // we come after, so this unit is 'before' in some sense
 					break;
 				}
-				else
+				else  // our unit comes before (why no break in this case - suppose you may have several groups on this plot)
 				{
-					pAfterUnit = pLoopUnit;
+					pAfterUnit = pLoopUnit;  // we come before, so this unit is 'after'
 				}
 			}
 		}
@@ -11867,6 +11895,10 @@ void CvPlayer::updateGroupCycle(CvUnit* pUnit)
 	iBestValue = MAX_INT;
 	pBestSelectionGroupNode = NULL;
 
+    // loop over player's selection groups
+    // for groups with head unit, if that unit is beforeUnit - set as best group node and break
+    // else try the same for afterUnit - but if match, set best group node as the next cycle node and break
+    // else pick closest group
 	while (pSelectionGroupNode != NULL)
 	{
 		pLoopSelectionGroup = getSelectionGroup(pSelectionGroupNode->m_data);

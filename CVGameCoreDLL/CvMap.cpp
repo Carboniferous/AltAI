@@ -37,9 +37,9 @@
 // AltAI
 #include "game.h"
 #include "player.h"
-#include "city.h"
 #include "iters.h"
 #include "utils.h"
+#include "save_utils.h"
 #include "sub_area.h"
 #include "irrigatable_area.h"
 
@@ -1138,6 +1138,10 @@ CvPlot* CvMap::plot(int iX, int iY) const
 	return plotINLINE(iX, iY);
 }
 
+CvPlot* CvMap::plot(XYCoords coords) const
+{
+    return plotINLINE(coords.iX, coords.iY);
+}
 
 CvPlot* CvMap::pointToPlot(float fX, float fY)													
 {
@@ -1359,9 +1363,40 @@ void CvMap::read(FDataStreamBase* pStream)
 	// call the read of the free list CvArea class allocations
 	ReadStreamableFFreeListTrashArray(m_areas, pStream);
 
-    // AltAI - Sub Areas and Irrigatable Areas are not saved
-    recalculateSubAreas();
-    recalculateIrrigatableAreas();
+    // AltAI - Sub Areas and Irrigatable Areas are not saved - edit - they are now
+    //recalculateSubAreas();
+    //recalculateIrrigatableAreas();
+
+    m_subAreas.clear();
+    int numSubAreas;
+    pStream->Read(&numSubAreas);
+    for (int i = 0; i < numSubAreas; ++i)
+    {
+        int subAreaID;
+        pStream->Read(&subAreaID);
+        boost::shared_ptr<AltAI::SubArea> pSubArea(new AltAI::SubArea());
+        pSubArea->read(pStream);
+        m_subAreas.insert(std::make_pair(subAreaID, pSubArea));
+    }
+    // reset next sub area ID
+    AltAI::SubArea::readID(pStream);
+
+    m_subAreaGraph = boost::shared_ptr<AltAI::SubAreaGraph>(new AltAI::SubAreaGraph());
+    m_subAreaGraph->read(pStream);
+
+    m_irrigatableAreas.clear();
+    int numIrrigatableAreas;
+    pStream->Read(&numIrrigatableAreas);
+    for (int i = 0; i < numIrrigatableAreas; ++i)
+    {
+        int irrigatableAreaID;
+        pStream->Read(&irrigatableAreaID);
+        boost::shared_ptr<AltAI::IrrigatableArea> pIrrigatableArea(new AltAI::IrrigatableArea());
+        pIrrigatableArea->read(pStream);
+        m_irrigatableAreas.insert(std::make_pair(irrigatableAreaID, pIrrigatableArea));
+    }
+    // reset next sub area ID
+    AltAI::SubArea::readID(pStream);
 
 	setup();
 }
@@ -1397,6 +1432,27 @@ void CvMap::write(FDataStreamBase* pStream)
 
 	// call the read of the free list CvArea class allocations
 	WriteStreamableFFreeListTrashArray(m_areas, pStream);
+
+    // AltAI - sub area data
+    pStream->Write(m_subAreas.size());
+    for (std::map<int, boost::shared_ptr<AltAI::SubArea> >::const_iterator subAreaIter(m_subAreas.begin()), subAreaEndIter(m_subAreas.end()); subAreaIter != subAreaEndIter; ++subAreaIter)
+    {
+        pStream->Write(subAreaIter->first);
+        subAreaIter->second->write(pStream);
+    }
+
+    AltAI::SubArea::writeID(pStream);
+
+    m_subAreaGraph->write(pStream);
+
+    pStream->Write(m_irrigatableAreas.size());
+    for (std::map<int, boost::shared_ptr<AltAI::IrrigatableArea> >::const_iterator irrigatableAreaIter(m_irrigatableAreas.begin()), irrigatableAreaEndIter(m_irrigatableAreas.end()); irrigatableAreaIter != irrigatableAreaEndIter; ++irrigatableAreaIter)
+    {
+        pStream->Write(irrigatableAreaIter->first);
+        irrigatableAreaIter->second->write(pStream);
+    }
+
+    AltAI::IrrigatableArea::writeID(pStream);
 }
 
 
@@ -1569,7 +1625,7 @@ void CvMap::calculateIrrigatableAreas()
         }
     }
 
-    GC.getGameINLINE().getAltAI()->logMap(*this);
+    //GC.getGameINLINE().getAltAI()->logMap(*this);
  //   std::map<int, std::pair<int, int> > irrigatableAreaCounts;
 
  //   // TODO check that at least one plot in the area has fresh water if it is irrigatable

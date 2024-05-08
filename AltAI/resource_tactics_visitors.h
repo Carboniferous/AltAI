@@ -10,4 +10,5 @@ namespace AltAI
     class ResourceInfo;
 
     ResourceTacticsPtr makeResourceTactics(const Player& player, const boost::shared_ptr<ResourceInfo>& pResourceInfo);
+    bool resourceCanAffectCity(City& city, const boost::shared_ptr<ResourceInfo>& pResourceInfo);
 }

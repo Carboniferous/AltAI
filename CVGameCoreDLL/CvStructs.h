@@ -22,6 +22,20 @@ struct DllExport XYCoords
 	bool operator== (const XYCoords xy) const { return (!(iY != xy.iY || iX != xy.iX)); }
 	bool operator>= (const XYCoords xy) const { return ((iY > xy.iY) || (iY == xy.iY && iX >= xy.iX)); }
 	bool operator>  (const XYCoords xy) const { return ((iY > xy.iY) || (iY == xy.iY && iX > xy.iX)); }
+
+    // AltAI
+    // added save/load functions
+    void write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(iX);
+        pStream->Write(iY);
+    }
+
+    void read(FDataStreamBase* pStream)
+    {
+        pStream->Read(&iX);
+        pStream->Read(&iY);
+    }
 };
 
 struct DllExport IDInfo

@@ -16,8 +16,6 @@
 #include "AltAI.h"
 #include "game.h"
 #include "player.h"
-#include "city.h"
-
 
 // Public Functions...
 
@@ -707,7 +705,11 @@ bool CvDeal::startTrade(TradeData trade, PlayerTypes eFromPlayer, PlayerTypes eT
         // AltAI
         if (GET_PLAYER(eFromPlayer).isUsingAltAI())
         {
-            GC.getGame().getAltAI()->getPlayer(eFromPlayer)->gaveTech((TechTypes)trade.m_iData, eToPlayer);
+            GC.getGame().getAltAI()->getPlayer(eFromPlayer)->gaveTech((TechTypes)trade.m_iData, eFromPlayer, eToPlayer);
+        }
+        if (GET_PLAYER(eToPlayer).isUsingAltAI())
+        {
+            GC.getGame().getAltAI()->getPlayer(eToPlayer)->gaveTech((TechTypes)trade.m_iData, eToPlayer, eFromPlayer);
         }
 
 		for (iI = 0; iI < MAX_PLAYERS; iI++)

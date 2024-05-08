@@ -55,18 +55,15 @@ namespace AltAI
 
     int UnitHelper::getUnitFreeExperience(UnitTypes unitType) const
     {
-        int experience = unitFreeExperience_;
+        int experience = 0;
         if (unitType != NO_UNIT)
         {
             const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
             if (unitInfo.getCombat() > 0 && unitInfo.getUnitCombatType() != NO_UNITCOMBAT)
             {
+                experience = unitFreeExperience_;
                 experience += domainFreeExperience_[unitInfo.getDomainType()];
                 experience += combatTypeFreeExperience_[unitInfo.getUnitCombatType()];
-            }
-            else
-            {
-                experience = 0;
             }
         }
         return experience;

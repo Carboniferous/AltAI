@@ -15,6 +15,7 @@
 #include "./tech_tactics.h"
 #include "./city_tactics.h"
 #include "./unit_tactics.h"
+#include "./great_people_tactics.h"
 #include "./project_tactics.h"
 #include "./building_tactics_visitors.h"
 #include "./unit_tactics_visitors.h"
@@ -23,13 +24,13 @@
 #include "./unit_info.h"
 #include "./unit_info_visitors.h"
 #include "./building_info_visitors.h"
+#include "./buildings_info.h"
 #include "./game.h"
 #include "./player.h"
 #include "./city.h"
 #include "./player_analysis.h"
 #include "./unit_analysis.h"
 #include "./map_analysis.h"
-#include "./city.h"
 #include "./city_simulator.h"
 #include "./iters.h"
 #include "./helper_fns.h"
@@ -40,11 +41,13 @@ namespace AltAI
 {
     void PlayerTactics::init()
     {
+        makeInitialUnitTactics();
         makeSpecialistUnitTactics();
         makeResourceTactics();
         makeCivicTactics();
 
-        debugTactics();
+        initialised_ = true;
+        //debugTactics();
     }
 
     void PlayerTactics::deleteCity(const CvCity* pCity)
@@ -439,6 +442,37 @@ namespace AltAI
         }
     }
 
+    bool PlayerTactics::hasBuildingTactic(BuildingTypes buildingType) const
+    {
+        BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(buildingType).getBuildingClassType();
+        if (isWorldWonderClass(buildingClassType))
+        {
+            return globalBuildingsTacticsMap_.find(buildingType) != globalBuildingsTacticsMap_.end();
+        }
+        else if (isNationalWonderClass(buildingClassType))
+        {
+            return nationalBuildingsTacticsMap_.find(buildingType) != nationalBuildingsTacticsMap_.end();
+        }
+        else
+        {
+            for (CityBuildingTacticsMap::const_iterator ci(cityBuildingTacticsMap_.begin()), ciEnd(cityBuildingTacticsMap_.end()); ci != ciEnd; ++ci)
+            {
+                if (ci->second.find(buildingType) != ci->second.end())
+                {
+                    return true;
+                }
+            }
+            for (CityBuildingTacticsMap::const_iterator ci(specialCityBuildingsTacticsMap_.begin()), ciEnd(specialCityBuildingsTacticsMap_.end()); ci != ciEnd; ++ci)
+            {
+                if (ci->second.find(buildingType) != ci->second.end())
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void PlayerTactics::updateCityUnitTactics(TechTypes techType)
     {
         boost::shared_ptr<TechInfo> pTechInfo = player.getAnalysis()->getTechInfo(techType);
@@ -512,6 +546,31 @@ namespace AltAI
         }
     }
 
+    TacticSelectionData& PlayerTactics::getBaseTacticSelectionData()
+    {
+        DependencyItemSet di;
+        di.insert(DependencyItem(-1, -1));
+
+        return tacticSelectionDataMap[di];
+    }
+
+    const TacticSelectionData& PlayerTactics::getBaseTacticSelectionData() const
+    {
+        DependencyItemSet di;
+        di.insert(DependencyItem(-1, -1));
+        static TacticSelectionData dummy;
+
+        TacticSelectionDataMap::const_iterator baseTacticIter = tacticSelectionDataMap.find(di);
+        if (baseTacticIter != tacticSelectionDataMap.end())
+        {
+            return baseTacticIter->second;
+        }
+        else
+        {
+            return dummy;
+        }
+    }
+
     std::map<int, ICityBuildingTacticsPtr> PlayerTactics::getCityBuildingTactics(BuildingTypes buildingType) const
     {
         std::map<int, ICityBuildingTacticsPtr> cityBuildingTactics;
@@ -560,12 +619,13 @@ namespace AltAI
 
     ResearchTech PlayerTactics::getResearchTech(TechTypes ignoreTechType)
     {
+        //debugTactics();
         return AltAI::getResearchTech(*this, ignoreTechType);
     }
 
-    ConstructItem PlayerTactics::getBuildItem(const City& city)
+    ConstructItem PlayerTactics::getBuildItem(City& city)
     {
-        debugTactics();
+        //debugTactics();
         return AltAI::getConstructItem(*this, city);
     }
 
@@ -907,6 +967,7 @@ namespace AltAI
     void PlayerTactics::debugTactics()
     {
 #ifdef ALTAI_DEBUG
+        const int turn = gGlobals.getGame().getGameTurn();
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
         os << "\n\nPlayerTactics::debugTactics():\nPossible tactics: (turn = " << gGlobals.getGame().getGameTurn() << ") ";
         os << "\nCity building tactics:";
@@ -915,15 +976,19 @@ namespace AltAI
             const CvCity* pCity = getCity(ci->first);
             if (pCity)
             {
-                os << "\nCity: " << narrow(pCity->getName());
-                const City& city = player.getCity(pCity);
+                os << "\n\nturn = " << turn << " City: " << narrow(pCity->getName());
+                City& city = player.getCity(pCity);
 
                 TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                os << " \n\tcurrent output projection: ";
+                city.getCurrentOutputProjection().debug(os);
+                os << " \n\tbase output projection: ";
+                city.getBaseOutputProjection().debug(os);
 
                 for (CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
-                {
-                    li->second->debug(os);
+                {                    
                     li->second->update(player, city.getCityData());
+                    li->second->debug(os);
 
                     const ProjectionLadder& ladder = li->second->getProjection();
                     if (ladder.buildings.empty())
@@ -939,6 +1004,7 @@ namespace AltAI
                             os << " delta = " << ladder.getOutput() - ladder.comparisons[0].getOutput();
                         }*/
                     }
+                    os << "\n";
                 }
             }
             else
@@ -1001,7 +1067,7 @@ namespace AltAI
 
             if (firstBuiltCity.eOwner != NO_PLAYER)
             {
-                os << "\nFirst built in: " << narrow(getCity(firstBuiltCity)->getName()) << " turn = " << firstBuiltTurn;
+                os << "\nFirst built in: " << safeGetCityName(firstBuiltCity) << " turn = " << firstBuiltTurn;
 
                 boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(ci->first);
                 //std::vector<IProjectionEventPtr> possibleEvents = getPossibleEvents(player, pBuildingInfo, firstBuiltTurn);
@@ -1010,7 +1076,7 @@ namespace AltAI
                 const CvCity* pBuiltCity = getCity(firstBuiltCity);
                 {
                     TotalOutput globalDelta;
-                    const City& city = player.getCity(pBuiltCity->getID());
+                    City& city = player.getCity(pBuiltCity->getID());
 
                     //cityTactics->debug(os);
                     /*if (cityTactics->getComparisonFlag() != ICityBuildingTactics::No_Comparison && !cityTactics->getProjection().comparisons.empty())
@@ -1032,14 +1098,14 @@ namespace AltAI
                         {
                             if (pOtherCity->getIDInfo().iID != firstBuiltCity.iID)
                             {
-                                const City& otherCity = player.getCity(pOtherCity->getID());
+                                City& otherCity = player.getCity(pOtherCity->getID());
 
                                 CityDataPtr pCityData = otherCity.getCityData()->clone();
                                 std::vector<IProjectionEventPtr> events;
                                 events.push_back(IProjectionEventPtr(new ProjectionGlobalBuildingEvent(pBuildingInfo, firstBuiltTurn, pBuiltCity)));
 
                                 ConstructItem constructItem;
-                                ProjectionLadder otherCityProjection = getProjectedOutput(player, pCityData, 30, events, constructItem, __FUNCTION__, true);
+                                ProjectionLadder otherCityProjection = getProjectedOutput(player, pCityData, player.getAnalysis()->getNumSimTurns(), events, constructItem, __FUNCTION__, true);
 
                                 //if (!otherCityProjection.comparisons.empty())
                                 {
@@ -1078,7 +1144,7 @@ namespace AltAI
                         }
 
                         ConstructItem constructItem(pBuildingInfo->getBuildingType());
-                        ProjectionLadder thisCityProjection = getProjectedOutput(player, pCityData, 30, events, constructItem, __FUNCTION__);
+                        ProjectionLadder thisCityProjection = getProjectedOutput(player, pCityData, player.getAnalysis()->getNumSimTurns(), events, constructItem, __FUNCTION__);
                         TotalOutput thisBase = thisCity.getCurrentOutputProjection().getOutput();
 
                         globalDelta += thisCityProjection.getOutput() - thisBase;
@@ -1189,15 +1255,15 @@ namespace AltAI
             if (pCity)
             {
                 os << "\nCity: " << narrow(pCity->getName());
-                const City& city = player.getCity(pCity);
-                TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                City& city = player.getCity(pCity);
+                //TotalOutput base = city.getCurrentOutputProjection().getOutput();
 
                 for (CityImprovementTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
                 {
                     (*li)->debug(os);
                     (*li)->update(player, city.getCityData());
 
-                    os << "\nTotal Delta = " << (*li)->getProjection().getOutput() - base;
+                    os << "\nTotal Delta = " << (*li)->getProjection().getOutput() - (*li)->getBaseProjection().getOutput();
                 }            
             }
             else
@@ -1232,7 +1298,7 @@ namespace AltAI
     {
         const BuildingTypes buildingType = pBuildingInfo->getBuildingType();
         const BuildingClassTypes buildingClassType = (BuildingClassTypes)gGlobals.getBuildingInfo(buildingType).getBuildingClassType();
-        const bool isWorldWonder = isWorldWonderClass(buildingClassType), isNationalWonder = isNationalWonderClass(buildingClassType);
+        const bool isWorldWonder = isWorldWonderClass(buildingClassType), isNationalWonder = !isWorldWonder && isNationalWonderClass(buildingClassType);
         const int lookAheadDepth = 2;
 
         if (!couldConstructSpecialBuilding(player, lookAheadDepth, pBuildingInfo))
@@ -1330,13 +1396,13 @@ namespace AltAI
         const int lookAheadDepth = 2;
 
 #ifdef ALTAI_DEBUG
-        CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Checking tactic for special building: " << gGlobals.getBuildingInfo(buildingType).getType();
+        //CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Checking tactic for special building: " << gGlobals.getBuildingInfo(buildingType).getType();
 #endif
 
         if (!couldConstructSpecialBuilding(player, lookAheadDepth, pBuildingInfo))
         {
 #ifdef ALTAI_DEBUG
-            CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Failed civ check for special building: " << gGlobals.getBuildingInfo(buildingType).getType();
+            //CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Failed civ check for special building: " << gGlobals.getBuildingInfo(buildingType).getType();
 #endif
             return;
         }
@@ -1346,8 +1412,8 @@ namespace AltAI
             if (!couldConstructUnitBuilding(player, player.getCity(pCity), lookAheadDepth, pBuildingInfo))
             {
 #ifdef ALTAI_DEBUG
-                CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Failed city check for special building: " << gGlobals.getBuildingInfo(buildingType).getType()
-                    << " for city: " << narrow(pCity->getName());
+                /*CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Failed city check for special building: " << gGlobals.getBuildingInfo(buildingType).getType()
+                    << " for city: " << narrow(pCity->getName());*/
 #endif
                 return;
             }
@@ -1385,22 +1451,22 @@ namespace AltAI
 
         const int lookAheadDepth = 2;
 
-        if (!couldConstructUnit(player, lookAheadDepth, pUnitInfo, true))
+        if (!couldConstructUnit(player, lookAheadDepth, pUnitInfo, true, true))
         {
             return;
-        }                
+        }
 
         if (pCity)
         {
             const City& city = player.getCity(pCity);
             
-            if (couldConstructUnit(player, city, lookAheadDepth, pUnitInfo, true))
+            if (couldEverConstructUnit(player, city, pUnitInfo, lookAheadDepth) && couldConstructUnit(player, city, lookAheadDepth, pUnitInfo, true, true))
             {
                 UnitTacticsMap::iterator iter = unitTacticsMap_.find(unitType);
 
                 if (iter == unitTacticsMap_.end())
                 {
-                    iter = unitTacticsMap_.insert(std::make_pair(unitType, UnitTacticsPtr(new UnitTactics(player.getPlayerID(), unitType)))).first;
+                    iter = unitTacticsMap_.insert(std::make_pair(unitType, makeUnitTactics(player, pUnitInfo))).first;
                 }
 #ifdef ALTAI_DEBUG
                 CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for unit: " << unitInfo.getType() << " for city: " << narrow(pCity->getName());
@@ -1442,36 +1508,69 @@ namespace AltAI
         }
     }
 
+    void PlayerTactics::makeInitialUnitTactics()
+    {
+        // add initial unit tactics (units which we can build without any techs) - units will get added to this set when initial techs are assigned
+        for (int i = 0, count = gGlobals.getNumUnitClassInfos(); i < count; ++i)
+        {
+            UnitTypes unitType = getPlayerVersion(player.getPlayerID(), (UnitClassTypes)i);
+
+            if (unitType == NO_UNIT)
+            {
+                continue;
+            }
+
+            boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(unitType);
+
+            if (!pUnitInfo)
+            {
+                continue;
+            }
+
+            const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+
+            addUnitTactics_(pUnitInfo, NULL);
+        }
+    }
+
     void PlayerTactics::makeCivicTactics()
     {
         for (int i = 0, count = gGlobals.getNumCivicInfos(); i < count; ++i)
         {
-            civicTacticsMap_[(CivicTypes)i] = AltAI::makeCivicTactics(player, player.getAnalysis()->getCivicInfo((CivicTypes)i));
+            boost::shared_ptr<CivicInfo> pCivicInfo = player.getAnalysis()->getCivicInfo((CivicTypes)i);
+            if (pCivicInfo)
+            {
+                civicTacticsMap_[(CivicTypes)i] = AltAI::makeCivicTactics(player, pCivicInfo);
+            }
         }
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-        for (CivicTacticsMap::const_iterator ci(civicTacticsMap_.begin()), ciEnd(civicTacticsMap_.end()); ci != ciEnd; ++ci)
-        {
-            os << "\nTactics for civic: " << gGlobals.getCivicInfo(ci->first).getType();
-            ci->second->debug(os);
-        }
-#endif
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+//        for (CivicTacticsMap::const_iterator ci(civicTacticsMap_.begin()), ciEnd(civicTacticsMap_.end()); ci != ciEnd; ++ci)
+//        {
+//            os << "\nTactics for civic: " << gGlobals.getCivicInfo(ci->first).getType();
+//            ci->second->debug(os);
+//        }
+//#endif
     }
 
     void PlayerTactics::makeResourceTactics()
     {
         for (int i = 0, count = gGlobals.getNumBonusInfos(); i < count; ++i)
         {
-            resourceTacticsMap_[(BonusTypes)i] = AltAI::makeResourceTactics(player, player.getAnalysis()->getResourceInfo((BonusTypes)i));
+            boost::shared_ptr<ResourceInfo> pResourceInfo = player.getAnalysis()->getResourceInfo((BonusTypes)i);
+            if (pResourceInfo)
+            {
+                resourceTacticsMap_[(BonusTypes)i] = AltAI::makeResourceTactics(player, pResourceInfo);
+            }
         }
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-        for (ResourceTacticsMap::const_iterator ci(resourceTacticsMap_.begin()), ciEnd(resourceTacticsMap_.end()); ci != ciEnd; ++ci)
-        {
-            os << "\nTactics for resource: " << gGlobals.getBonusInfo(ci->first).getType();
-            ci->second->debug(os);
-        }
-#endif
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+//        for (ResourceTacticsMap::const_iterator ci(resourceTacticsMap_.begin()), ciEnd(resourceTacticsMap_.end()); ci != ciEnd; ++ci)
+//        {
+//            os << "\nTactics for resource: " << gGlobals.getBonusInfo(ci->first).getType();
+//            ci->second->debug(os);
+//        }
+//#endif
     }
 
     void PlayerTactics::updateFirstToTechTactics(TechTypes techType)

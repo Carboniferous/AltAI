@@ -56,13 +56,17 @@ namespace AltAI
             CvPlotFnPtr plotCond;
             int militaryProductionModifier;
             bool global;
+
+            bool operator == (const YieldNode& other) const;
         };
 
         struct SpecialistNode
         {
-            SpecialistNode() {}
+            SpecialistNode() : cityGPPRateModifier(0), playerGPPRateModifier(0) {} 
             std::vector<std::pair<SpecialistTypes, PlotYield> > specialistTypesAndYields;
             Commerce extraCommerce;
+            std::pair<int, UnitClassTypes> generatedGPP;
+            int cityGPPRateModifier, playerGPPRateModifier;
         };
 
         struct CommerceNode
@@ -103,6 +107,8 @@ namespace AltAI
             std::vector<std::pair<DomainTypes, int> > domainFreeExperience, domainProductionModifier;
             std::vector<std::pair<UnitCombatTypes, int> > combatTypeFreeExperience;
             PromotionTypes freePromotion;
+
+            bool operator == (const UnitExpNode& other) const;
         };
 
         struct SpecialistSlotNode
@@ -115,29 +121,26 @@ namespace AltAI
 
         struct BonusNode
         {
-            BonusNode() : bonusType(NO_BONUS), happy(0), health(0), prodModifier(0) {}
+            BonusNode() : bonusType(NO_BONUS), happy(0), health(0), prodModifier(0), freeBonusCount(0), isRemoved(false) {}
             BonusTypes bonusType;
             YieldModifier yieldModifier;
             int happy, health;
             int prodModifier;
-        };
+            int freeBonusCount;
+            bool isRemoved;
 
-        struct FreeBonusNode
-        {
-            FreeBonusNode() : freeBonuses(std::make_pair(NO_BONUS, 0)) {}
-            std::pair<BonusTypes, int> freeBonuses;
-        };
-
-        struct RemoveBonusNode
-        {
-            RemoveBonusNode() : bonusType(NO_BONUS) {}
-            BonusTypes bonusType;
+            bool operator == (const BonusNode& other) const;
         };
 
         struct CityDefenceNode
         {
-            CityDefenceNode() : defenceBonus(0), globalDefenceBonus(0), bombardRateModifier(0), espionageDefence(0) {}
-            int defenceBonus, globalDefenceBonus, bombardRateModifier, espionageDefence;
+            CityDefenceNode() : defenceBonus(0), globalDefenceBonus(0), bombardRateModifier(0),
+                espionageDefence(0), airDefenceModifier(0), nukeDefenceModifier(0),
+                extraAirUnitCapacity(0), extraAirLiftCount(0) {}
+            int defenceBonus, globalDefenceBonus, bombardRateModifier, espionageDefence, airDefenceModifier, nukeDefenceModifier;
+            int extraAirUnitCapacity, extraAirLiftCount;
+
+            bool operator == (const CityDefenceNode& other) const;
         };
 
         struct ReligionNode
@@ -145,6 +148,12 @@ namespace AltAI
             ReligionNode() : prereqReligion(NO_RELIGION), religionType(NO_RELIGION), globalReligionType(NO_RELIGION) {}
             ReligionTypes prereqReligion, religionType, globalReligionType;
             Commerce globalCommerceChange;
+        };
+
+        struct HurryNode
+        {
+            HurryNode() : hurryAngerModifier(0), globalHurryCostModifier(0) {}
+            int hurryAngerModifier, globalHurryCostModifier;
         };
 
         struct AreaEffectNode
@@ -156,8 +165,9 @@ namespace AltAI
 
         struct MiscEffectNode
         {
-            MiscEffectNode() : cityMaintenanceModifierChange(0), foodKeptPercent(0), hurryAngerModifier(0), workerSpeedModifier(0),
-                globalPopChange(0), nFreeTechs(0), noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false), 
+            MiscEffectNode() : cityMaintenanceModifierChange(0), foodKeptPercent(0), hurryAngerModifier(0), 
+                workerSpeedModifier(0), globalPopChange(0), nFreeTechs(0), 
+                noUnhealthinessFromBuildings(false), noUnhealthinessFromPopulation(false), noUnhappiness(false),
                 startsGoldenAge(false), makesCityCapital(false), isGovernmentCenter(false), freeBuildingType(NO_BUILDING)
             {}
 
@@ -167,19 +177,22 @@ namespace AltAI
             int workerSpeedModifier;
             int globalPopChange;
             int nFreeTechs;
-            bool noUnhealthinessFromBuildings, noUnhealthinessFromPopulation, startsGoldenAge;
+            bool noUnhealthinessFromBuildings, noUnhealthinessFromPopulation, noUnhappiness, startsGoldenAge;
             bool makesCityCapital, isGovernmentCenter;
             BuildingTypes freeBuildingType;
             std::vector<CivicTypes> civicTypes;
+
+            bool operator == (const MiscEffectNode& other) const;
         };
 
-        typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, YieldNode, CommerceNode, TradeNode, BonusNode, FreeBonusNode, 
-            RemoveBonusNode, SpecialistNode, PowerNode, UnitExpNode, CityDefenceNode, SpecialistSlotNode, AreaEffectNode, ReligionNode, MiscEffectNode> BuildingInfoNode;
+        typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, YieldNode, CommerceNode, 
+            TradeNode, BonusNode, SpecialistNode, PowerNode, UnitExpNode, CityDefenceNode, SpecialistSlotNode,
+            AreaEffectNode, ReligionNode, HurryNode, MiscEffectNode> BuildingInfoNode;
 
         struct BaseNode
         {
-            BaseNode() : cost(0), productionModifier(0), happy(0), health(0) {}
-            int cost, productionModifier;
+            BaseNode() : cost(0), productionModifier(0), hurryCostModifier(0), happy(0), health(0) {}
+            int cost, productionModifier, hurryCostModifier;
             int happy, health;
             std::vector<TechTypes> techs;
             std::vector<BuildCondition> buildConditions;
@@ -194,5 +207,14 @@ namespace AltAI
         BuildingTypes buildingType_;
         PlayerTypes playerType_;
         BuildingInfoNode infoNode_;
+    };
+
+    // todo - generalise to multiple conditions?
+    struct ConditionalPlotYieldEnchancingBuilding
+    {
+        explicit ConditionalPlotYieldEnchancingBuilding(BuildingTypes buildingType_ = NO_BUILDING) : buildingType(buildingType_) {}
+        BuildingTypes buildingType;
+        std::vector<BuildingInfo::BuildCondition> buildConditions;
+        std::vector<std::pair<CvPlotFnPtr, PlotYield> > conditionalYieldChanges;
     };
 }

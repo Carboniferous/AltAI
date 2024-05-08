@@ -14,7 +14,7 @@ namespace AltAI
 
         void addTactic(const IResourceTacticPtr& pResourceTactic);
         void setTechDependency(const ResearchTechDependencyPtr& pTechDependency);
-        void update(const Player& player);
+        void update(Player& player);
         void updateDependencies(const Player& player);
         void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
         void apply(TacticSelectionData& selectionData);
@@ -45,8 +45,8 @@ namespace AltAI
     public:
         virtual void debug(std::ostream&) const;
 
-        virtual void update(const ResourceTacticsPtr&, const City&);
-        virtual void update(const ResourceTacticsPtr&, const Player&);
+        virtual void update(const ResourceTacticsPtr&, City&);
+        virtual void update(const ResourceTacticsPtr&, Player&);
         virtual void apply(const ResourceTacticsPtr&, TacticSelectionData&);
 
         virtual void write(FDataStreamBase*) const;
@@ -55,21 +55,50 @@ namespace AltAI
         static const int ID = 0;
 
     private:
-        std::map<IDInfo, ProjectionLadder> cityProjections_;
+        // resource ladder, base ladder
+        std::map<IDInfo, std::pair<ProjectionLadder, ProjectionLadder> > cityProjections_;
     };
 
     class UnitResourceTactic : public IResourceTactic
     {
     public:
+        UnitResourceTactic() : unitType_(NO_UNIT) {}
+        explicit UnitResourceTactic(UnitTypes unitType) : unitType_(unitType) {}
+
         virtual void debug(std::ostream&) const;
 
-        virtual void update(const ResourceTacticsPtr&, const City&);
-        virtual void update(const ResourceTacticsPtr&, const Player&);
+        virtual void update(const ResourceTacticsPtr&, City&);
+        virtual void update(const ResourceTacticsPtr&, Player&);
         virtual void apply(const ResourceTacticsPtr&, TacticSelectionData&);
 
         virtual void write(FDataStreamBase*) const;
         virtual void read(FDataStreamBase*);
 
         static const int ID = 1;
+
+    private:
+        UnitTypes unitType_;
+    };
+
+    class BuildingResourceTactic : public IResourceTactic
+    {
+    public:
+        BuildingResourceTactic() : buildingType_(NO_BUILDING), resourceModifier_(0) {}
+        BuildingResourceTactic(BuildingTypes buildingType, int resourceModifier) : buildingType_(buildingType), resourceModifier_(resourceModifier) {}
+
+        virtual void debug(std::ostream&) const;
+
+        virtual void update(const ResourceTacticsPtr&, City&);
+        virtual void update(const ResourceTacticsPtr&, Player&);
+        virtual void apply(const ResourceTacticsPtr&, TacticSelectionData&);
+
+        virtual void write(FDataStreamBase*) const;
+        virtual void read(FDataStreamBase*);
+
+        static const int ID = 2;
+
+    private:
+        BuildingTypes buildingType_;
+        int resourceModifier_;
     };
 }

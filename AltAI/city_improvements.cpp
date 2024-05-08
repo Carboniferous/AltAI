@@ -11,6 +11,7 @@
 #include "./helper_fns.h"
 #include "./city_optimiser.h"
 #include "./building_info_visitors.h"
+#include "./buildings_info.h"
 #include "./plot_info_visitors.h"
 #include "./tech_info_visitors.h"
 #include "./city_simulator.h"
@@ -120,7 +121,7 @@ namespace AltAI
         PlayerTypes playerType = pCity->getOwner();
         PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
 
-        std::vector<ConditionalPlotYieldEnchancingBuilding> conditionalEnhancements = GameDataAnalysis::getInstance()->getConditionalPlotYieldEnhancingBuildings(playerType, pCity);
+        std::vector<ConditionalPlotYieldEnchancingBuilding> conditionalEnhancements = GameDataAnalysis::getInstance()->getConditionalPlotYieldEnhancingBuildings(playerType, pCity);        
         
         //DotMapItem dotMapItem(XYCoords(pCity->getX(), pCity->getY()), pCity->plot()->getYield());
         boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(playerType)->getAnalysis()->getMapAnalysis();
@@ -128,7 +129,7 @@ namespace AltAI
 
         std::set<XYCoords> pinnedIrrigationPlots, sharedCoords = pMapAnalysis->getCitySharedPlots(city_);
 
-        DotMapItem dotMapItem(pCity->plot()->getCoords(), pCityData->getCityPlotData().plotYield);
+        DotMapItem dotMapItem(pCity->plot()->getCoords(), pCityData->getCityPlotData().plotYield, pCity->plot()->isFreshWater());
 
         for (PlotDataList::const_iterator plotIter(pCityData->getPlotOutputs().begin()), plotEndIter(pCityData->getPlotOutputs().end()); plotIter != plotEndIter; ++plotIter)
         {
@@ -167,50 +168,44 @@ namespace AltAI
                                 }
                             }
 
-                            for (size_t j = 0, count = plotData.possibleImprovements.size(); j < count; ++j)
+                            if (plotData.setWorkedImpIndex(selectedImprovement))
                             {
-                                if (plotData.possibleImprovements[j].second == selectedImprovement)
-                                {
-                                    plotData.workedImprovement = j;
-                                    break;
-                                }
-                            }
-                            plotData.isPinned = true;
-                            isImpOwnedPlot = false;
+                                plotData.isPinned = true;
+                                isImpOwnedPlot = false;
 #ifdef ALTAI_DEBUG
-                            {   // debug
-                                std::ostream& os = CityLog::getLog(pCity)->getStream();
-                                os << "\nMarked shared plot: " << plotIter->coords << " as pinned with improvement: "
-                                    << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo((ImprovementTypes)plotData.getWorkedImprovement()).getType());
-                            }
+                                {   // debug
+                                    std::ostream& os = CityLog::getLog(pCity)->getStream();
+                                    os << "\nMarked shared plot: " << plotIter->coords << " as pinned with improvement: "
+                                        << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo((ImprovementTypes)plotData.getWorkedImprovement()).getType());
+                                }
 #endif
+                            }
+
                         }
                     }
 
                     if (isImpOwnedPlot)
                     {
-                        if (plotIter->bonusType == NO_BONUS &&
+                        if (plotIter->bonusType == NO_BONUS && plotIter->improvementType != NO_IMPROVEMENT &&
                                 // keep any plot worked long enough to upgrade
-                                getBaseImprovement(plotIter->improvementType) != plotIter->improvementType)
+                                (getBaseImprovement(plotIter->improvementType) != plotIter->improvementType ||
+                                // if base imp, but time imp has been built is less than twice the imp upgrade time
+                                (gGlobals.getImprovementInfo(plotIter->improvementType).getImprovementUpgrade() != NO_IMPROVEMENT && 
+                                2 * gGlobals.getGame().getImprovementUpgradeTime(plotIter->improvementType) > gGlobals.getMap().plot(plotIter->coords)->getImprovementDuration())))
                                 // mark towns and villages as probably want to keep them
                                 //(improvementIsFinalUpgrade(plotIter->improvementType) || nextImprovementIsFinalUpgrade(plotIter->improvementType)))
                         {
-                            for (size_t j = 0, count = plotData.possibleImprovements.size(); j < count; ++j)
+                            if (plotData.setWorkedImpIndex(plotIter->improvementType))
                             {
-                                if (getBaseImprovement(plotData.possibleImprovements[j].second) == getBaseImprovement(plotIter->improvementType))
-                                {
-                                    plotData.workedImprovement = j;
-                                    break;
-                                }
-                            }
-                            plotData.isPinned = true;
+                                plotData.isPinned = true;
 #ifdef ALTAI_DEBUG
-                            {   // debug
-                                std::ostream& os = CityLog::getLog(pCity)->getStream();
-                                os << "\nMarked plot: " << plotIter->coords << " as pinned with upgraded improvement: "
-                                    << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo(plotIter->improvementType).getType());
-                            }
+                                {   // debug
+                                    std::ostream& os = CityLog::getLog(pCity)->getStream();
+                                    os << "\nMarked plot: " << plotIter->coords << " as pinned with upgraded improvement: "
+                                        << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo(plotIter->improvementType).getType());
+                                }
 #endif
+                            }
                         }
 
                         std::vector<PlotImprovementData>::iterator impIter = std::find_if(improvements_.begin(), improvements_.end(), PlotImprovementDataFinder(plotIter->coords));
@@ -219,23 +214,18 @@ namespace AltAI
                         {                        
                             if (impIter->flags & PlotImprovementData::IrrigationChainPlot) // mark plot as pinned if it needs to keep irrigation
                             {
-                                pinnedIrrigationPlots.insert(plotIter->coords);
-                                for (size_t j = 0, count = plotData.possibleImprovements.size(); j < count; ++j)
+                                if (plotData.setWorkedImpIndex(impIter->improvement))
                                 {
-                                    if (plotData.possibleImprovements[j].second == impIter->improvement)
-                                    {
-                                        plotData.workedImprovement = j;
-                                        break;
-                                    }
-                                }
-                                plotData.isPinned = true;
+                                    pinnedIrrigationPlots.insert(plotIter->coords);
+                                    plotData.isPinned = true;
 #ifdef ALTAI_DEBUG
-                                {   // debug
-                                    std::ostream& os = CityLog::getLog(pCity)->getStream();
-                                    os << "\nMarked plot: " << impIter->coords << " as pinned with improvement: "
-                                        << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo((ImprovementTypes)plotData.getWorkedImprovement()).getType());
-                                }
+                                    {   // debug
+                                        std::ostream& os = CityLog::getLog(pCity)->getStream();
+                                        os << "\nMarked plot: " << impIter->coords << " as pinned with improvement: "
+                                            << (plotData.getWorkedImprovement() == NO_IMPROVEMENT ? " (none) " : gGlobals.getImprovementInfo((ImprovementTypes)plotData.getWorkedImprovement()).getType());
+                                    }
 #endif
+                                }
                             }                            
                         }
                     }
@@ -246,32 +236,33 @@ namespace AltAI
                     plotData.debug(os);
                 }
 #endif
-                dotMapItem.plotData.insert(plotData);
+                dotMapItem.plotDataSet.insert(plotData);
             }
         }
 
+        dotMapItem.calcOutput(*pPlayer, 3 * pPlayer->getAnalysis()->getTimeHorizon(), pCity->goodHealth());
         DotMapOptimiser optMixed(dotMapItem, YieldWeights(), YieldWeights());
 
         //optMixed.optimise(yieldTypes, std::min<int>(dotMapItem.plotData.size(), targetSize));
-        optMixed.optimise(yieldTypes, std::min<int>(targetSize, dotMapItem.plotData.size()));
+        optMixed.optimise(yieldTypes, std::min<int>(targetSize, dotMapItem.plotDataSet.size()));
         //optMixed.optimise(yieldTypes, std::min<int>(dotMapItem.plotData.size(), 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel())));
 
 #ifdef ALTAI_DEBUG
         {
             std::ostream& os = CityLog::getLog(pCity)->getStream();
-            os << "\nPop = " << pCity->getPopulation() << ", happy = " << pCity->happyLevel() << ", unhappy = " << pCity->unhappyLevel() << " target = " << std::min<int>(targetSize, dotMapItem.plotData.size());
+            os << "\nPop = " << pCity->getPopulation() << ", happy = " << pCity->happyLevel() << ", unhappy = " << pCity->unhappyLevel() << " target = " << std::min<int>(targetSize, dotMapItem.plotDataSet.size());
             /*for (size_t i = 0, count = yieldTypes.size(); i < count; ++i)
             {
                 os << " yieldTypes[" << i << "] = " << yieldTypes[i];
             }*/
         }
-        dotMapItem.debugOutputs(CityLog::getLog(pCity)->getStream());
+        dotMapItem.debugOutputs(*gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner), CityLog::getLog(pCity)->getStream());
 #endif
 
         improvements_.clear();
         improvementsDelta_ = TotalOutput();
 
-        for (DotMapItem::PlotDataConstIter ci(dotMapItem.plotData.begin()), ciEnd(dotMapItem.plotData.end()); ci != ciEnd; ++ci)
+        for (DotMapItem::PlotDataConstIter ci(dotMapItem.plotDataSet.begin()), ciEnd(dotMapItem.plotDataSet.end()); ci != ciEnd; ++ci)
         {
             ImprovementTypes improvementType = ci->getWorkedImprovement();
 
@@ -450,7 +441,7 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CityLog::getLog(::getCity(city_))->getStream();
-        os << "\nTurn = " << gGlobals.getGame().getGameTurn();
+        os << "\nTurn = " << gGlobals.getGame().getGameTurn() << __FUNCTION__;
         //logImprovements();
         for (size_t i = 0, count = conditions.size(); i < count; ++i)
         {
@@ -522,7 +513,9 @@ namespace AltAI
                 logImprovement(os, improvements_[i]);
 #endif
 
-                bool valid = improvements_[i].isSelectedAndNotBuilt();
+                bool valid = improvements_[i].isSelectedAndNotBuilt() ||
+                    // build improvements which setup bonus resources (maybe add flag to override this if want to prevent connecting a resource)
+                    (plotNeedsBonusImprovement && improvements_[i].state == PlotImprovementData::Not_Built && improvements_[i].flags & PlotImprovementData::ImprovementMakesBonusValid);
                 if (valid)
                 {
                     for (size_t j = 0, count = conditions.size(); j < count; ++j)
@@ -533,8 +526,14 @@ namespace AltAI
 
                 if (valid)
                 {
+#ifdef ALTAI_DEBUG
+                    os << " (valid) ";
+#endif
                     if (!selectedOnly || (selectedOnly && improvements_[i].simulationData.numTurnsWorked > 0))
                     {
+#ifdef ALTAI_DEBUG
+                        os << " selected imp as best ";
+#endif
                         bestImprovementIndex = i;
                     }                    
                     break;
@@ -634,6 +633,8 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player->getCvPlayer())->getStream();
         os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " label = " << logLabel;
+        std::ostream& cityLog = CityLog::getLog(pCityData->getCity())->getStream();
+        cityLog << "\nTurn = " << gGlobals.getGame().getGameTurn() << " label = " << logLabel;
 #endif
         std::vector<YieldTypes> yieldTypes = boost::assign::list_of(YIELD_PRODUCTION)(YIELD_COMMERCE);
         const int targetSize = std::min<int>(20, 3 + std::max<int>(pCity->getPopulation(), pCity->getPopulation() + pCity->happyLevel() - pCity->unhappyLevel()));
@@ -654,7 +655,8 @@ namespace AltAI
             std::vector<IProjectionEventPtr> events;
 
             ConstructItem constructItem;
-            ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 30, events, constructItem, __FUNCTION__, false, true);
+            const int numSimTurns = player->getAnalysis()->getNumSimTurns();
+            ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, numSimTurns, events, constructItem, __FUNCTION__, false, true);
 
             // add all imps
             {
@@ -675,7 +677,7 @@ namespace AltAI
                 }
 
                 events.clear();
-                ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, 30, events, constructItem, __FUNCTION__, false, true);
+                ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, numSimTurns, events, constructItem, __FUNCTION__, false, true);
 
                 {
 #ifdef ALTAI_DEBUG
@@ -863,7 +865,7 @@ namespace AltAI
         std::multimap<int, DotMapItem::PlotDataIter> forestMap;
         YieldValueFunctor valueF(makeYieldW(4, 2, 1));
 
-        for (DotMapItem::PlotDataIter plotIter(dotMapItem.plotData.begin()), endIter(dotMapItem.plotData.end()); plotIter != endIter; ++plotIter)
+        for (DotMapItem::PlotDataIter plotIter(dotMapItem.plotDataSet.begin()), endIter(dotMapItem.plotDataSet.end()); plotIter != endIter; ++plotIter)
         {
             // TODO - detect bonuses on good features which don't require removal of the feature (e.g. furs and deer)
             if (plotIter->featureType != NO_FEATURE && plotIter->bonusType == NO_BONUS && gGlobals.getFeatureInfo(plotIter->featureType).getHealthPercent() > 0)
@@ -1135,13 +1137,7 @@ namespace AltAI
         pStream->Write(count);
         for (size_t i = 0; i < count; ++i)
         {
-            pStream->Write(improvements[i].coords.iX);
-            pStream->Write(improvements[i].coords.iY);
-            pStream->Write(improvements[i].removedFeature);
-            pStream->Write(improvements[i].improvement);
-            improvements[i].yield.write(pStream);
-            pStream->Write(improvements[i].state);
-            pStream->Write(improvements[i].flags);
+            improvements[i].write(pStream);
         }
     }
 
@@ -1153,26 +1149,9 @@ namespace AltAI
 
         for (size_t i = 0; i < count; ++i)
         {
-            XYCoords coords;
-            pStream->Read(&coords.iX);
-            pStream->Read(&coords.iY);
-
-            FeatureTypes featureType = NO_FEATURE;
-            pStream->Read((int*)&featureType);
-
-            ImprovementTypes improvementType = NO_IMPROVEMENT;
-            pStream->Read((int*)&improvementType);
-
-            PlotYield plotYield;
-            plotYield.read(pStream);
-
-            PlotImprovementData::ImprovementState improvementState;
-            pStream->Read((int*)&improvementState);
-
-            int improvementFlags = 0;
-            pStream->Read(&improvementFlags);
-
-            improvements.push_back(PlotImprovementData(coords, featureType, improvementType, plotYield, improvementState, improvementFlags));
+            PlotImprovementData improvementData;
+            improvementData.read(pStream);
+            improvements.push_back(improvementData);
         }
     }
 
@@ -1180,7 +1159,7 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CityLog::getLog(::getCity(city_))->getStream();
-        os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " CityImprovementManager::logImprovements: ";
+        os << "\nTurn = " << gGlobals.getGame().getGameTurn()  << __FUNCTION__ << " : ";
 
         logImprovements(os);
 #endif

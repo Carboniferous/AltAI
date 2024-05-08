@@ -90,19 +90,11 @@ namespace AltAI
     {
         TotalOutput cumulativeOutput;
         int storedFood = 0, cumulativeCost = 0;
-        int currentPop = 0;
         for (size_t i = 0, count = entries.size(); i < count; ++i)
         {            
             cumulativeOutput += entries[i].output * entries[i].turns;
             cumulativeCost += entries[i].cost * entries[i].turns;
-
-            if (entries[i].pop > currentPop)
-            {
-                // since we got the advantage from it by growing sooner
-                storedFood = 0;
-                currentPop = entries[i].pop;
-            }
-            storedFood += (entries[i].output[OUTPUT_FOOD] * entries[i].turns * entries[i].foodKeptPercent) / 100;
+            storedFood = entries[i].storedFood;  // just take the final entry's value for stored food
         }
 
         cumulativeOutput[OUTPUT_FOOD] += storedFood;
@@ -119,6 +111,16 @@ namespace AltAI
             cumulativeOutput += entries[i].processOutput * entries[i].turns;
         }
         return cumulativeOutput;
+    }
+
+    int ProjectionLadder::getAccumulatedProduction() const
+    {
+        int totalAccumulatedProduction = 0;
+        for (size_t i = 0, count = entries.size(); i < count; ++i)
+        {
+            totalAccumulatedProduction += entries[i].accumulatedProduction;
+        }
+        return totalAccumulatedProduction;
     }
 
     int ProjectionLadder::getGPPTotal() const
@@ -259,7 +261,7 @@ namespace AltAI
         pStream->Write(pop);
         pStream->Write(turns);
         pStream->Write(cost);
-        pStream->Write(foodKeptPercent);
+        pStream->Write(storedFood);
         pStream->Write(accumulatedProduction);
         output.write(pStream);
         processOutput.write(pStream);
@@ -306,7 +308,7 @@ namespace AltAI
         pStream->Read(&pop);
         pStream->Read(&turns);
         pStream->Read(&cost);
-        pStream->Read(&foodKeptPercent);
+        pStream->Read(&storedFood);
         pStream->Read(&accumulatedProduction);
         output.read(pStream);
         processOutput.read(pStream);

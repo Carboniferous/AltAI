@@ -1,6 +1,5 @@
 #pragma once
 
-#include "./buildings_info.h"
 #include "./city_optimiser.h"
 
 class CvCity;
@@ -20,7 +19,7 @@ namespace AltAI
 
     std::vector<TechTypes> getRequiredTechs(const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 
-    BuildingInfo::BaseNode getBadNodes(const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
+    //BuildingInfo::BaseNode getBadNodes(const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
     Commerce getCommerceValue(const CvCity* pCity, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 
     void updateRequestData(CityData& data, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
@@ -30,19 +29,11 @@ namespace AltAI
     bool buildingHasPotentialEconomicImpact(const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
     bool buildingHasPotentialMilitaryImpact(PlayerTypes playerType, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 
-    // todo - generalise to multiple conditions?
-    struct ConditionalPlotYieldEnchancingBuilding
-    {
-        explicit ConditionalPlotYieldEnchancingBuilding(BuildingTypes buildingType_ = NO_BUILDING) : buildingType(buildingType_) {}
-        BuildingTypes buildingType;
-        std::vector<BuildingInfo::BuildCondition> buildConditions;
-        std::vector<std::pair<CvPlotFnPtr, PlotYield> > conditionalYieldChanges;
-    };
-
     std::vector<ConditionalPlotYieldEnchancingBuilding> getConditionalYieldEnchancingBuildings(PlayerTypes playerType);
 
     std::map<XYCoords, PlotYield> getExtraConditionalYield(const std::pair<XYCoords, std::map<int, std::set<XYCoords> > >& plotData,
-        const std::vector<ConditionalPlotYieldEnchancingBuilding>& conditionalYieldEnchancingBuildings, PlayerTypes playerType, int lookaheadDepth);
+        const std::vector<ConditionalPlotYieldEnchancingBuilding>& conditionalYieldEnchancingBuildings, PlayerTypes playerType, int lookaheadDepth,
+        std::map<BuildingTypes, PlotYield>& requiredBuildings);
 
     PlotYield getExtraConditionalYield(XYCoords cityCoords, XYCoords plotCoords,
         const std::vector<ConditionalPlotYieldEnchancingBuilding>& conditionalYieldEnchancingBuildings);

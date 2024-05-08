@@ -85,7 +85,7 @@ namespace AltAI
     {
     public:
         ReligiousDependency() : religionType_(NO_RELIGION), unitType_(NO_UNIT) {}
-        ReligiousDependency(ReligionTypes religionType, UnitTypes unitType);
+        explicit ReligiousDependency(ReligionTypes religionType, UnitTypes unitType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity, int ignoreFlags) const;
@@ -160,7 +160,7 @@ namespace AltAI
     {
     public:
         CivUnitDependency() : unitType_(NO_UNIT) {}
-        CivUnitDependency(UnitTypes unitType);
+        explicit CivUnitDependency(UnitTypes unitType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
         virtual bool required(const CvCity* pCity, int ignoreFlags) const;
@@ -178,5 +178,30 @@ namespace AltAI
 
     private:        
         UnitTypes unitType_;
+    };
+
+    class ResouceProductionBonusDependency : public IDependentTactic
+    {
+    public:
+        ResouceProductionBonusDependency() : bonusType_(NO_BONUS), productionModifier_(0) {}
+        ResouceProductionBonusDependency(BonusTypes bonusType, int productionModifier);
+        virtual void apply(const CityDataPtr& pCityData);
+        virtual void remove(const CityDataPtr& pCityData);
+        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
+        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool removeable() const;
+        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual std::vector<DependencyItem> getDependencyItems() const;
+
+        virtual void debug(std::ostream& os) const;
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = 7;
+
+    private:        
+        BonusTypes bonusType_;
+        int productionModifier_;
     };
 }
