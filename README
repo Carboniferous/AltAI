@@ -1,8 +1,15 @@
 AltAI - An additional AI for Civ IV.
 
-Does not change the default AI - adds the ability for some/all players (incl. barbs) to use a new AI.
+Adds the ability for some/all players (incl. barbs) to use a new AI.
+Implemented in parallel with existing AI which remains unchanged.
 
-ALTAI currently has separate worker AI, new city placement, plot selection, building, unit and tech selection.
+Currently has separate worker AI, new city placement, plot selection, building, unit and tech selection.
 
-Still very much in an alpha state. (No national wonders, spies, missionaries, minimal navy and no air units). 
-Diplomacy and unit movement (except workers, settlers and their escorts) still controlled by original logic.
+Enhancements include logic to calculate SubAreas (splits Areas into regions which are passable/impassable) 
+and (Non)-Irrigatable based on connectivity to water and ability of plots to chain irrigation. Unit path finding 
+logic extended to evaluating road building cost and cost of irrigation chains.
+
+Unit path logic takes into account other nearby unit groups and can coordinate moves including attacks from multiple plots
+
+To-dos include explanding basic city build and tech selection logic, implement civic selection, war planning.
+
