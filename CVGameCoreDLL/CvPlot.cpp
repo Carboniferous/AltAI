@@ -3867,6 +3867,7 @@ int CvPlot::getArea() const
 	return m_iArea;
 }
 
+// AltAI
 std::vector<const CvArea*> CvPlot::getAdjacentAreas() const
 {
     std::vector<const CvArea*> adjacentAreas;
@@ -3897,6 +3898,31 @@ std::vector<const CvArea*> CvPlot::getAdjacentAreas() const
     }
 
     return adjacentAreas;
+}
+
+// AltAI
+std::vector<int> CvPlot::getAdjacentSubAreas(bool matchDomain) const
+{
+    std::vector<int> subAreas;
+    AltAI::NeighbourPlotIter plotIter(this);
+    while (AltAI::IterPlot pLoopPlot = plotIter())
+    {
+        if (pLoopPlot.valid())
+        {
+            // if matchDomain is true: and plot is land - this should give us land sub areas (true == (false == false)) => true == true => true
+            // if matchDomain is false: and plot is land - should give water sub areas (false == (true == false)) => false == false => true
+            if (matchDomain == (pLoopPlot->isWater() == isWater()))
+            {
+                if (pLoopPlot->getSubArea() != m_iSubArea && 
+                    std::find(subAreas.begin(), subAreas.end(), pLoopPlot->getSubArea()) == subAreas.end())
+                {
+                    subAreas.push_back(pLoopPlot->getSubArea());
+                }
+            }
+        }
+    }
+
+    return subAreas;
 }
 
 // AltAI

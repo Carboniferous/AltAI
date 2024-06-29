@@ -74,7 +74,7 @@ namespace AltAI
         {
             ConstructItem constructItem(buildingType_);
             const int numSimTurns = player.getAnalysis()->getNumSimTurns();
-            projection_ = getProjectedOutput(player, pCityData_, numSimTurns, events, constructItem, __FUNCTION__, false, true);
+            projection_ = getProjectedOutput(player, pCityData_, numSimTurns, events, constructItem, __FUNCTION__, false, false);
 
             int accumulatedTurns = 0;
             for (size_t i = 0, entryCount = projection_.entries.size(); i < entryCount; ++i)
@@ -641,7 +641,14 @@ namespace AltAI
                             std::make_pair(bi->first, *cityTacticsMap[bi->first].economicBuildings.begin()));
                     }
                 }
-            }            
+            }
+            // cheesy way to add in free tech (and possibly other less common build effects)
+            if (!cityBuildTimes.empty())
+            {
+                selectionData.possibleFreeTechs.insert(
+                    cityTacticsMap[cityBuildTimes.begin()->first].possibleFreeTechs.begin(), 
+                        cityTacticsMap[cityBuildTimes.begin()->first].possibleFreeTechs.end());
+            }
         }
     }
 

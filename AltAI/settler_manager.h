@@ -14,6 +14,7 @@ namespace AltAI
         std::vector<int> getBestCitySites(int minValue, int count);
         int getOverseasCitySitesCount(int minValue, int count, int subAreaID) const;
         void analysePlotValues();
+        void makePlotDirty(XYCoords coords);  // todo
         void debugDotMap() const;
         void debugPlot(XYCoords coords, std::ostream& os) const;
 

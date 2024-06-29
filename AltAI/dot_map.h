@@ -9,6 +9,8 @@ namespace AltAI
 
     struct DotMapItem
     {
+        DotMapItem(XYCoords coords_, PlotYield cityPlotYield_, bool isFreshWater_ = false, BonusTypes bonusType = NO_BONUS);
+
         struct DotMapPlotData
         {
             DotMapPlotData()
@@ -140,8 +142,8 @@ namespace AltAI
             return bestImprovements;
         }
 
-        DotMapItem(XYCoords coords_, PlotYield cityPlotYield_, bool isFreshWater_ = false, BonusTypes bonusType = NO_BONUS);
         bool operator < (const DotMapItem& other) const { return coords < other.coords; }
+
         void calcOutput(const Player& player, int lookAheadTurns, int baseHealthyPop, bool debug = false);
 
         int getFoundValue(const Player& player) const;

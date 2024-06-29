@@ -27,8 +27,12 @@ namespace AltAI
         void deletePlayerUnit(CvUnitAI* pUnit, const CvPlot* pPlot);
         void withdrawPlayerUnit(CvUnitAI* pUnit, const CvPlot* pAttackPlot);
 
-        void addCity(const CvCity* pCity);
+        void addOurCity(const CvCity* pCity);
         void deleteCity(const CvCity* pCity);
+
+        void addPlayerCity(const CvCity* pCity);
+        void deletePlayerCity(const CvCity* pCity);
+        void addHostilePlotsWithUnknownCity(const std::vector<XYCoords>& coords);
 
         void addNewSubArea(int subArea);
 

@@ -5,6 +5,7 @@
 #include "./tactic_selection_data.h"
 #include "./building_tactics_visitors.h"
 #include "./building_info_visitors.h"
+#include "./tech_info_visitors.h"
 #include "./military_tactics.h"
 #include "./tactic_actions.h"
 #include "./tactic_streams.h"
@@ -636,8 +637,16 @@ namespace AltAI
                     {
                         if (ci->city == city.getCvCity()->getIDInfo())
                         {
+                            TotalOutput extraOutput;
+                            if (tacticSelectionData.possibleFreeTechs.find(ci->buildingType) != tacticSelectionData.possibleFreeTechs.end())
+                            {
+                                const int techCost = calculateTechResearchCost(tacticSelectionData.possibleFreeTechs[ci->buildingType], player.getPlayerID());
+                                extraOutput += makeOutput(0, 0, 0, techCost * 100, 0, 0);
+                                civLog << "\n(Economic Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType() << " adding free tech: " <<
+                                    gGlobals.getTechInfo(tacticSelectionData.possibleFreeTechs[ci->buildingType]).getType() << " as extra output: " << extraOutput;
+                            }
                             civLog << "\n(Economic Building): " << gGlobals.getBuildingInfo(ci->buildingType).getType()
-                                   << " turns = " << ci->nTurns << ", delta = " << ci->output << " value = " << (valueF(ci->output) / (ci->nTurns == 0 ? 1 : ci->nTurns));
+                                   << " turns = " << ci->nTurns << ", delta = " << ci->output << " value = " << (valueF(ci->output + extraOutput) / (ci->nTurns == 0 ? 1 : ci->nTurns));
                         }
                     }
                 }
@@ -650,8 +659,14 @@ namespace AltAI
                 {
                     if (ci->city == city.getCvCity()->getIDInfo())
                     {
+                        TotalOutput extraOutput;
+                        if (tacticSelectionData.possibleFreeTechs.find(ci->buildingType) != tacticSelectionData.possibleFreeTechs.end())
+                        {
+                            const int techCost = calculateTechResearchCost(tacticSelectionData.possibleFreeTechs[ci->buildingType], player.getPlayerID());
+                            extraOutput += makeOutput(0, 0, 0, techCost * 100, 0, 0);
+                        }
                         //int thisValue = valueF(ci->output) / std::max<int>(1, ci->nTurns);
-                        int thisValue = econValueF(ci->output) / std::max<int>(1, ci->nTurns);
+                        int thisValue = econValueF(ci->output + extraOutput) / std::max<int>(1, ci->nTurns);
                         if (thisValue > bestValue && // econValueF(ci->output) > 0 &&
                             tacticSelectionData.exclusions.find(ci->buildingType) == tacticSelectionData.exclusions.end())
                         {
@@ -696,6 +711,16 @@ namespace AltAI
                     if (firstBuiltCity == city.getCvCity()->getIDInfo() || 4 * thisCityBuiltTurn / 5 < firstBuiltTurn)
                     {
                         int thisValue = valueF(thisDelta);
+
+                        TotalOutput extraOutput;
+                        if (tacticSelectionData.possibleFreeTechs.find(ci->first) != tacticSelectionData.possibleFreeTechs.end())
+                        {
+                            const int techCost = calculateTechResearchCost(tacticSelectionData.possibleFreeTechs[ci->first], player.getPlayerID());
+                            thisValue += valueF(makeOutput(0, 0, 0, techCost * 100, 0, 0));
+                            civLog << "\n(Economic Building): " << gGlobals.getBuildingInfo(ci->first).getType() << " adding free tech: " <<
+                                gGlobals.getTechInfo(tacticSelectionData.possibleFreeTechs[ci->first]).getType() << " as extra output: " << valueF(makeOutput(0, 0, 0, techCost * 100, 0, 0));
+                        }
+
                         if (thisValue > bestValue)
                         {
                             bestValue = thisValue;
@@ -1886,7 +1911,7 @@ namespace AltAI
                     if (playerLands && buildingAndValue.first > 20 && setConstructItem(buildingAndValue.second))
                     {
 #ifdef ALTAI_DEBUG
-                        civLog << "\n(getConstructItem) Returning def mil building for city: " << selection
+                        civLog << "\n(getConstructItem) Returning def mil building for city: " << safeGetCityName(city.getCvCity()) << " " << selection
                                << " value, mil building: " << buildingAndValue.first << ", " << (buildingAndValue.second == NO_BUILDING ? "none" : gGlobals.getBuildingInfo(buildingAndValue.second).getType());
 #endif
                         return true;
@@ -1899,7 +1924,7 @@ namespace AltAI
                 if (playerLands && buildingAndValue.first > 20 && setConstructItem(buildingAndValue.second))
                 {
 #ifdef ALTAI_DEBUG
-                    civLog << "\n(getConstructItem) Returning mil building for city: " << selection
+                    civLog << "\n(getConstructItem) Returning mil building for city: " << safeGetCityName(city.getCvCity())
                            << " value, mil building: " << buildingAndValue.first << ", " << (buildingAndValue.second == NO_BUILDING ? "none" : gGlobals.getBuildingInfo(buildingAndValue.second).getType());
 #endif
                     return true;

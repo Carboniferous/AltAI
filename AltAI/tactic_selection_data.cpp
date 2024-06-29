@@ -139,7 +139,15 @@ namespace AltAI
         std::copy(other.cultureSources.begin(), other.cultureSources.end(), std::back_inserter(cultureSources));
         // exclusions
         cityImprovementsDelta += other.cityImprovementsDelta;
-        possibleFreeTech = other.possibleFreeTech == NO_TECH ? possibleFreeTech : other.possibleFreeTech;  // not ideal
+
+        // free techs from buildings
+        possibleFreeTechs.insert(other.possibleFreeTechs.begin(), other.possibleFreeTechs.end());
+        // free techs from tech or Great People (tactic selection data is stored by tech or city - hence multiple buildings map)
+        // still not ideal and doesn't express GP dependency well - todo re-think
+        if (possibleFreeTech == NO_TECH)
+        {
+            possibleFreeTech = other.possibleFreeTech;
+        }
         resourceOutput += other.resourceOutput;
         // processOutputsMap
     }
@@ -936,9 +944,15 @@ namespace AltAI
             os << "\n\tProcess: " << gGlobals.getProcessInfo(ci->first).getType() << " output = " << ci->second;
         }
 
+        for (std::map<BuildingTypes, TechTypes>::const_iterator ci(possibleFreeTechs.begin()), ciEnd(possibleFreeTechs.end());
+            ci != ciEnd; ++ci)
+        {
+            os << "\n\tBuilding: " << gGlobals.getBuildingInfo(ci->first).getType() << " gives free tech, possible choice = " << gGlobals.getTechInfo(ci->second).getType(); 
+        }
+
         if (possibleFreeTech != NO_TECH)
         {
-            os << "\n\tGives free tech, possible choice = " << gGlobals.getTechInfo(possibleFreeTech).getType(); 
+            os << "\n\tGives free tech, possible choice = " << gGlobals.getTechInfo(possibleFreeTech).getType();
         }
 
         if (!isEmpty(baselineDelta))

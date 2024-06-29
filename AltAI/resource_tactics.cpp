@@ -186,7 +186,7 @@ namespace AltAI
         pCityData->getBonusHelper()->changeNumBonuses(pResourceTactics->getBonusType(), 1);
         updateRequestData(*pCityData, pPlayer->getAnalysis()->getResourceInfo(pResourceTactics->getBonusType()), true);
             
-        ProjectionLadder delta = getProjectedOutput(*pPlayer, pCityData, pPlayer->getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, false, true);
+        ProjectionLadder delta = getProjectedOutput(*pPlayer, pCityData, pPlayer->getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, false, false);
         cityProjections_[city.getCvCity()->getIDInfo()] = std::make_pair(delta, base);
 
 #ifdef ALTAI_DEBUG

@@ -227,6 +227,7 @@ public:
 
     // AltAI
     std::vector<const CvArea*> getAdjacentAreas() const;
+    std::vector<int> getAdjacentSubAreas(bool matchDomain = false) const;
 
     // AltAI
     int getSubArea() const;

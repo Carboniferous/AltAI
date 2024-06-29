@@ -116,6 +116,7 @@ namespace AltAI
             //pPlayerAnalysis_->getMapAnalysis()->update();
 
             calcMaxResearchRate_();
+            pOpponentsAnalysis_->updateAttitudes();
 
             for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
             {
@@ -165,7 +166,7 @@ namespace AltAI
             {
                 pPlayerAnalysis_->analyseSpecialists();
             }*/
-            pPlayerAnalysis_->getMilitaryAnalysis()->addCity(pCity);
+            pPlayerAnalysis_->getMilitaryAnalysis()->addOurCity(pCity);
         }
 
         citiesToInit_.insert(pCity->getID());
@@ -1539,14 +1540,20 @@ namespace AltAI
 
     void Player::meetTeam(TeamTypes teamType)
     {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
-        PlayerIter playerIter(teamType);
-        while (const CvPlayerAI* player = playerIter())
+        if (teamType != pPlayer_->getTeam())
         {
-            os << "\nMet team: " << teamType << " player: " << narrow(player->getName());
-        }        
+#ifdef ALTAI_DEBUG
+            std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
 #endif
+            PlayerIter playerIter(teamType);
+            while (const CvPlayerAI* player = playerIter())
+            {
+                pOpponentsAnalysis_->addPlayer(player);
+#ifdef ALTAI_DEBUG
+                os << "\nMet team: " << teamType << " player: " << narrow(player->getName());
+#endif
+           }
+        }
     }
 
     int Player::getTechResearchDepth(TechTypes techType) const

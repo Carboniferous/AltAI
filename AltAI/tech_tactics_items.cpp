@@ -348,7 +348,7 @@ namespace AltAI
 
             std::vector<TechTypes> techs = pPlayer->getAnalysis()->getTechsWithDepth(1);
 
-            // repeat of logic in FreeTechBuildingTactic - todo - move to common fn
+            // similar to logic in FreeTechBuildingTactic - todo - move to common fn
             int maxCost = 0;
             TechTypes possibleTechSelection = NO_TECH;
             for (size_t i = 0, count = techs.size(); i < count; ++i)
@@ -591,7 +591,7 @@ namespace AltAI
             CityDataPtr pCityData = city.getCityData()->clone();
             updateRequestData(pCity, *pCityData, pPlayer->getAnalysis()->getTechInfo(pTechTactics->getTechType()));
             std::vector<IProjectionEventPtr> events;
-            ProjectionLadder newBaseline = getProjectedOutput(*pPlayer, pCityData, pPlayer->getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, true);
+            ProjectionLadder newBaseline = getProjectedOutput(*pPlayer, pCityData, pPlayer->getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, false);
             newBaselineOutput += newBaseline.getOutput();
 
             pCityData->getCivHelper()->removeTech(pTechTactics->getTechType());

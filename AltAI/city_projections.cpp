@@ -877,11 +877,11 @@ namespace AltAI
             constructItem.debug(os);
             if (!ladder.buildings.empty())
             {
-                os << " building: " << ladder.buildings[0].first << " turns ";
+                os << " " << ladder.buildings[0].first << " turns ";
             }
             else if (!ladder.units.empty())
             {
-                os << " unit: " << ladder.units[0].turns << " turns ";
+                os << " " << ladder.units[0].turns << " turns ";
             }
 
             /*if (doComparison && !ladder.comparisons.empty())

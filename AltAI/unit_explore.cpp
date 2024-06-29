@@ -929,6 +929,9 @@ namespace AltAI
             const CvPlot* pEscapePlot = getEscapePlot(*pPlayer, pUnit->getGroup(), reachablePlotsData.allReachablePlots, dangerPlots, hostiles);
             if (pEscapePlot && !pUnit->atPlot(pEscapePlot))
             {
+#ifdef ALTAI_DEBUG
+                os << "\ncoastal explore: trying closest port for healing: " << pClosestCityPlot->getCoords();
+#endif
                 pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pEscapePlot->getX_INLINE(), pEscapePlot->getY_INLINE(), 
                     MOVE_IGNORE_DANGER, false, false, MISSIONAI_EXPLORE, (CvPlot*)pEscapePlot, 0, __FUNCTION__);
                 return true;
@@ -936,16 +939,41 @@ namespace AltAI
         }
 
         const std::map<int /* sub area id */, std::set<XYCoords> >& borders = pMapAnalysis->getUnrevealedBorderMap();
-        std::map<int, std::set<XYCoords> >::const_iterator subAreaBorderIter = borders.find(pUnitPlot->getSubArea());
-        const bool haveBorders = subAreaBorderIter != borders.end() && !subAreaBorderIter->second.empty();
+        std::vector<int> accessibleSubAreas;
+        if (pUnitPlot->isCoastalLand())
+        {
+            for (PlotSet::const_iterator rIter(reachablePlotsData.allReachablePlots.begin()), rEndIter(reachablePlotsData.allReachablePlots.end()); rIter != rEndIter; ++rIter)
+            {
+                if ((*rIter)->isWater())
+                {
+                    if (std::find(accessibleSubAreas.begin(), accessibleSubAreas.end(), (*rIter)->getSubArea()) == accessibleSubAreas.end())
+                    {
+                        accessibleSubAreas.push_back((*rIter)->getSubArea());
+                    }
+                }
+            }
+        }
+        else
+        {
+            accessibleSubAreas.push_back(pUnitPlot->getSubArea());
+        }
 
         PlotSet reachableBorderPlots;
-            
-        for (PlotSet::const_iterator ci(reachablePlotsData.allReachablePlots.begin()), ciEnd(reachablePlotsData.allReachablePlots.end()); ci != ciEnd; ++ci)
+        for (size_t i = 0, count = accessibleSubAreas.size(); i < count; ++i)
         {
-            if (haveBorders && subAreaBorderIter->second.find((*ci)->getCoords()) != subAreaBorderIter->second.end())
+            std::map<int, std::set<XYCoords> >::const_iterator subAreaBorderIter = borders.find(accessibleSubAreas[i]);
+            const bool haveBorders = subAreaBorderIter != borders.end() && !subAreaBorderIter->second.empty();
+            
+            for (PlotSet::const_iterator ci(reachablePlotsData.allReachablePlots.begin()), ciEnd(reachablePlotsData.allReachablePlots.end()); haveBorders && ci != ciEnd; ++ci)
             {
-                reachableBorderPlots.insert(*ci);
+                PlayerTypes plotOwner = (*ci)->getRevealedOwner(pUnit->getTeam(), false);
+                if (plotOwner == NO_PLAYER || plotOwner == pUnit->getOwner() || CvTeamAI::getTeam(PlayerIDToTeamID(plotOwner)).isOpenBorders(pUnit->getTeam()))
+                {
+                    if (subAreaBorderIter->second.find((*ci)->getCoords()) != subAreaBorderIter->second.end())
+                    {
+                        reachableBorderPlots.insert(*ci);
+                    }
+                }
             }
         }
 
@@ -971,31 +999,86 @@ namespace AltAI
             os << "\ncoastal explore border plots:";
             if (pBestPlot) os << " best plot = " << pBestPlot->getCoords(); else os << " best plot = NULL";
 #endif
-            if (pBestPlot && pUnit->generatePath(pBestPlot, MOVE_NO_ENEMY_TERRITORY, true))
+            if (pBestPlot)
             {
-                pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_IGNORE_DANGER, false, false, MISSIONAI_EXPLORE, (CvPlot*)pBestPlot, 0, __FUNCTION__);
-                return true;
+                UnitPathData unitPathData;
+                unitPathData.calculate(pUnit->getGroup(), pBestPlot, MOVE_MAX_MOVES | MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY);
+
+                if (unitPathData.valid)
+                {
+                    const CvPlot* pMoveToPlot = getNextMovePlot(*pPlayer, pUnit->getGroup(), pBestPlot);
+                    if (pMoveToPlot && !pUnit->at(pMoveToPlot->getX(), pMoveToPlot->getY()))
+                    {
+                        pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pMoveToPlot->getX(), pMoveToPlot->getY(), MOVE_IGNORE_DANGER, false, false, MISSIONAI_EXPLORE, (CvPlot*)pMoveToPlot, 0, __FUNCTION__);
+#ifdef ALTAI_DEBUG
+                        os << "\npushed mission to plot: " << pBestPlot->getCoords();
+#endif
+                        return true;
+                    }
+                }
             }
         }
 
-        if (haveBorders)
+        for (size_t i = 0, count = accessibleSubAreas.size(); i < count; ++i)
         {
-            int bestValue = MAX_INT;
-            for (std::set<XYCoords>::const_iterator ci(subAreaBorderIter->second.begin()), ciEnd(subAreaBorderIter->second.end());
-                ci != ciEnd; ++ci)
+            std::map<int, std::set<XYCoords> >::const_iterator subAreaBorderIter = borders.find(accessibleSubAreas[i]);
+            const bool haveBorders = subAreaBorderIter != borders.end() && !subAreaBorderIter->second.empty();
+            if (haveBorders)
             {
-                int thisPlotDistance = plotDistance(pUnit->getX(), pUnit->getY(), ci->iX, ci->iY);
-                if (thisPlotDistance <= bestValue)
-                {                    
-                    pBestPlot = gGlobals.getMap().plot(ci->iX, ci->iY);
-                    bestValue = thisPlotDistance;
-                }
-            }
+                int bestValue = MAX_INT;
+                PlotSet excludedPlots;
+                for (;;)
+                {
+                    for (std::set<XYCoords>::const_iterator ci(subAreaBorderIter->second.begin()), ciEnd(subAreaBorderIter->second.end());
+                        ci != ciEnd; ++ci)
+                    {
+                        const CvPlot* pThisPlot = gGlobals.getMap().plot(ci->iX, ci->iY);
+                        // could relax the second check to just same team
+                        if (excludedPlots.find(pThisPlot) != excludedPlots.end() || (!pThisPlot->isAdjacentToLand() && pThisPlot->getOwner() != pUnit->getOwner()))
+                        {
+                            continue;
+                        }
 
-            if (pBestPlot && pUnit->generatePath(pBestPlot, MOVE_IGNORE_DANGER, true))
-            {
-                pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pBestPlot->getX_INLINE(), pBestPlot->getY_INLINE(), MOVE_NO_ENEMY_TERRITORY, false, false, MISSIONAI_EXPLORE, (CvPlot*)pBestPlot, 0, __FUNCTION__);
-                return true;
+                        int thisPlotDistance = plotDistance(pUnit->getX(), pUnit->getY(), ci->iX, ci->iY);
+                        if (thisPlotDistance <= bestValue)
+                        {                    
+                            pBestPlot = pThisPlot;
+                            bestValue = thisPlotDistance;
+                        }
+                    }
+
+                    if (!pBestPlot)
+                    {
+                        break;
+                    }
+#ifdef ALTAI_DEBUG
+                    os << "\ncoastal explore: trying plot: " << pBestPlot->getCoords();
+#endif
+                    UnitPathData unitPathData;
+                    unitPathData.calculate(pUnit->getGroup(), pBestPlot, MOVE_MAX_MOVES | MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY);
+
+                    if (unitPathData.valid)
+                    {
+                        const CvPlot* pMoveToPlot = getNextMovePlot(*pPlayer, pUnit->getGroup(), pBestPlot);
+                        if (pMoveToPlot && !pUnit->at(pMoveToPlot->getX(), pMoveToPlot->getY()))
+                        {
+                            pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pMoveToPlot->getX(), pMoveToPlot->getY(), MOVE_IGNORE_DANGER, false, false, MISSIONAI_EXPLORE, (CvPlot*)pMoveToPlot, 0, __FUNCTION__);
+#ifdef ALTAI_DEBUG
+                            os << "\npushed mission to plot: " << pBestPlot->getCoords();
+#endif
+                            return true;
+                        }
+                    }
+                    else
+                    {
+#ifdef ALTAI_DEBUG
+                        os << "\nfailed to generate path to plot, excluding it from search";
+#endif
+                        excludedPlots.insert(pBestPlot);
+                        bestValue = MAX_INT;
+                        pBestPlot = (const CvPlot*)0;
+                    }
+                }
             }
         }
 
@@ -1005,6 +1088,9 @@ namespace AltAI
             int iPathTurns = 0;
             if (pUnit->generatePath(pClosestCityPlot, 0, false, &iPathTurns))
             {
+#ifdef ALTAI_DEBUG
+                os << "\ncoastal explore: trying closest port: " << pClosestCityPlot->getCoords();
+#endif
                 pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pClosestCityPlot->getX_INLINE(), pClosestCityPlot->getY_INLINE(), 
                     MOVE_IGNORE_DANGER, false, false, MISSIONAI_EXPLORE, (CvPlot*)pClosestCityPlot, 0, __FUNCTION__);
                 return true;

@@ -1431,6 +1431,13 @@ bool CvPlayerAI::AI_captureUnit(UnitTypes eUnit, CvPlot* pPlot) const
 		return true;
 	}
 
+    // prob. want to refine this
+    if (isUsingAltAI())
+    {        
+        return true;
+    }
+
+    // this will not include a city which has just been captured on the same plot as ownership has not yet transfered
 	pNearestCity = GC.getMapINLINE().findCity(pPlot->getX_INLINE(), pPlot->getY_INLINE(), NO_PLAYER, getTeam());
 
 	if (pNearestCity != NULL)

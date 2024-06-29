@@ -111,9 +111,20 @@ namespace AltAI
                 return false;
             }
 
-            if (pPlot->isWater() && !pUnit->canMoveAllTerrain())
-            {            
-                return false;
+            if (pUnit->getDomainType() == DOMAIN_SEA)
+            {
+                // can't move to plot if it's is not water and it's not a friendly city
+                if (!pPlot->isWater() && (!pUnit->canMoveAllTerrain() || !(pPlot->isFriendlyCity(*pUnit, true) && pPlot->isCoastalLand())))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                if (pPlot->isWater() && !pUnit->canMoveAllTerrain())
+                {            
+                    return false;
+                }
             }
 
             // skip spy check in orig fn - USE_SPIES_NO_ENTER_BORDERS is false in any case    
@@ -398,26 +409,28 @@ namespace AltAI
 
     bool DefenceMoveDataPred::operator () (const CombatMoveData& first, const CombatMoveData& second) const
     {
+        // chance that hostile units overwhelm our units is less than threshold
+        // (pLoss is chance attacker looses) - threshold is usually 0.2 for unit counter missions        
         if (first.defenceOdds.pWin < threshold)
         {
             if (first.stepDistanceFromTarget == second.stepDistanceFromTarget)
             {
-                return first.defenceOdds.pWin < second.defenceOdds.pWin;
+                return first.defenceOdds.pLoss + first.defenceOdds.pDraw > second.defenceOdds.pLoss + second.defenceOdds.pDraw;
             }
             else
             {
                 return first.stepDistanceFromTarget < second.stepDistanceFromTarget;
             }
         }
-        else  // reverse order to consider prob survival first
+        else  // reverse consideration to consider survival prob over proximity to target
         {
-            if ((int)(1000.0f * first.defenceOdds.pWin) == (int)(1000.0f * second.defenceOdds.pWin))
+            if ((int)(1000.0f * first.defenceOdds.pLoss) == (int)(1000.0f * second.defenceOdds.pLoss))
             {
                 return first.stepDistanceFromTarget < second.stepDistanceFromTarget;
             }
             else
             {
-                return first.defenceOdds.pWin < second.defenceOdds.pWin;
+                return first.defenceOdds.pLoss + first.defenceOdds.pDraw > second.defenceOdds.pLoss + second.defenceOdds.pDraw;
             }
         }
     }
@@ -521,7 +534,7 @@ namespace AltAI
             for (const StackCombatDataNode* pNode = (*ci)->parentNode; pNode; pNode = pNode->parentNode)
             {
                 pEndState *= pCurrentNode == pNode->winNode.get() ? pNode->data.odds.AttackerKillOdds : // win
-                    (pCurrentNode == pNode->drawNode.get() ? pNode->data.odds.PullOutOdds + pNode->data.odds.RetreatOdds : // draw
+                    (pCurrentNode == pNode->drawNode.get() ? (pNode->data.odds.PullOutOdds + pNode->data.odds.RetreatOdds) : // draw
                         pNode->data.odds.DefenderKillOdds);  // loss
                 pCurrentNode = pNode;
             }
@@ -571,7 +584,18 @@ namespace AltAI
                 
             for (const StackCombatDataNode* pNode = (*ci)->parentNode; pNode; pNode = pNode->parentNode)
             {
-                pEndState *= pCurrentNode == pNode->winNode.get() ? pNode->data.odds.AttackerKillOdds : pNode->data.odds.DefenderKillOdds;
+                if (pCurrentNode == pNode->winNode.get())
+                {
+                    pEndState *= pNode->data.odds.AttackerKillOdds;
+                }
+                else if (pCurrentNode == pNode->lossNode.get())
+                {
+                    pEndState *= pNode->data.odds.DefenderKillOdds;
+                }
+                else  // withdrawal and retreat (pNode->drawNode)
+                {
+                    pEndState *= (pNode->data.odds.PullOutOdds + pNode->data.odds.RetreatOdds);
+                }
                 pCurrentNode = pNode;
             }
             os << "\n\t P(endstate) = " << pEndState;
@@ -650,9 +674,9 @@ namespace AltAI
         readVector<float, float>(pStream, defenderUnitOdds);
         readComplexList(pStream, longestAndShortestAttackOrder.first);
         readComplexList(pStream, longestAndShortestAttackOrder.second);
-        /*pStream->Read(&pWin);
+        pStream->Read(&pWin);
         pStream->Read(&pLoss);
-        pStream->Read(&pDraw);*/
+        pStream->Read(&pDraw);
     }
 
     size_t CombatGraph::getFirstUnitIndex(bool isAttacker) const
@@ -718,7 +742,8 @@ namespace AltAI
 
     CombatGraph getCombatGraph(const Player& player, const UnitData::CombatDetails& combatDetails, 
         const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, double oddsThreshold)
-    {   
+    {
+        boost::shared_ptr<UnitAnalysis> pUnitAnalysis = player.getAnalysis()->getUnitAnalysis();
         std::list<StackCombatDataNodePtr> openNodes, endNodes;
 
         StackCombatDataNodePtr pRootNode(new StackCombatDataNode());
@@ -733,13 +758,23 @@ namespace AltAI
             // expand node if required
             if (!pCurrentNode->attackers.empty() && !pCurrentNode->defenders.empty() && stackCanAttack(pCurrentNode->attackers))
             {
-                pCurrentNode->data = getBestUnitOdds(player, combatDetails, pCurrentNode->attackers, pCurrentNode->defenders);
+                pCurrentNode->data = getBestUnitOdds(player, combatDetails, pCurrentNode->attackers, pCurrentNode->defenders, false);
 
                 // oddsThreshold limits expansion of very unlikely paths - which significantly reduces the no. of nodes for large stack combinations
                 // better than 99.99% (0.9999) (if oddsThreshold is 0.0001) chance of attacker dying
                 bool ignoreAttackerSurvival = pCurrentNode->data.odds.DefenderKillOdds > 1.0 - oddsThreshold;
                 // better than 99.99% chance of defender dying
                 bool ignoreDefenderSurvival = pCurrentNode->data.odds.AttackerKillOdds > 1.0 - oddsThreshold;
+                std::vector<int> unitsCollateralDamage;
+                bool checkCollateral = pCurrentNode->attackers[pCurrentNode->data.attackerIndex].pUnitInfo->getCollateralDamage() > 0;
+
+                if (checkCollateral)
+                {
+                    unitsCollateralDamage = pUnitAnalysis->getCollateralDamage(pCurrentNode->attackers[pCurrentNode->data.attackerIndex],
+                        pCurrentNode->defenders, pCurrentNode->data.defenderIndex, combatDetails);
+                }
+
+                // todo - flanking damage
 
                 if (!ignoreAttackerSurvival)
                 {
@@ -754,6 +789,10 @@ namespace AltAI
                         if (i != pCurrentNode->data.defenderIndex)
                         {
                             pWinNode->defenders.push_back(pCurrentNode->defenders[i]);
+                            if (checkCollateral)
+                            {
+                                pWinNode->defenders.rbegin()->hp -= unitsCollateralDamage[i];
+                            }
                         }
                     }
                     pCurrentNode->winNode = pWinNode;
@@ -771,6 +810,13 @@ namespace AltAI
                     pLossNode->defenders = pCurrentNode->defenders;
                     UnitData& defendingUnitData = pLossNode->defenders[pCurrentNode->data.defenderIndex];
                     defendingUnitData.hp = std::max<int>(1, (int)pCurrentNode->data.odds.E_HP_Def);
+                    if (checkCollateral)  // even if attacker died - still apply any collateral damage to defenders
+                    {
+                        for (size_t i = 0, count = pLossNode->defenders.size(); i < count; ++i)
+                        {
+                            pLossNode->defenders.rbegin()->hp -= unitsCollateralDamage[i];
+                        }
+                    }
                     for (size_t i = 0, count = pCurrentNode->attackers.size(); i < count; ++i)
                     {
                         if (i != pCurrentNode->data.attackerIndex)
@@ -1099,7 +1145,7 @@ namespace AltAI
         return std::make_pair(combatUnits, possibleCombatUnits);
     }
 
-    StackCombatData getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, bool debug)
+    StackCombatData getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, bool useCollateral, bool debug)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*player.getCvPlayer())->getStream();
@@ -1111,6 +1157,12 @@ namespace AltAI
 
         for (size_t i = 0, count = attackUnitsCount; i < count; ++i)
         {
+            bool isCollateralUnit = attackers[i].pUnitInfo->getCollateralDamage() > 0;
+            if (useCollateral != isCollateralUnit)
+            {
+                continue;
+            }
+
             std::vector<int> odds = pUnitAnalysis->getOdds(attackers[i], defenders, combatDetails, true);
                 
             // find best defender v. attacking unit
@@ -1173,7 +1225,7 @@ namespace AltAI
     }
 
     std::list<StackCombatData> getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, 
-        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, const int oddsThreshold, bool debug)
+        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, const int oddsThreshold, bool useCollateral, bool debug)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*player.getCvPlayer())->getStream();
@@ -1186,6 +1238,12 @@ namespace AltAI
 
         for (size_t i = 0, count = attackUnitsCount; i < count; ++i)
         {
+            bool isCollateralUnit = attackers[i].pUnitInfo->getCollateralDamage() > 0;
+            if (useCollateral != isCollateralUnit)
+            {
+                continue;
+            }
+
             std::vector<int> odds = player.getAnalysis()->getUnitAnalysis()->getOdds(attackers[i], defenders, combatDetails, true);
                 
             // find best defender v. attacking unit
@@ -1217,6 +1275,9 @@ namespace AltAI
                 os << "\n";
             }
 #endif
+            // todo - currently just calc this here for logging and recalc later in getCombatGraph to simulate possible damage
+            // possibly calc for each unit and take results into account for best collateral damage
+            // currently 
             if (attackers[i].pUnitInfo->getCollateralDamage() > 0)
             {
                 std::vector<int> unitsCollateralDamage = player.getAnalysis()->getUnitAnalysis()->getCollateralDamage(attackers[i], defenders, defenderIndex[i], combatDetails);
@@ -1234,6 +1295,7 @@ namespace AltAI
 
         std::list<StackCombatData> combatsData;
 
+        // best odds was worse than passed in threshold
         if (bestOdds > 0 && bestOdds < oddsThreshold)
         {
             StackCombatData data;
@@ -1253,11 +1315,11 @@ namespace AltAI
         }
         else
         {
-            const int minThreshold = bestOdds * 4 / 5;
-            // find attackers with odds greater than threshold
+            const int minThreshold = bestOdds * 4 / 5;            
             for (size_t i = 0; i < attackUnitsCount; ++i)
             {
-                if (attackerOdds[i] >= oddsThreshold && attackerOdds[i] > minThreshold) // (odds are 0 -> 1000) odds at least threshold and at least 80% of best odds 
+                // find attackers with odds greater than 80% best odds and better than passed in threshold
+                if (attackerOdds[i] >= oddsThreshold && attackerOdds[i] > minThreshold) // (odds are 0 -> 1000)
                 {
                     StackCombatData data;
                     UnitOddsData oddsDetail = player.getAnalysis()->getUnitAnalysis()->getCombatOddsDetail(attackers[i], defenders[defenderIndex[i]], combatDetails);
@@ -1284,19 +1346,21 @@ namespace AltAI
             const std::vector<const CvUnit*>& enemyStack, const std::set<IDInfo>& existingUnits)
     {
         RequiredUnitStack requiredUnitStack;
+        bool canBuildCollateralUnits = false;
+        const int minStackSizeToIncludeCollateralUnits = 3;
 
 #ifdef ALTAI_DEBUG
-            std::ostream& os = UnitLog::getLog(*player.getCvPlayer())->getStream();
-            os << "\ngetRequiredAttackStack: buildable units: ";
-            for (size_t i = 0, count = availableUnits.size(); i < count; ++i)
-            {
-                if (i > 0) os << ", ";
-                os << gGlobals.getUnitInfo(availableUnits[i]).getType();
-            }
-            os << "\n\tavailable units: ";
-            debugUnitSet(os, existingUnits);
-            os << "\n\tenemy units: ";
-            debugUnitVector(os, enemyStack);
+        std::ostream& os = UnitLog::getLog(*player.getCvPlayer())->getStream();
+        os << "\ngetRequiredAttackStack: buildable units: ";
+        for (size_t i = 0, count = availableUnits.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            os << gGlobals.getUnitInfo(availableUnits[i]).getType();
+        }
+        os << "\n\tavailable units: ";
+        debugUnitSet(os, existingUnits);
+        os << "\n\tenemy units: ";
+        debugUnitVector(os, enemyStack);
 #endif
         boost::shared_ptr<UnitAnalysis> pUnitAnalysis = player.getAnalysis()->getUnitAnalysis();
 
@@ -1329,14 +1393,25 @@ namespace AltAI
             {
                 // todo - derive promotion level dynamically
                 ourPotentialUnits.push_back(UnitData(availableUnits[i], pUnitAnalysis->getCombatPromotions(availableUnits[i], 1).second));
+                if (gGlobals.getUnitInfo(availableUnits[i]).getCollateralDamage() > 0)
+                {
+                    canBuildCollateralUnits = true;
+                }
             }
         }
 
-        const int maxIterations = 2 * enemyStack.size();  // no point in trying to build a huge stack of outclassed units
-        int iterations = 0;
+        const int maxIterations = 2 * enemyStack.size();  // no point in trying to build a huge stack of outclassed units        
+        const int oddsThreshold = 650; // out of 1,000
+        const float minAttackerSurvivalProd = 0.2, targetOverallWinProb = 0.9;
+
+        bool includeCollateral = canBuildCollateralUnits && enemyStack.size() > minStackSizeToIncludeCollateralUnits;
+        int iterations = 0, collateralIterations = 0;
+        // take a copy as may need to refine stack later and we remove units from the original in below loop
+        std::vector<UnitData> hostileUnitsCopy(hostileUnits);  
         while (!hostileUnits.empty() && iterations++ < maxIterations)
         {
             bool haveExistingUnits = !ourExistingUnits.empty();
+            bool selectedCollateralUnit = false;
             std::vector<UnitData>& ourUnits(haveExistingUnits ? ourExistingUnits : ourPotentialUnits);
             size_t ourUnitsCount = ourUnits.size();
             std::vector<size_t> defenderIndex(ourUnitsCount);
@@ -1350,16 +1425,45 @@ namespace AltAI
 
             // want the odds of our possible units v. all the hostiles to see what our best unit choice is
             // select all those >= threshold - if none - returns single entry with best odds
-            std::list<StackCombatData> attackData = getBestUnitOdds(player, combatDetails, ourUnits, hostileUnits, 650);
+            std::list<StackCombatData> attackData = getBestUnitOdds(player, combatDetails, ourUnits, hostileUnits, oddsThreshold, false, false);
+
+            if (attackData.empty())
+            {
+                break;
+            }
+
+            // basic limit on how many collateral damage units we select
+            // as they usually can't kill anything outright
+            if (collateralIterations > enemyStack.size())
+            {
+                includeCollateral = false;
+            }
+
+            std::list<StackCombatData> collateralAttackData;
+            if (includeCollateral)
+            {
+                collateralAttackData = getBestUnitOdds(player, combatDetails, ourUnits, hostileUnits, oddsThreshold, includeCollateral, false);
+            }
 
             // sort possible attackers by survival odds
             attackData.sort(StackCombatDataComp());
-
-            // best attacker has collateral damage:
-            if (!attackData.empty() && ourUnits[attackData.begin()->attackerIndex].pUnitInfo->getCollateralDamage() > 0)
+            if (!collateralAttackData.empty())
             {
-                std::vector<int> unitsCollateralDamage = pUnitAnalysis->getCollateralDamage(ourUnits[attackData.begin()->attackerIndex], hostileUnits,
-                    attackData.begin()->defenderIndex, combatDetails);
+                collateralAttackData.sort(StackCombatDataComp());
+                // if best collateral unit's chance of survival is at least half of best non-collateral unit's chances
+                // then select colalteral unit as the attacking unit for this round
+                if (collateralAttackData.begin()->odds.DefenderKillOdds * 2 > attackData.begin()->odds.DefenderKillOdds)
+                {
+                    selectedCollateralUnit = true;
+                    ++collateralIterations;
+                }
+            }
+
+            // consider best collateral attacker and apply collateral damage:
+            if (selectedCollateralUnit)
+            {
+                std::vector<int> unitsCollateralDamage = pUnitAnalysis->getCollateralDamage(ourUnits[collateralAttackData.begin()->attackerIndex], hostileUnits,
+                    collateralAttackData.begin()->defenderIndex, combatDetails);
                 for (size_t j = 0; j < unitsCollateralDamage.size(); ++j)
                 {
 #ifdef ALTAI_DEBUG
@@ -1369,56 +1473,89 @@ namespace AltAI
                 }
             }
 
-            if (!attackData.empty())
+            std::list<StackCombatData>& selectedAttackData(selectedCollateralUnit ? collateralAttackData : attackData);
+            
+            if (haveExistingUnits)
             {
-                if (haveExistingUnits)
+                // if odds are too poor, stop considering any remaining existing units
+                if (!selectedCollateralUnit && 1.0 - selectedAttackData.begin()->odds.DefenderKillOdds < minAttackerSurvivalProd)
                 {
-                    // if odds are too poor, stop considering any remaining existing units
-                    if (1.0 - attackData.begin()->odds.DefenderKillOdds < 0.2)
-                    {
-                        ourExistingUnits.clear();
-                        remainingExistingUnits.clear();
-                        continue;
-                    }
-                    else
-                    {
-                        requiredUnitStack.existingUnits.push_back(remainingExistingUnits[attackData.begin()->attackerIndex]->getIDInfo());
-                        if (attackData.begin()->attackerIndex != ourUnitsCount - 1)
-                        {
-                            ourExistingUnits[attackData.begin()->attackerIndex] = ourExistingUnits.back();
-                            remainingExistingUnits[attackData.begin()->attackerIndex] = remainingExistingUnits.back();
-                        }
-                        ourExistingUnits.pop_back();
-                        remainingExistingUnits.pop_back();
-                    }
+                    ourExistingUnits.clear();
+                    remainingExistingUnits.clear();
+                    continue;
                 }
                 else
                 {
-                    std::list<UnitData> potentialUnits;
-                    for (std::list<StackCombatData>::const_iterator iter(attackData.begin()), endIter(attackData.end()); iter != endIter; ++iter)
-                    {
-                        potentialUnits.push_back(ourPotentialUnits[iter->attackerIndex]);
+                    requiredUnitStack.existingUnits.push_back(remainingExistingUnits[selectedAttackData.begin()->attackerIndex]->getIDInfo());
+                    // remove attacker from ourExistingUnits and remainingExistingUnits
+                    if (selectedAttackData.begin()->attackerIndex != ourUnitsCount - 1)
+                    {                        
+                        ourExistingUnits[selectedAttackData.begin()->attackerIndex] = ourExistingUnits.back();
+                        remainingExistingUnits[selectedAttackData.begin()->attackerIndex] = remainingExistingUnits.back();
                     }
-                    requiredUnitStack.unitsToBuild.push_back(potentialUnits);
-                }
-
-                if (attackData.begin()->odds.AttackerKillOdds >= 0.5)
-                {
-                    hostileUnits.erase(hostileUnits.begin() + attackData.begin()->defenderIndex);
-                }
-                else
-                {
-                    hostileUnits[attackData.begin()->defenderIndex].hp = (int)attackData.begin()->odds.E_HP_Def;
+                    ourExistingUnits.pop_back();
+                    remainingExistingUnits.pop_back();
                 }
             }
             else
             {
-                break;
+                std::list<UnitData> potentialUnits;
+                for (std::list<StackCombatData>::const_iterator iter(selectedAttackData.begin()), endIter(selectedAttackData.end()); iter != endIter; ++iter)
+                {
+                    potentialUnits.push_back(ourPotentialUnits[iter->attackerIndex]);
+                }
+                requiredUnitStack.unitsToBuild.push_back(potentialUnits);
+            }
+
+            // for collateral units - usually this will not be true
+            if (selectedAttackData.begin()->odds.AttackerKillOdds >= 0.5)
+            {
+                hostileUnits.erase(hostileUnits.begin() + attackData.begin()->defenderIndex);
+            }
+            else
+            {
+                // already applied any collateral damage above
+                hostileUnits[selectedAttackData.begin()->defenderIndex].hp = (int)selectedAttackData.begin()->odds.E_HP_Def;
             }
         }
+
+        std::vector<UnitData> ourUnits;
+        for (size_t i = 0, count = requiredUnitStack.existingUnits.size(); i < count; ++i)
+        {
+            ourUnits.push_back(UnitData(::getUnit(requiredUnitStack.existingUnits[i])));
+        }
+
+        for (size_t i = 0, count = requiredUnitStack.unitsToBuild.size(); i < count; ++i)
+        {
+            // todo - improve selection
+            ourUnits.push_back(UnitData(*requiredUnitStack.unitsToBuild[i].begin()));
+        }
+
+        CombatGraph combatGraph = getCombatGraph(player, combatDetails, ourUnits, hostileUnitsCopy);
+        combatGraph.analyseEndStates();
+
+        iterations = 0;
+        includeCollateral = false;
+        while (combatGraph.endStatesData.pWin < targetOverallWinProb && iterations++ < maxIterations)
+        {
+            // not adding more collateral here atm - may need to refine
+            std::list<StackCombatData> attackData = getBestUnitOdds(player, combatDetails, ourPotentialUnits, hostileUnitsCopy, oddsThreshold, includeCollateral);
+            attackData.sort(StackCombatDataComp());
+            ourUnits.push_back(ourPotentialUnits[attackData.begin()->attackerIndex]);
+            requiredUnitStack.unitsToBuild.push_back(std::list<UnitData>(1, ourPotentialUnits[attackData.begin()->attackerIndex]));
+            combatGraph = getCombatGraph(player, combatDetails, ourUnits, hostileUnitsCopy);
+            combatGraph.analyseEndStates();
+        }
+
 #ifdef ALTAI_DEBUG
         os << "\n combat details: ";
-        combatDetails.debug(os);
+        combatDetails.debug(os);        
+        combatGraph.debugEndStates(os);
+        os << " winning odds = " << combatGraph.endStatesData.pWin << ", losing odds = " << combatGraph.endStatesData.pLoss;
+        if (combatGraph.endStatesData.pDraw > 0)
+        {
+            os << " draw = " << combatGraph.endStatesData.pDraw;
+        }
         os << "\nRequired stack: ";
         if (!requiredUnitStack.existingUnits.empty())
         {
@@ -1520,7 +1657,8 @@ namespace AltAI
                             }
 
                             // todo - track which units this stack can reach which are its enemies
-                            if (canAttack && pLoopPlot->isVisibleEnemyUnit(mIter->second[0]))
+                            bool isAttackMove = canAttack && pLoopPlot->isVisibleEnemyUnit(mIter->second[0]);
+                            if (isAttackMove)
                             {
                             }
                         
@@ -1557,7 +1695,8 @@ namespace AltAI
                                 }
                             }
 
-                            if (openPlotsIter->second > 0)
+                            // can't move through plot with enemy units (unless we attack and beat the last one)
+                            if (openPlotsIter->second > 0 && !isAttackMove)
                             {
                                 openList.insert(pLoopPlot);                                
                             }
@@ -1680,8 +1819,19 @@ namespace AltAI
             {
                 continue; // plot contains a unit we would need to attack
             }
+            
+            std::vector<UnitData> ourUnitData;
+            UnitMovementDataMap::const_iterator uIter = reachablePlotsData.unitMovementDataMap.find(plotIter->first);
+            if (uIter != reachablePlotsData.unitMovementDataMap.end())
+            {
+                for (std::map<const CvUnit*, int, CvUnitIDInfoOrderF>::const_iterator umIter(uIter->second.begin()), umEndIter(uIter->second.end());
+                    umIter != umEndIter; ++umIter)
+                {
+                    ourUnitData.push_back(UnitData(umIter->first));
+                }
+            }
+
             UnitPlotIterP<OurUnitsPred> ourUnitsIter(plotIter->first, OurUnitsPred(player.getPlayerID()));
-            std::vector<UnitData> ourUnitData(ourBaseUnitData);
             while (CvUnit* pPlotUnit = ourUnitsIter())
             {
                 // unit of ours which can fight at this plot and is not in the group we started with
@@ -1731,20 +1881,20 @@ namespace AltAI
 
             if (!enemyUnitData.empty())
             {
-                std::vector<UnitData> ourUnitData(ourAttackUnitBaseData);
-                //// add in unit of ours which can reach this plot, but are not in this group or on its plot
-                //std::map<XYCoords, CombatData>::const_iterator attIter = attackableUnitsMap.find(hi->first->getCoords());
-                //if (attIter != attackableUnitsMap.end())
-                //{
-                //    for (size_t i = 0, count = attIter->second.attackers.size(); i < count; ++i)
-                //    {
-                //        const CvUnit* pUnit = ::getUnit(attIter->second.attackers[i].unitId);
-                //        if (pUnit && pUnit->getGroupID() != pGroup->getID() && canAttack(pUnit))
-                //        {
-                //            ourUnitData.push_back(attIter->second.attackers[i]);
-                //        }
-                //    }
-                //}
+                // iterate over units which can attack 
+                std::vector<UnitData> ourUnitData;
+                UnitMovementDataMap::const_iterator uIter = reachablePlotsData.unitMovementDataMap.find(hi->first);
+                if (uIter != reachablePlotsData.unitMovementDataMap.end())
+                {
+                    for (std::map<const CvUnit*, int, CvUnitIDInfoOrderF>::const_iterator umIter(uIter->second.begin()), umEndIter(uIter->second.end());
+                        umIter != umEndIter; ++umIter)
+                    {
+                        if (canAttack(umIter->first, false, false))
+                        {
+                            ourUnitData.push_back(UnitData(umIter->first));
+                        }
+                    }
+                }
 
                 for (size_t i = 0, count = ourUnits.size(); i < count; ++i)
                 {

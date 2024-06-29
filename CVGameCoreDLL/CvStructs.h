@@ -12,7 +12,9 @@
 
 struct DllExport XYCoords
 {
-	explicit XYCoords(int x=0, int y=0) : iX(x), iY(y) {}
+    XYCoords() : iX(-1), iY(-1) {}
+    // AltAI - removed default = 0 values as (0, 0) is a valid coordinate
+	explicit XYCoords(int x, int y) : iX(x), iY(y) {}
 	int iX;
 	int iY;
 

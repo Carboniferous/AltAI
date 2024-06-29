@@ -156,7 +156,7 @@ namespace AltAI
             CityDataPtr pCityData = player.getCity(pCity->getID()).getCityData()->clone();
             std::vector<IProjectionEventPtr> events;
             events.push_back(IProjectionEventPtr(new ProjectionChangeCivicEvent(civicOptionType, pCivicTactics->getCivicType(), 0)));
-            cityProjections_[pCity->getIDInfo()] = getProjectedOutput(player, pCityData, player.getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, true);
+            cityProjections_[pCity->getIDInfo()] = getProjectedOutput(player, pCityData, player.getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, false);
             // need to reset civic as CivHelper data is currently shared - probably want to fix this
             // otherwise, when the civic is adopted next time round the civic which is un-applied is probably going to be wrong
             player.getCivHelper()->adoptCivic(player.getCvPlayer()->getCivics(civicOptionType));
@@ -219,7 +219,7 @@ namespace AltAI
 
             hurryData.hurryPopulation = 2; //  todo - derive dynamically
             events.push_back(IProjectionEventPtr(new ProjectionHurryEvent(hurryData)));
-            ProjectionLadder delta = getProjectedOutput(player, pCityData, player.getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, true);
+            ProjectionLadder delta = getProjectedOutput(player, pCityData, player.getAnalysis()->getNumSimTurns(), events, ConstructItem(), __FUNCTION__, true, false);
             cityProjections_[pCity->getIDInfo()] = std::make_pair(delta, base);
 
             // need to reset civic as CivHelper data is currently shared - probably want to fix this

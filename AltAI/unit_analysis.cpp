@@ -419,8 +419,7 @@ namespace AltAI
         hillsAttackPercent(pUnit->hillsAttackModifier()), hillsDefencePercent(pUnit->hillsDefenseModifier()),
         extraCollateralDamage(pUnit->getExtraCollateralDamage()), collateralDamageProtection(pUnit->getCollateralDamageProtection()),
         immuneToFirstStrikes(pUnit->immuneToFirstStrikes()), isBlitz(pUnit->isBlitz()),
-        isRiver(pUnit->isRiver()), isAmphib(pUnit->isAmphib()),
-        isBarbarian(pUnit->isBarbarian()), isAnimal(pUnit->isAnimal()),
+        isRiver(pUnit->isRiver()), isAmphib(pUnit->isAmphib()), isBarbarian(pUnit->isBarbarian()), isAnimal(pUnit->isAnimal()),
         hasAttacked(false),
         animalModifier(gGlobals.getHandicapInfo(gGlobals.getGame().getHandicapType()).getAIAnimalCombatModifier()),
         barbModifier(gGlobals.getHandicapInfo(gGlobals.getGame().getHandicapType()).getAIBarbarianCombatModifier())
@@ -1232,14 +1231,18 @@ namespace AltAI
         return getCombatOddsDetail_(attacker, defender, combatDetails);
     }
 
-    std::vector<int> UnitAnalysis::getCollateralDamage(const UnitData& attacker, const std::vector<UnitData>& units, size_t skipIndex, const UnitData::CombatDetails& combatDetails) const
+    std::vector<int> UnitAnalysis::getCollateralDamage(const UnitData& attacker, const std::vector<UnitData>& defenders, size_t skipIndex, const UnitData::CombatDetails& combatDetails) const
     {
+        // actual collateral combat assigns random numbers in range 0 - 10000 to each visible unit in defender stack (except unit being directly attacked)
+        // takes up to possible target count units (e.g. 6 for catapults) with highest score
+        // if unit is not immune to collateral damage from attacker's unit combat type (usually UNITCOMBAT_SIEGE)
+        // collateral damage is calculated and applied to that unit base on relative strengths and any promotions which reduce collateral damage
         static const int COLLATERAL_COMBAT_DAMAGE = gGlobals.getDefineINT("COLLATERAL_COMBAT_DAMAGE");
         static const int MAX_HIT_POINTS = gGlobals.getMAX_HIT_POINTS();
 
-        std::vector<int> damage(units.size(), 0);        
+        std::vector<int> damage(defenders.size(), 0);        
         
-        const int numPossibleTargets = std::min<int>(attacker.pUnitInfo->getCollateralDamageMaxUnits(), units.size());
+        const int numPossibleTargets = std::min<int>(attacker.pUnitInfo->getCollateralDamageMaxUnits(), defenders.size());
         if (numPossibleTargets <= 0)
         {
             return damage;
@@ -1250,11 +1253,11 @@ namespace AltAI
 
 		CvGameAI& refgame = gGlobals.getGame();
         std::multimap<int, size_t, std::greater<int> > potentialTargets;
-        for (size_t i = 0, count = units.size(); i < count; ++i)
+        for (size_t i = 0, count = defenders.size(); i < count; ++i)
         {
             if (i == skipIndex) continue;
-            // assumes all units in the list can defend and are visible
-            potentialTargets.insert(std::make_pair((1 + refgame.getSorenRandNum(10000, "CollateralSim")) * units[i].hp, i));
+            // assumes all defending units in the list can defend and are visible (i.e. caller should have removed workers, etc...)
+            potentialTargets.insert(std::make_pair((1 + refgame.getSorenRandNum(10000, "CollateralSim")) * defenders[i].hp, i));
         }
 
         std::multimap<int, size_t, std::greater<int> >::iterator targetIter = potentialTargets.begin();
@@ -1265,9 +1268,9 @@ namespace AltAI
                 break;
             }
 
-            if (!units[targetIter->second].pUnitInfo->getUnitCombatCollateralImmune(attacker.pUnitInfo->getUnitCombatType()))
+            if (!defenders[targetIter->second].pUnitInfo->getUnitCombatCollateralImmune(attacker.pUnitInfo->getUnitCombatType()))
             {
-                int iTheirStrength = units[targetIter->second].baseCombat;
+                int iTheirStrength = defenders[targetIter->second].baseCombat;
 
 				int iStrengthFactor = (collateralStr + iTheirStrength + 1) / 2;
 
@@ -1275,7 +1278,7 @@ namespace AltAI
 
                 iCollateralDamage *= 100 + attacker.extraCollateralDamage;
 
-				iCollateralDamage *= std::max<int>(0, 100 - units[targetIter->second].collateralDamageProtection);
+				iCollateralDamage *= std::max<int>(0, 100 - defenders[targetIter->second].collateralDamageProtection);
 				iCollateralDamage /= 100;
 
                 // todo - add air modifier for city attacks from bombers (bunker gives protection)				
@@ -1285,8 +1288,8 @@ namespace AltAI
 				iCollateralDamage = std::max<int>(0, iCollateralDamage);
 
 				int iMaxDamage = std::min<int>(collateralDamageLimit, (collateralDamageLimit * (collateralStr + iStrengthFactor)) / (iTheirStrength + iStrengthFactor));
-                int iUnitDamage = std::max<int>(units[targetIter->second].maxhp - units[targetIter->second].hp, 
-                    std::min<int>(units[targetIter->second].maxhp - units[targetIter->second].hp + iCollateralDamage, iMaxDamage));
+                int iUnitDamage = std::max<int>(defenders[targetIter->second].maxhp - defenders[targetIter->second].hp, 
+                    std::min<int>(defenders[targetIter->second].maxhp - defenders[targetIter->second].hp + iCollateralDamage, iMaxDamage));
 
 				damage[targetIter->second] = iUnitDamage;
             }

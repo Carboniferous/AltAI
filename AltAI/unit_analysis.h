@@ -219,7 +219,8 @@ namespace AltAI
 
         UnitOddsData getCombatOddsDetail(const UnitData& attacker, const UnitData& defender, const UnitData::CombatDetails& combatDetails = UnitData::CombatDetails()) const;
 
-        std::vector<int> getCollateralDamage(const UnitData& attacker, const std::vector<UnitData>& units, size_t skipIndex, const UnitData::CombatDetails& combatDetails) const;
+        std::vector<int> getCollateralDamage(const UnitData& attacker, const std::vector<UnitData>& defenders, size_t skipIndex, const UnitData::CombatDetails& combatDetails) const;
+        // todo - flanking damage calc
 
     private:
 

@@ -656,7 +656,7 @@ namespace AltAI
 
             ConstructItem constructItem;
             const int numSimTurns = player->getAnalysis()->getNumSimTurns();
-            ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, numSimTurns, events, constructItem, __FUNCTION__, false, true);
+            ProjectionLadder base = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, numSimTurns, events, constructItem, __FUNCTION__, false, false);
 
             // add all imps
             {
@@ -677,7 +677,7 @@ namespace AltAI
                 }
 
                 events.clear();
-                ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, numSimTurns, events, constructItem, __FUNCTION__, false, true);
+                ProjectionLadder ladder = getProjectedOutput(*gGlobals.getGame().getAltAI()->getPlayer(pCityData->getOwner()), pSimulationCityData, numSimTurns, events, constructItem, __FUNCTION__, false, false);
 
                 {
 #ifdef ALTAI_DEBUG

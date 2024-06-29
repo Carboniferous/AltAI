@@ -488,7 +488,7 @@ namespace AltAI
 
     PlotYield DotMapItem::getUsablePlots(const Player& player, SortedPlots& sortedPlots, int baseHealthyPop, int lookAheadTurns, bool debug)
     {
-        bool doBreak = coords == XYCoords(48, 14);
+        //bool doBreak = coords == XYCoords(48, 14);
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
         PlotYield totalYield = cityPlotYield;

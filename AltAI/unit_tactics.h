@@ -32,10 +32,14 @@ namespace AltAI
         UnitOddsData odds;
     };
 
-    StackCombatData getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, bool debug = false);
-
+    // version for use in simulating unit combat between stacks 
+    // use to get odds and determine which unit to attack with and which unit will defend
+    StackCombatData getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails,
+        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, bool useCollateral, bool debug = false);
+    // version for use to get list of odds of theoretical attack stack
+    // use to determine required stack compositions
     std::list<StackCombatData> getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, 
-        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, const int oddsThreshold, bool debug = false);
+        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, const int oddsThreshold, bool useCollateral, bool debug = false);
 
     struct StackCombatDataNode;
     typedef boost::shared_ptr<StackCombatDataNode> StackCombatDataNodePtr;

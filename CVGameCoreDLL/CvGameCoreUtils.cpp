@@ -3361,8 +3361,9 @@ void getMissionAIString(CvWString& szString, MissionAITypes eMissionAI)
     // AltAI mission types...
     case MISSIONAI_ESCORT: szString = L"MISSIONAI_ESCORT"; break;
     case MISSIONAI_ESCORT_WORKER: szString = L"MISSIONAI_ESCORT_WORKER"; break;
-    case MISSIONAI_COUNTER: szString = L"MISSIONAI_COUNTER"; break;
+    case MISSIONAI_COUNTER: szString = L"MISSIONAI_COUNTER"; break;    
     case MISSIONAI_RESERVE: szString = L"MISSIONAI_RESERVE"; break;
+    case MISSIONAI_COUNTER_CITY: szString = L"MISSIONAI_COUNTER_CITY"; break;
     case MISSIONAI_MONITOR: szString = L"MISSIONAI_MONITOR"; break;
 
 	default: szString = CvWString::format(L"UNKNOWN_MISSION_AI(%d)", eMissionAI); break;

@@ -1678,9 +1678,9 @@ namespace AltAI
                             {
                                 // split off escort unit
                                 MilitaryMissionDataPtr pMissionData = player_.getAnalysis()->getMilitaryAnalysis()->getMissionData((CvUnitAI*)pPlotUnit);
-                                FAssertMsg(pMissionData && pMissionData->targets.find(pUnit->getIDInfo()) != pMissionData->targets.end(), "escorted worker not in escort's targets?")
+                                FAssertMsg(pMissionData && pMissionData->targetUnits.find(pUnit->getIDInfo()) != pMissionData->targetUnits.end(), "escorted worker not in escort's targets?")
                                 unitsWithEscorts_.erase(pUnit->getIDInfo());  // todo - assumes we only have one escort
-                                pMissionData->targets.clear();  // assumes a single unit to be escorted (prob reasonable)
+                                pMissionData->unassignUnit(pPlotUnit, false);
                                 pPlotUnit->joinGroup(NULL);
 #ifdef ALTAI_DEBUG
                                 os << "\nremoved worker unit escort: " << pPlotUnit->getIDInfo() << " from worker: " << pUnit->getIDInfo();

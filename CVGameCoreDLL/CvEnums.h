@@ -1456,8 +1456,9 @@ enum MissionAITypes		// Exposed to Python
     // AltAI extra mission types...
     MISSIONAI_ESCORT,
     MISSIONAI_ESCORT_WORKER,
-    MISSIONAI_COUNTER,
+    MISSIONAI_COUNTER,    
     MISSIONAI_RESERVE,
+    MISSIONAI_COUNTER_CITY,
     MISSIONAI_MONITOR
     // ...
 };

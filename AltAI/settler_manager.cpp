@@ -261,6 +261,10 @@ namespace AltAI
 #endif
     }
 
+    void SettlerManager::makePlotDirty(XYCoords coords)
+    {
+    }
+
     void SettlerManager::debugDotMap() const
     {
 #ifdef ALTAI_DEBUG
@@ -466,7 +470,7 @@ namespace AltAI
         {
             boost::tie(bestClosestSiteValue, bestClosestSite) = getClosestSite_(subAreaID, 70, targetedPlots, pUnit->plot());
 
-            if (bestClosestSite == XYCoords(-1, -1))  // nothing found
+            if (bestClosestSite == XYCoords())  // nothing found
             {
                 break;
             }
@@ -943,6 +947,7 @@ namespace AltAI
 
     void SettlerManager::populateDotMap_()
     {
+        DotMap oldDotMap = dotMap_;
         dotMap_.clear();
 
         const MapAnalysis::PlotValues& plotValues = pMapAnalysis_->getPlotValues();
@@ -951,6 +956,7 @@ namespace AltAI
         {
             for (MapAnalysis::PlotValues::SubAreaPlotValueMap::const_iterator ci2(ci->second.begin()), ci2End(ci->second.end()); ci2 != ci2End; ++ci2)
             {
+                DotMapItem dotMapItem = analysePlotValue_(plotValues, ci2);
                 dotMap_.insert(analysePlotValue_(plotValues, ci2));
             }
         }

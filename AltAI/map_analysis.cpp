@@ -5,6 +5,7 @@
 #include "./map_analysis.h"
 #include "./player_analysis.h"
 #include "./gamedata_analysis.h"
+#include "./military_tactics.h"
 #include "./helper_fns.h"
 #include "./plot_info_visitors.h"
 #include "./plot_info_visitors_streams.h"
@@ -253,6 +254,32 @@ namespace AltAI
             }
 
             return validPlot;
+        }
+
+        bool plotCultureHasKnownSource(const CvPlot* pPlot, TeamTypes ourTeam)
+        {
+            bool foundSource = false;
+            PlayerTypes revealedOwner = pPlot->getRevealedOwner(ourTeam, false);
+
+            NeighbourPlotIter plotIter(pPlot, 2, 2);  // todo - drive search radius from plot culture
+            while (IterPlot pLoopPlot = plotIter())
+            {
+                if (!pLoopPlot.valid())
+                {
+                    continue;
+                }
+                // can see plot, it's owned by same player and is a city that we can see
+                if (pLoopPlot->isRevealed(ourTeam, false) && 
+                    pLoopPlot->getRevealedOwner(ourTeam, false) == revealedOwner &&
+                    pLoopPlot->isCity(false) &&
+                    pLoopPlot->getPlotCity()->wasRevealed(ourTeam, false))
+                {
+                    foundSource = true;
+                    break;
+                }
+            }
+
+            return foundSource;
         }
     }
 
@@ -783,7 +810,6 @@ namespace AltAI
         }
 
         const CvMap& theMap = gGlobals.getMap();
-        std::vector<XYCoords> cities;
         
         for (int i = 0, count = theMap.numPlots(); i < count; ++i)
         {
@@ -792,9 +818,8 @@ namespace AltAI
             const CvPlot* pPlot = theMap.plotByIndex(i);
             if (pPlot->isRevealed(teamType, false))
             {
-                if (pPlot->isCity() && pPlot->getPlotCity()->getOwner() == playerType)
+                if (pPlot->isCity() && pPlot->getPlotCity()->wasRevealed(teamType, false))  // add anyone's cities that we've seen
                 {
-                    cities.push_back(pPlot->getCoords());
                     addCity(pPlot->getPlotCity());
                 }
                 else if (pPlot->isCity(true, teamType))
@@ -806,6 +831,43 @@ namespace AltAI
                 updatePlotRevealed(pPlot, true);
                 updatePlotInfo(pPlot, true, __FUNCTION__);
             }
+        }
+
+        // second loop to highlight any hostile plots that are visible but not linked to any known city
+        CvTeamAI& ourTeam = CvTeamAI::getTeam(player_.getTeamID());
+        std::vector<XYCoords> hostilePlotsWithUnknownCity;
+        for (int i = 0, count = theMap.numPlots(); i < count; ++i)
+        {
+            const CvPlot* pPlot = theMap.plotByIndex(i);
+            if (pPlot->isRevealed(teamType, false))
+            {
+                PlayerTypes revealedOwner = pPlot->getRevealedOwner(teamType, false);
+                if (revealedOwner == NO_PLAYER)
+                {
+                    continue;
+                }
+
+                TeamTypes revealedTeam = PlayerIDToTeamID(revealedOwner);
+                if (ourTeam.isAtWar(revealedTeam))
+                {
+                    bool foundCity = pPlot->isCity(false) && pPlot->getPlotCity()->wasRevealed(teamType, false);
+
+                    if (!foundCity)
+                    {
+                        foundCity = plotCultureHasKnownSource(pPlot, teamType);
+                    }
+
+                    if (!foundCity)
+                    {
+                        hostilePlotsWithUnknownCity.push_back(pPlot->getCoords());
+                    }
+                }
+            }
+        }
+
+        if (!hostilePlotsWithUnknownCity.empty())
+        {
+            player_.getAnalysis()->getMilitaryAnalysis()->addHostilePlotsWithUnknownCity(hostilePlotsWithUnknownCity);
         }
 
 #ifdef ALTAI_DEBUG
@@ -901,7 +963,7 @@ namespace AltAI
         
         updatedPlots_.insert(pPlot);
 
-        if (pPlot->isCity())
+        if (pPlot->isCity() && pPlot->getPlotCity()->wasRevealed(player_.getTeamID(), false))
         {
             std::map<IDInfo, XYCoords>::iterator seenCitiesIter = seenCities_.find(pPlot->getPlotCity()->getIDInfo());
             if (seenCitiesIter != seenCities_.end())
@@ -917,7 +979,7 @@ namespace AltAI
                 addCity(pPlot->getPlotCity());
             }
         }
-        else if (pPlot->isCity(true, player_.getTeamID()))
+        else if (pPlot->isCity(true, player_.getTeamID()))  // improvement which acts as city
         {
             impAsCityMap_[pPlot->getSubArea()].insert(pPlot->getCoords());
         }
@@ -1098,6 +1160,7 @@ namespace AltAI
     void MapAnalysis::updatePlotCulture(const CvPlot* pPlot, PlayerTypes previousRevealedOwner, PlayerTypes newRevealedOwner)
     {
         XYCoords coords(pPlot->getCoords());
+        std::vector<XYCoords> hostilePlotsWithUnknownCity;
 
         KeyInfoMap::const_iterator keyIter = keyInfoMap_.find(coords);
 
@@ -1164,6 +1227,23 @@ namespace AltAI
                 os << "\nRemoving shared plot: " << pPlot->getCoords();
 #endif
             }
+
+            CvTeamAI& ourTeam = CvTeamAI::getTeam(player_.getTeamID());
+            TeamTypes revealedTeam = PlayerIDToTeamID(newRevealedOwner);
+            if (ourTeam.isAtWar(revealedTeam))
+            {
+                bool foundCity = pPlot->isCity(false) && pPlot->getPlotCity()->wasRevealed(player_.getTeamID(), false);
+                if (!foundCity)
+                {
+                    foundCity = plotCultureHasKnownSource(pPlot, player_.getTeamID());
+                }
+
+                if (!foundCity)
+                {
+                    hostilePlotsWithUnknownCity.push_back(pPlot->getCoords());
+                }
+            }
+
         }
         else if (newRevealedOwner == player_.getPlayerID())
         {
@@ -1224,6 +1304,11 @@ namespace AltAI
 
             // just update if plot is being added - only get called if plot is visible to us (our team) (think this works correctly!)
             updateResourceData_(pPlot);
+        }
+
+        if (!hostilePlotsWithUnknownCity.empty())
+        {
+            player_.getAnalysis()->getMilitaryAnalysis()->addHostilePlotsWithUnknownCity(hostilePlotsWithUnknownCity);
         }
     }
 
@@ -2300,6 +2385,10 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             debugSharedPlots();
 #endif
+        }
+        else
+        {
+            player_.getAnalysis()->getMilitaryAnalysis()->addPlayerCity(pCity);
         }
 
         // remove plots from plotValues_

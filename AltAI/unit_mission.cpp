@@ -65,27 +65,85 @@ namespace AltAI
         return count;
     }
 
-    std::vector<IDInfo> MilitaryMissionData::updateRequiredUnits(const Player& player, std::set<IDInfo> availableUnits)
+    std::vector<IDInfo> MilitaryMissionData::updateRequiredUnits(const Player& player, const std::set<IDInfo>& reserveUnits)
     {
         const CvPlot* pMissionTarget = NULL;
         std::vector<IDInfo> unitsToReassign;
-        availableUnits.insert(assignedUnits.begin(), assignedUnits.end());
-
         std::vector<const CvUnit*> enemyStack;
-        for (std::set<IDInfo>::const_iterator ti(targets.begin()), tiEnd(targets.end()); ti != tiEnd; ++ti)
+
+        if (missionType == MISSIONAI_COUNTER_CITY && !isEmpty(targetCity))
+        {
+            const CvCity* pTargetCity = ::getCity(targetCity);
+            if (pTargetCity)
+            {
+                pMissionTarget = pTargetCity->plot();
+                if (pTargetCity->plot()->isVisible(player.getTeamID(), false))
+                {
+                    UnitPlotIter unitPlotIter(pTargetCity->plot());
+                    while (CvUnit* pUnit = unitPlotIter())
+                    {
+                        if (pUnit->getTeam() == pTargetCity->getTeam())
+                        {
+                            if (targetUnits.find(pUnit->getIDInfo()) == targetUnits.end())
+                            {
+                                enemyStack.push_back(pUnit);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (std::set<IDInfo>::const_iterator ti(targetUnits.begin()), tiEnd(targetUnits.end()); ti != tiEnd; ++ti)
         {
             const CvUnit* pTargetUnit = ::getUnit(*ti);
             if (pTargetUnit) // todo - store UnitData objects
             {
                 enemyStack.push_back(pTargetUnit);
-                pMissionTarget = pTargetUnit->plot();
+                pMissionTarget = pTargetUnit->plot();  // todo - sort this out properly
             }
         }
 
-        if (!enemyStack.empty() && pMissionTarget)
+        if (!pMissionTarget)
         {
-            // todo - support storing list of UnitData objects as alternative to CvUnit pointers
-            RequiredUnitStack requiredUnitStack = getRequiredUnits(player, pMissionTarget, enemyStack, availableUnits);
+            pMissionTarget = getTargetPlot();
+        }
+
+        if (pMissionTarget)
+        {            
+            std::set<IDInfo> availableUnits(assignedUnits);
+            availableUnits.insert(reserveUnits.begin(), reserveUnits.end());
+            RequiredUnitStack requiredUnitStack;
+
+            if (!enemyStack.empty())
+            {
+                requiredUnitStack = getRequiredUnits(player, pMissionTarget, enemyStack, availableUnits);
+            }
+            else  // know our target (e.g. a city, but can't see it currently - could search unit history but currently inefficient by coords)
+            {
+                // see if we have any fast moving units available to reconnoiter
+                for (std::set<IDInfo>::const_iterator ci(availableUnits.begin()), ciEnd(availableUnits.end()); ci != ciEnd; ++ci)
+                {
+                    const CvUnit* pUnit = ::getUnit(*ci);
+                    if (pUnit && pUnit->maxMoves() > 1)
+                    {
+                        unitsToReassign.push_back(*ci);
+                        if (unitsToReassign.size() > 1)
+                        {
+                            break;
+                        }
+                    }
+                }
+                if (unitsToReassign.empty() && !availableUnits.empty())
+                {
+                    const CvUnit* pUnit = ::getUnit(*availableUnits.begin());
+                    if (pUnit)
+                    {
+                         unitsToReassign.push_back(*availableUnits.begin());
+                    }
+                }
+            }
+
             requiredUnits = requiredUnitStack.unitsToBuild;
 
             for (size_t i = 0, count = requiredUnitStack.existingUnits.size(); i < count; ++i)
@@ -159,7 +217,7 @@ namespace AltAI
         std::vector<const CvUnit*> plotUnits;
         if (missionType == MISSIONAI_COUNTER)
         {
-            for (std::set<IDInfo>::const_iterator unitsIter(targets.begin()), unitsEndIter(targets.end());
+            for (std::set<IDInfo>::const_iterator unitsIter(targetUnits.begin()), unitsEndIter(targetUnits.end());
                 unitsIter != unitsEndIter; ++unitsIter)
             {
                 const CvUnit* pHostileUnit = ::getUnit(*unitsIter);
@@ -222,73 +280,87 @@ namespace AltAI
     PlotSet MilitaryMissionData::getTargetPlots() const
     {
         PlotSet targetPlots;
-        for (std::set<IDInfo>::const_iterator tIter(targets.begin()), tEndIter(targets.end()); tIter != tEndIter; ++tIter)
+        for (std::set<IDInfo>::const_iterator tIter(targetUnits.begin()), tEndIter(targetUnits.end()); tIter != tEndIter; ++tIter)
         {
             const CvUnit* pUnit = ::getUnit(*tIter);
             if (pUnit) targetPlots.insert(pUnit->plot());
+        }
+        if (!isEmpty(targetCity))
+        {
+            const CvCity* pCity = ::getCity(targetCity);
+            if (pCity)
+            {
+                targetPlots.insert(pCity->plot());
+            }
         }
         return targetPlots;
     }
 
     const CvPlot* MilitaryMissionData::getTargetPlot() const
     {
-        XYCoords targetCoords = plotTarget;
-        const CvCity* pTargetCity = NULL;
-        if (!targets.empty())
+        const CvPlot* pPlot = NULL;
+        if (targetCoords != XYCoords(-1, -1))
         {
-            pTargetCity = ::getCity(*targets.begin());
-            if (pTargetCity)
+            pPlot = gGlobals.getMap().plot(targetCoords);
+        }
+        else
+        {
+            const CvCity* pCity = getTargetCity();
+            if (pCity)
             {
-                targetCoords = pTargetCity->plot()->getCoords();
+                pPlot = pCity->plot();
             }
         }
-        return targetCoords == XYCoords(-1, -1) ? NULL : gGlobals.getMap().plot(targetCoords);
+        return pPlot;
+    }
+
+    const CvCity* MilitaryMissionData::getTargetCity() const
+    {
+        const CvCity* pCity = NULL;
+        if (!isEmpty(targetCity))
+        {
+            pCity = ::getCity(targetCity);
+        }
+        return pCity;
     }
 
     void MilitaryMissionData::debug(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
         os << "\nMilitary mission data: (" << this << ") unit ai = " << getMissionAIString(missionType);
-        if (targets.empty())
+        if (!isEmpty(targetCity))
         {
-            os << " (no targets) ";
+            os << " target city: " << safeGetCityName(targetCity);
         }
-        else
+        if (!isEmpty(targetCoords))
         {
-            os << " targets: ";
-            for (std::set<IDInfo>::const_iterator targetsIter(targets.begin()), targetsEndIter(targets.end()); targetsIter != targetsEndIter; ++targetsIter)
+            os << " target coords: " << targetCoords;
+        }
+        if (!targetUnits.empty())
+        {
+            os << " target units: ";
+            for (std::set<IDInfo>::const_iterator targetsIter(targetUnits.begin()), targetsEndIter(targetUnits.end()); targetsIter != targetsEndIter; ++targetsIter)
             {
-                if (targetsIter != targets.begin()) os << ", ";
+                if (targetsIter != targetUnits.begin()) os << ", ";
 
-                if (missionType == MISSIONAI_GUARD_CITY || missionType == MISSIONAI_RESERVE)
+                os << *targetsIter;
+                const CvUnit* pUnit = ::getUnit(*targetsIter);
+                if (pUnit)
                 {
-                    const CvCity* pCity = ::getCity(*targetsIter);
-                    if (pCity)
+                    if (!pUnit->isDelayedDeath())
                     {
-                        os << "city = " << safeGetCityName(*targetsIter) << " at: " << pCity->plot()->getCoords();
-                    }
-                }
-                else
-                {
-                    os << *targetsIter;
-                    const CvUnit* pUnit = ::getUnit(*targetsIter);
-                    if (pUnit)
-                    {
-                        if (!pUnit->isDelayedDeath())
-                        {
-                            os << " at: " << pUnit->plot()->getCoords();
-                        }
-                        else
-                        {
-                            os << " (zombie unit)";  // think this happens if unit is killed in combat but update not yet processed
-                        }                            
+                        os << " at: " << pUnit->plot()->getCoords();
                     }
                     else
                     {
-                        os << " (not found)";
-                    }
+                        os << " (zombie unit)";  // think this happens if unit is killed in combat but update not yet processed
+                    }                            
                 }
-            }
+                else
+                {
+                    os << " (unit not found)";
+                }
+            }            
         }
         if (!assignedUnits.empty())
         {
@@ -331,9 +403,10 @@ namespace AltAI
 
     void MilitaryMissionData::write(FDataStreamBase* pStream) const
     {
-        writeComplexSet(pStream, targets);
+        writeComplexSet(pStream, targetUnits);
         writeComplexSet(pStream, specialTargets);
-        plotTarget.write(pStream);
+        targetCity.write(pStream);
+        targetCoords.write(pStream);
         writeComplexSet(pStream, assignedUnits);
 
         pStream->Write(requiredUnits.size());
@@ -360,9 +433,10 @@ namespace AltAI
 
     void MilitaryMissionData::read(FDataStreamBase* pStream)
     {
-        readComplexSet(pStream, targets);
+        readComplexSet(pStream, targetUnits);
         readComplexSet(pStream, specialTargets);
-        plotTarget.read(pStream);
+        targetCity.read(pStream);
+        targetCoords.read(pStream);
         readComplexSet(pStream, assignedUnits);
 
         size_t count = 0;

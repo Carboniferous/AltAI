@@ -300,6 +300,12 @@
 				RelativePath=".\area_helper.h">
 			</File>
 			<File
+				RelativePath=".\attitude_helper.cpp">
+			</File>
+			<File
+				RelativePath=".\attitude_helper.h">
+			</File>
+			<File
 				RelativePath=".\bonus_helper.cpp">
 			</File>
 			<File

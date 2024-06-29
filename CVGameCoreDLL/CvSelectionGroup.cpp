@@ -4299,9 +4299,9 @@ void CvSelectionGroup::clearMissionQueue(const std::string& caller)
 
     // AltAI
     //if (CvPlayerAI::getPlayer(m_eOwner).isUsingAltAI())
-    {
+    /*{
         GC.getGame().getAltAI()->getPlayer(m_eOwner)->logClearMissions(this, caller);
-    }
+    }*/
 
 	deactivateHeadMission();
 

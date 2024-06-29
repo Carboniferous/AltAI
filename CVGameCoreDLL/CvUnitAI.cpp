@@ -4409,6 +4409,8 @@ void CvUnitAI::AI_workerSeaMove()
 
     if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
     {
+        // will do worker move normally but falls back to explore for work boats if no builds required
+        //return (void)AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this);
         return (void)(AltAI::doWorkerMove(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this));
     }
 

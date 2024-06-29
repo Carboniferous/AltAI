@@ -85,11 +85,12 @@ namespace AltAI
 
     struct MilitaryMissionData
     {
-        MilitaryMissionData() : plotTarget(-1, -1), missionType(NO_MISSIONAI), recalcOdds(false) {}
-        explicit MilitaryMissionData(MissionAITypes missionType_) : plotTarget(-1, -1), missionType(missionType_) {}
+        MilitaryMissionData() : targetCoords(-1, -1), missionType(NO_MISSIONAI), recalcOdds(false) {}
+        explicit MilitaryMissionData(MissionAITypes missionType_) : targetCoords(-1, -1), missionType(missionType_) {}
 
-        std::set<IDInfo> targets, specialTargets;
-        XYCoords plotTarget;
+        std::set<IDInfo> targetUnits, specialTargets;
+        IDInfo targetCity;
+        XYCoords targetCoords;
         std::set<IDInfo> assignedUnits;
         std::vector<RequiredUnitStack::UnitDataChoices> requiredUnits;
 
@@ -107,6 +108,7 @@ namespace AltAI
         std::vector<UnitData> ourAttackers, ourDefenders;
         IDInfo firstAttacker, closestCity;
         std::set<IDInfo> attackableUnits;
+        std::pair<IDInfo, XYCoords> nextAttack, pushedAttack;
         bool recalcOdds;
 
         void resetDynamicData();
@@ -118,7 +120,7 @@ namespace AltAI
 
         int getAssignedUnitCount(const CvPlayer* pPlayer, UnitTypes unitType) const;
 
-        std::vector<IDInfo> updateRequiredUnits(const Player& player, std::set<IDInfo> availableUnits);
+        std::vector<IDInfo> updateRequiredUnits(const Player& player, const std::set<IDInfo>& reserveUnits);
 
         void assignUnit(const CvUnit* pUnit, bool updateRequiredUnits = true);
         void unassignUnit(const CvUnit* pUnit, bool updateRequiredUnits);
@@ -147,7 +149,8 @@ namespace AltAI
 
         PlotSet getTargetPlots() const;
 
-        const CvPlot* getTargetPlot() const;  // city plot if set, otherwise target coords (if valid)
+        const CvPlot* getTargetPlot() const;
+        const CvCity* getTargetCity() const;
 
         void debug(std::ostream& os) const;
         void debugReachablePlots(std::ostream& os) const;

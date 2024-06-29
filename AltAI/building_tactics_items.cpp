@@ -558,18 +558,24 @@ namespace AltAI
 #endif
         }
 
-        // remove techs we added temporarily
-        for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
-        {
-            pPlayer->getCivHelper()->removeTech(*ci);
-        }
         if (currentResearch != NO_TECH)
         {
+            // remove techs we added temporarily
+            for (std::list<TechTypes>::const_iterator ci(prereqTechs.begin()), ciEnd(prereqTechs.end()); ci != ciEnd; ++ci)
+            {
+                pPlayer->getCivHelper()->removeTech(*ci);
+            }
             pPlayer->getCivHelper()->removeTech(currentResearch);
             pPlayer->getAnalysis()->recalcTechDepths();
-        }        
+        }
 
-        selectionData.possibleFreeTech = possibleTechSelection;
+#ifdef ALTAI_DEBUG
+        if (possibleTechSelection != NO_TECH)
+        {
+            os << "\n\t setting possible tech: " << gGlobals.getTechInfo(possibleTechSelection).getType();
+        }
+#endif
+        selectionData.possibleFreeTechs[pCityBuildingTactics->getBuildingType()] = possibleTechSelection;
     }
 
     void FreeTechBuildingTactic::debug(std::ostream& os) const

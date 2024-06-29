@@ -619,7 +619,7 @@ void CyTeam::changeExtraMoves(int /*DomainTypes*/ eIndex, int iChange)
 
 bool CyTeam::isHasMet(int /*TeamTypes*/ eIndex)
 {
-	return m_pTeam ? m_pTeam->isHasMet((TeamTypes)eIndex) : false;
+	return m_pTeam && eIndex >= 0 ? m_pTeam->isHasMet((TeamTypes)eIndex) : false;
 }
 
 bool CyTeam::isAtWar(int /*TeamTypes*/ iIndex)

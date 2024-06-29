@@ -145,8 +145,20 @@ namespace AltAI
                 {
                     const int techCost = calculateTechResearchCost(selectionData.possibleFreeTech, player.getPlayerID());
 #ifdef ALTAI_DEBUG
-                    const int rate = player.getCvPlayer()->calculateResearchRate(techType);
+                    const int rate = player.getCvPlayer()->calculateResearchRate(selectionData.possibleFreeTech);
                     civLog << "\nChecking free tech data for tech: " << gGlobals.getTechInfo(selectionData.possibleFreeTech).getType()
+                        << " research rate for tech: " << rate << " cost = " << techCost << " approx turns = " << (1 + techCost / (rate == 0 ? 1 : rate));
+#endif
+                    score += techCost;
+                }
+
+                for (std::map<BuildingTypes, TechTypes>::const_iterator ci(selectionData.possibleFreeTechs.begin()), ciEnd(selectionData.possibleFreeTechs.end());
+                    ci != ciEnd; ++ci)
+                {
+                    const int techCost = calculateTechResearchCost(ci->second, player.getPlayerID());
+#ifdef ALTAI_DEBUG
+                    const int rate = player.getCvPlayer()->calculateResearchRate(ci->second);
+                    civLog << "\nChecking free tech data for tech: " << gGlobals.getTechInfo(ci->second).getType()
                         << " research rate for tech: " << rate << " cost = " << techCost << " approx turns = " << (1 + techCost / (rate == 0 ? 1 : rate));
 #endif
                     score += techCost;

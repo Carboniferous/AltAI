@@ -258,6 +258,7 @@ namespace AltAI
 
         std::set<BuildingTypes> exclusions;
         TotalOutput cityImprovementsDelta;
+        std::map<BuildingTypes, TechTypes> possibleFreeTechs;
         TechTypes possibleFreeTech;
         TotalOutput baselineDelta, resourceOutput;
         
