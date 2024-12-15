@@ -9,8 +9,7 @@
 #include "./tech_tactics_visitors.h"
 #include "./building_tactics_visitors.h"
 #include "./building_tactics_deps.h"
-#include "./civic_tactics.h"
-#include "./building_info_visitors.h"
+#include "./civic_tactics_items.h"
 #include "./unit_info_visitors.h"
 #include "./resource_info_visitors.h"
 #include "./resource_tactics.h"
@@ -35,8 +34,8 @@ namespace AltAI
     {
         struct TechSelectionData
         {
-            explicit TechSelectionData(const PlayerTactics& playerTactics_)
-                : playerTactics(playerTactics_), player(playerTactics_.player), 
+            explicit TechSelectionData(PlayerTactics& playerTactics_)
+                : playerTactics(playerTactics_), player(playerTactics_.player), tacticSelectionDataMap(playerTactics_.tacticSelectionDataMap),
                   bestTech(NO_TECH), selection(NO_TECH), civLog(CivLog::getLog(*player.getCvPlayer())->getStream())
             {
                 pMapAnalysis = player.getAnalysis()->getMapAnalysis();
@@ -120,13 +119,38 @@ namespace AltAI
                     {
 #ifdef ALTAI_DEBUG
                         civLog << "\nErasing tech selection: ";
-                        for (DependencyItemSet::const_iterator di(ci->first.begin()), diEnd(ci->first.end()); di != diEnd; ++di)
-                        {
-                            if (di != ci->first.begin()) civLog << "+";
-                            debugDepItem(*di, civLog);                            
-                        }
+                        debugDepItemSet(ci->first, civLog);
 #endif
                         tacticSelectionDataMap.erase(ci->first);
+                    }
+                }
+            }
+
+            void resetTechSelectionData()
+            {
+                for (TacticSelectionDataMap::iterator iter(tacticSelectionDataMap.begin()), endIter(tacticSelectionDataMap.end());
+                    iter != endIter;)
+                {
+                    bool entryHasTechDep = false;
+                    for (DependencyItemSet::const_iterator depIter(iter->first.begin()), depEndIter(iter->first.end()); depIter != depEndIter; ++depIter)
+                    {
+                        if (depIter->first == ResearchTechDependency::ID)
+                        {
+                            entryHasTechDep = true;
+                            break;
+                        }
+                    }
+                    if (entryHasTechDep)
+                    {
+#ifdef ALTAI_DEBUG
+                        civLog << "\nRemoving tech selection data: ";
+                        debugDepItemSet(iter->first, civLog);
+#endif
+                        tacticSelectionDataMap.erase(iter++);
+                    }
+                    else
+                    {
+                        ++iter;
                     }
                 }
             }
@@ -307,7 +331,7 @@ namespace AltAI
                     }
                 }
 
-                const TacticSelectionData& baseSelectionData = playerTactics.getBaseTacticSelectionData();
+                TacticSelectionData& baseSelectionData = playerTactics.getBaseTacticSelectionData();
 
                 for (std::map<BonusTypes, std::vector<XYCoords> >::const_iterator ci(selectionData.connectableResources.begin()), 
                     ciEnd(selectionData.connectableResources.end()); ci != ciEnd; ++ci)
@@ -321,6 +345,7 @@ namespace AltAI
                             score += valueF(potentialResourceOutputIter->second.first);
 #ifdef ALTAI_DEBUG
                             os << "\n\t" << gGlobals.getBonusInfo(ci->first).getType() << " added connectable resource value: " << valueF(potentialResourceOutputIter->second.first);
+                            os << "\n\t\t" << potentialResourceOutputIter->second.first << ", " << potentialResourceOutputIter->second.second;
 #endif
                         }
                         else
@@ -356,7 +381,7 @@ namespace AltAI
                 {
                     for (DependencyItemSet::const_iterator depIter(tacticMapIter->first.begin()), depEndIter(tacticMapIter->first.end()); depIter != depEndIter; ++depIter)
                     {
-                        if (depIter->first == ResouceProductionBonusDependency::ID)
+                        if (depIter->first == ResourceProductionBonusDependency::ID)
                         {
                             std::map<BonusTypes, std::vector<XYCoords> >::const_iterator crIter = selectionData.connectableResources.find((BonusTypes)depIter->second);
                             if (crIter != selectionData.connectableResources.end())
@@ -383,12 +408,12 @@ namespace AltAI
                                                 pCityDeps[depIndex]->apply(pCopyCityData);
                                             }
 
-                                            std::vector<DependencyItem> newDepItems = pCityBuildingTactics->getDepItems(IDependentTactic::Ignore_Techs);
+                                            std::vector<DependencyItem> newDepItems = pCityBuildingTactics->getDepItems(IDependentTactic::Tech_Dep);
                                             DependencyItemSet newDepSet(newDepItems.begin(), newDepItems.end());
 
                                             pCityBuildingTactics->update(player, pCopyCityData);
                                             TacticSelectionDataMap tacticSelectionDataMap;
-                                            pCityBuildingTactics->apply(tacticSelectionDataMap, IDependentTactic::Ignore_Techs);
+                                            pCityBuildingTactics->apply(tacticSelectionDataMap, IDependentTactic::Tech_Dep);
 
                                             for (size_t depIndex = 0, depCount = pCityDeps.size(); depIndex < depCount; ++depIndex)
                                             {
@@ -533,7 +558,6 @@ namespace AltAI
                 int maxResearchRate = player.getMaxResearchPercent();  // % max rate
 
                 DependencyItemSet noDep;
-                noDep.insert(DependencyItem(-1, -1));
                 // todo - check if this is correct in case of other non-tech deps
                 TacticSelectionDataMap::const_iterator noDepIter = tacticSelectionDataMap.find(noDep);
                 if (noDepIter != tacticSelectionDataMap.end())
@@ -846,16 +870,12 @@ namespace AltAI
             void debug() const
             {
 #ifdef ALTAI_DEBUG
-                civLog << "\nTech tactics selection data:";
+                civLog << "\nTech tactics selection data: (global selection data map)";
                 for (TacticSelectionDataMap::const_iterator ci(tacticSelectionDataMap.begin()), ciEnd(tacticSelectionDataMap.end());
                     ci != ciEnd; ++ci)
                 {
                     civLog << "\nDep items: ";
-                    for (DependencyItemSet::const_iterator di(ci->first.begin()), diEnd(ci->first.end()); di != diEnd; ++di)
-                    {
-                        debugDepItem(*di, civLog);
-                        civLog << " ";
-                    }
+                    debugDepItemSet(ci->first, civLog);
                     ci->second.debug(civLog);
                 }
 
@@ -863,7 +883,12 @@ namespace AltAI
 #endif
             }
 
-            TacticSelectionDataMap tacticSelectionDataMap;
+            PlayerTactics& playerTactics;
+            Player& player;
+            TacticSelectionDataMap& tacticSelectionDataMap;
+
+            boost::shared_ptr<MapAnalysis> pMapAnalysis;
+            boost::shared_ptr<CivHelper> civHelper;
 
             TotalOutput currentOutputProjection;
             bool possiblyIsolated;
@@ -879,11 +904,6 @@ namespace AltAI
             std::map<TechTypes, int> techScoresMap, techCostsMap;
             std::vector<TechTypes> freeTechTechs;
 
-            const PlayerTactics& playerTactics;
-            Player& player;
-            boost::shared_ptr<MapAnalysis> pMapAnalysis;
-            boost::shared_ptr<CivHelper> civHelper;
-
             TechTypes bestTech;
             ResearchTech selection;
 
@@ -893,7 +913,9 @@ namespace AltAI
 
     ResearchTech getResearchTech(PlayerTactics& playerTactics, TechTypes ignoreTechType)
     {
+#ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*playerTactics.player.getCvPlayer())->getStream();
+#endif
 
         if (playerTactics.cityBuildingTacticsMap_.empty())
         {
@@ -902,6 +924,10 @@ namespace AltAI
         }
 
         TechSelectionData selectionData(playerTactics);
+
+        // clear existing tech dependencies
+        // todo - just update when acquire techs
+        selectionData.resetTechSelectionData();
 
         // update base resource tactics as may need them for connectable resource evaluations
         TacticSelectionData& baseSelectionData = playerTactics.getBaseTacticSelectionData();
@@ -944,7 +970,7 @@ namespace AltAI
             for (PlayerTactics::CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
             {
                 li->second->update(playerTactics.player, city.getCityData());
-                li->second->apply(selectionData.tacticSelectionDataMap, IDependentTactic::Ignore_Techs);
+                li->second->apply(selectionData.tacticSelectionDataMap, IDependentTactic::Tech_Dep);
             }
         }
 
@@ -955,7 +981,7 @@ namespace AltAI
             if (iter->second)
             {
                 iter->second->update(playerTactics.player);
-                iter->second->apply(selectionData.tacticSelectionDataMap, IDependentTactic::Ignore_Techs);
+                iter->second->apply(selectionData.tacticSelectionDataMap, IDependentTactic::Tech_Dep);
             }
         }
 
@@ -966,14 +992,13 @@ namespace AltAI
             if (iter->second)
             {
                 iter->second->update(playerTactics.player);
-                iter->second->apply(selectionData.tacticSelectionDataMap, IDependentTactic::Ignore_Techs);
+                iter->second->apply(selectionData.tacticSelectionDataMap, IDependentTactic::Tech_Dep);
 
                 // no tech deps
                 if (iter->second->areTechDependenciesSatisfied(playerTactics.player))
                 {
-                    DependencyItemSet di;
-                    di.insert(DependencyItem(-1, -1));
-                    iter->second->apply(selectionData.tacticSelectionDataMap[di]);
+                    // apply into global (no-deps) selection data
+                    iter->second->apply(selectionData.tacticSelectionDataMap[DependencyItemSet()]);
                 }
             }
         }
@@ -983,6 +1008,7 @@ namespace AltAI
             endIter(playerTactics.civicTacticsMap_.end()); iter != endIter; ++iter)
         {
             // might already be able to run this civic because of other source (i.e. some wonders)
+            // could generate specific deps for these cases perhaps
             if (playerTactics.player.getCvPlayer()->canDoCivics(iter->first))
             {
                 continue;
@@ -992,7 +1018,7 @@ namespace AltAI
             if (playerTactics.player.getTechResearchDepth(pTechDependency->getResearchTech()) <= 3)
             {
                 iter->second->update(playerTactics.player);
-                iter->second->apply(selectionData.tacticSelectionDataMap, IDependentTactic::Ignore_Techs);
+                iter->second->apply(selectionData.tacticSelectionDataMap, IDependentTactic::Tech_Dep);
             }
         }
 
@@ -1071,7 +1097,7 @@ namespace AltAI
         for (PlayerTactics::ProcessTacticsMap::const_iterator ci(playerTactics.processTacticsMap_.begin()), ciEnd(playerTactics.processTacticsMap_.end());
             ci != ciEnd; ++ci)
         {
-            if (ci->second->areDependenciesSatisfied(playerTactics.player, IDependentTactic::Ignore_Techs))
+            if (ci->second->areDependenciesSatisfied(playerTactics.player, IDependentTactic::Tech_Dep))
             {
                 CityIter iter(*playerTactics.player.getCvPlayer());
                 TotalOutput processOutput;

@@ -1363,10 +1363,7 @@ void CvMap::read(FDataStreamBase* pStream)
 	// call the read of the free list CvArea class allocations
 	ReadStreamableFFreeListTrashArray(m_areas, pStream);
 
-    // AltAI - Sub Areas and Irrigatable Areas are not saved - edit - they are now
-    //recalculateSubAreas();
-    //recalculateIrrigatableAreas();
-
+    // read sub areas and irrigatable areas data
     m_subAreas.clear();
     int numSubAreas;
     pStream->Read(&numSubAreas);

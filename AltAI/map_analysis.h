@@ -30,7 +30,7 @@ namespace AltAI
 
         struct ResourcePlotData
         {
-            ResourcePlotData() : coords(-1, -1), owner(NO_PLAYER), imp(NO_IMPROVEMENT) {}
+            ResourcePlotData() : owner(NO_PLAYER), imp(NO_IMPROVEMENT) {}
             ResourcePlotData(XYCoords coords_, PlayerTypes owner_, ImprovementTypes imp_) : coords(coords_), owner(owner_), imp(imp_) {}
             XYCoords coords;
             PlayerTypes owner;
@@ -63,6 +63,7 @@ namespace AltAI
         void init();
 
         void reinitDotMap();
+        void reinitPlotKeys();
         void recalcPlotInfo();
         void update();
 

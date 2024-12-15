@@ -28,9 +28,12 @@ namespace AltAI
         void doTurn();
 
         int getID() const;
+        IDInfo getIDInfo() const;
 
         XYCoords getCoords() const;
         const CvCity* getCvCity() const;
+
+        void setHasReligion(ReligionTypes religionIndex, bool newValue);
 
         boost::tuple<UnitTypes, BuildingTypes, ProcessTypes, ProjectTypes> getBuild();
         const ConstructItem& getConstructItem() const;
@@ -50,6 +53,8 @@ namespace AltAI
         int getNumReqdWorkers() const;
         int getNumWorkers() const;
         int getNumWorkersTargetingPlot(XYCoords targetCoords) const;
+
+        std::vector<int> getAccessibleSubAreas(bool isWater) const;
 
         TotalOutput getMaxOutputs() const;
         TotalOutputWeights getMaxOutputWeights() const;

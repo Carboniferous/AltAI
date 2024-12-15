@@ -7,7 +7,7 @@
 #include "./city_tactics.h"
 #include "./city_data.h"
 #include "./building_tactics_deps.h"
-#include "./building_info_visitors.h"
+#include "./building_info_construct_visitors.h"
 #include "./tech_info_visitors.h"
 #include "./resource_info_visitors.h"
 #include "./game.h"
@@ -173,7 +173,7 @@ namespace AltAI
 
     void CityImprovementTactics::write(FDataStreamBase* pStream) const
     {
-        pStream->Write(ID);
+        pStream->Write(CityImprovementTacticsID);
 
         size_t depCount = dependentTactics_.size();
         pStream->Write(depCount);

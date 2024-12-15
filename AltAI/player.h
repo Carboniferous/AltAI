@@ -37,6 +37,8 @@ namespace AltAI
         void deleteCity(CvCity* pCity);
         void initCities();
         void recalcPlotInfo();
+        void reinitDotMap();
+        void reinitPlotKeys();
 
         City& getCity(const CvCity* pCity);
         const City& getCity(const CvCity* pCity) const;
@@ -178,11 +180,14 @@ namespace AltAI
         std::pair<int, int> getCityRank(IDInfo city, OutputTypes outputType) const;
 
         TechTypes getResearchTech(TechTypes ignoreTechType = NO_TECH);
+        CivicTypes chooseCivic(CivicOptionTypes civicOptionType);
+
         void logBestResearchTech(TechTypes techType) const;
         void logPushResearchTech(TechTypes techType) const;
         int getTechResearchDepth(TechTypes techType) const;
         ResearchTech getCurrentResearchTech() const;
         void notifyFirstToTechDiscovered(TeamTypes teamType, TechTypes techType);
+
         void logHurry(const CvCity* pCity, const HurryData& hurryData) const;
 
         void logStuckSelectionGroup(CvUnit* pHeadUnit) const;

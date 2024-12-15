@@ -10373,6 +10373,11 @@ void CvCity::setHasReligion(ReligionTypes eIndex, bool bNewValue, bool bAnnounce
 			// Python Event
 			CvEventReporter::getInstance().religionRemove(eIndex, getOwnerINLINE(), this);
 		}
+
+        if (GET_PLAYER(m_eOwner).isUsingAltAI())
+        {
+		    GC.getGame().getAltAI()->getPlayer(m_eOwner)->getCity(m_iID).setHasReligion(eIndex, bNewValue);
+        }
 		
 	}
 }

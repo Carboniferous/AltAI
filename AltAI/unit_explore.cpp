@@ -363,7 +363,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const { pStream->Write(ID); }
         virtual void read(FDataStreamBase* pStream) {}
 
-        static const int ID = 1;
+        static const int ID = IUnitMission::LandExploreMissionID;
 
     private:
         void setTarget_(bool ignoreSelf)
@@ -837,7 +837,12 @@ namespace AltAI
             PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pUnit_->getOwner());
 
             UnitPathData unitPathData;
-            unitPathData.calculate(pUnit_->getGroup(), pDestPlot, MOVE_MAX_MOVES | MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY);
+            int flags = MOVE_MAX_MOVES | MOVE_IGNORE_DANGER;
+            if (pUnit_->getGroup()->canFight())
+            {
+                flags |= MOVE_THROUGH_ENEMY;
+            }
+            unitPathData.calculate(pUnit_->getGroup(), pDestPlot, flags);
 
             if (unitPathData.valid)
             {
@@ -882,6 +887,7 @@ namespace AltAI
         ReachablePlotsData reachablePlotsData;
         getReachablePlotsData(reachablePlotsData, *pPlayer, std::vector<const CvUnit*>(1, pUnit), false, pUnit->canFight());
         PlotSet dangerPlots = pPlayer->getAnalysis()->getMilitaryAnalysis()->getThreatenedPlots();
+        // todo - use this to detect going in circles?
         std::set<XYCoords> ourHistory = getUnitHistory(*pPlayer, pUnit->getIDInfo());
 
         const bool plotDanger = dangerPlots.find(pUnit->plot()) != dangerPlots.end();
@@ -1002,7 +1008,12 @@ namespace AltAI
             if (pBestPlot)
             {
                 UnitPathData unitPathData;
-                unitPathData.calculate(pUnit->getGroup(), pBestPlot, MOVE_MAX_MOVES | MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY);
+                int flags = MOVE_MAX_MOVES | MOVE_SAFE_TERRITORY;
+                if (pUnit->getGroup()->canFight())
+                {
+                    flags |= MOVE_THROUGH_ENEMY;
+                }
+                unitPathData.calculate(pUnit->getGroup(), pBestPlot, flags);
 
                 if (unitPathData.valid)
                 {
@@ -1055,7 +1066,12 @@ namespace AltAI
                     os << "\ncoastal explore: trying plot: " << pBestPlot->getCoords();
 #endif
                     UnitPathData unitPathData;
-                    unitPathData.calculate(pUnit->getGroup(), pBestPlot, MOVE_MAX_MOVES | MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY);
+                    int flags = MOVE_MAX_MOVES | MOVE_IGNORE_DANGER;
+                    if (pUnit->getGroup()->canFight())
+                    {
+                        flags |= MOVE_THROUGH_ENEMY;
+                    }
+                    unitPathData.calculate(pUnit->getGroup(), pBestPlot, flags);
 
                     if (unitPathData.valid)
                     {
@@ -1069,21 +1085,18 @@ namespace AltAI
                             return true;
                         }
                     }
-                    else
-                    {
 #ifdef ALTAI_DEBUG
-                        os << "\nfailed to generate path to plot, excluding it from search";
+                    os << "\nfailed to generate path to plot, excluding it from search";
 #endif
-                        excludedPlots.insert(pBestPlot);
-                        bestValue = MAX_INT;
-                        pBestPlot = (const CvPlot*)0;
-                    }
+                    excludedPlots.insert(pBestPlot);
+                    bestValue = MAX_INT;
+                    pBestPlot = (const CvPlot*)0;
                 }
             }
         }
 
         // just try and go to closest port
-        if (pClosestCityPlot)
+        if (pClosestCityPlot && !pUnit->atPlot(pClosestCityPlot))
         {
             int iPathTurns = 0;
             if (pUnit->generatePath(pClosestCityPlot, 0, false, &iPathTurns))
@@ -1120,7 +1133,7 @@ namespace AltAI
         std::map<int, std::set<XYCoords> >::const_iterator subAreaBorderIter = borders.find(pUnitPlot->getSubArea());
         if (subAreaBorderIter == borders.end())  // no unrevealed borders in this sub area...
         { // ...so look for another sub area
-            XYCoords closestOtherAreaBorderCoords(-1, -1); 
+            XYCoords closestOtherAreaBorderCoords;
             // pick nearest (coastal) plot
             for (subAreaBorderIter = borders.begin(); subAreaBorderIter != borders.end(); ++subAreaBorderIter)
             {

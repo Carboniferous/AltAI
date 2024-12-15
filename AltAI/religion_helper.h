@@ -18,17 +18,21 @@ namespace AltAI
         explicit ReligionHelper(const CvCity* pCity);
         ReligionHelperPtr clone() const;
 
-        void changeReligionCount(ReligionTypes religionType, int change = 1);
+        void setHasReligion(CityData& data, ReligionTypes religionType, bool newValue);
+        void setStateReligion(CityData& data, ReligionTypes religionType);
 
         bool isHasReligion(ReligionTypes religionType) const;
         int getReligionCount(ReligionTypes religionType) const;
         ReligionTypes getStateReligion() const;
         bool hasStateReligion() const;
 
+        Commerce getCityReligionCommerce() const;
+
     private:
+        void updateReligionHappy_(CityData& data);
+
         const CvCity* pCity_;
-        Commerce existingStateReligionCommerce_, extraStateReligionCommerce_;
-        ReligionTypes religionType_;
+        ReligionTypes stateReligionType_;
 
         std::vector<int> religionCounts_;
         std::vector<int> cityReligions_;

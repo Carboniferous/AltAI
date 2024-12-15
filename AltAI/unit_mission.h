@@ -8,6 +8,8 @@ namespace AltAI
     class IUnitMission;
     typedef boost::shared_ptr<IUnitMission> UnitMissionPtr;
 
+    struct MilitaryMissionData;
+
     class IUnitMission
     {
     public:
@@ -26,6 +28,11 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         static UnitMissionPtr factoryRead(FDataStreamBase*);
+
+        enum UnitMissionTypes
+        {
+            WorkerMissionID = 0, LandExploreMissionID = 1
+        };
     };
 
     struct HasTarget
@@ -73,20 +80,13 @@ namespace AltAI
         const int areaID;
     };
 
-    class IUnitsMission
-    {
-    public:
-        virtual ~IUnitsMission() = 0 {}
-        virtual bool doUnitMission(CvUnitAI* pUnit) = 0;
-        virtual void update(Player& player) = 0;
-    };
-
+    class IUnitsMission;
     typedef boost::shared_ptr<IUnitsMission> IUnitsMissionPtr;
 
     struct MilitaryMissionData
     {
-        MilitaryMissionData() : targetCoords(-1, -1), missionType(NO_MISSIONAI), recalcOdds(false) {}
-        explicit MilitaryMissionData(MissionAITypes missionType_) : targetCoords(-1, -1), missionType(missionType_) {}
+        MilitaryMissionData() : targetCoords(), missionType(NO_MISSIONAI), recalcOdds(false) {}
+        explicit MilitaryMissionData(MissionAITypes missionType_);
 
         std::set<IDInfo> targetUnits, specialTargets;
         IDInfo targetCity;
@@ -107,6 +107,7 @@ namespace AltAI
         std::map<IDInfo, CombatGraph::Data> cityAttackOdds;
         std::vector<UnitData> ourAttackers, ourDefenders;
         IDInfo firstAttacker, closestCity;
+        std::vector<IDInfo> tooDistantAssignedUnits;
         std::set<IDInfo> attackableUnits;
         std::pair<IDInfo, XYCoords> nextAttack, pushedAttack;
         bool recalcOdds;
@@ -152,7 +153,7 @@ namespace AltAI
         const CvPlot* getTargetPlot() const;
         const CvCity* getTargetCity() const;
 
-        void debug(std::ostream& os) const;
+        void debug(std::ostream& os, bool includeReachablePlots = false) const;
         void debugReachablePlots(std::ostream& os) const;
 
         void write(FDataStreamBase* pStream) const;
@@ -161,26 +162,52 @@ namespace AltAI
 
     typedef boost::shared_ptr<MilitaryMissionData> MilitaryMissionDataPtr;
 
+    class IUnitsMission
+    {
+    public:
+        virtual ~IUnitsMission() = 0 {}
+        virtual bool doUnitMission(CvUnitAI* pUnit, MilitaryMissionData* pMission) = 0;
+        virtual void update(Player& player) = 0;
+        virtual void write(FDataStreamBase* pStream) const = 0;
+        virtual void read(FDataStreamBase* pStream) = 0;
+
+        static IUnitsMissionPtr factoryRead(FDataStreamBase*);
+
+        enum MissionTypes
+        {
+            ReserveMissionID = 0, GuardBonusesMissionID = 1, CoastalDefenceMissionID = 2, UnitCounterMissionID = 3,
+            SettlerEscortMissionID = 4, WorkerEscortMissionID = 5, CityDefenceMissionID = 6
+        };
+    };
+
     class ReserveMission : public IUnitsMission
     {
     public:
+        static MilitaryMissionDataPtr createMission();
         virtual ~ReserveMission() {}
-        virtual bool doUnitMission(CvUnitAI* pUnit);
+        virtual bool doUnitMission(CvUnitAI* pUnit, MilitaryMissionData* pMission);
         virtual void update(Player& player);
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
 
+        static const int ID = IUnitsMission::ReserveMissionID;
     private:
-
     };
 
     class GuardBonusesMission : public IUnitsMission
     {
     public:
+        static MilitaryMissionDataPtr createMission(int subArea);
+        GuardBonusesMission() :subArea_(-1) {}
         explicit GuardBonusesMission(int subArea);
         virtual ~GuardBonusesMission() {}
-        virtual bool doUnitMission(CvUnitAI* pUnit);
+        virtual bool doUnitMission(CvUnitAI* pUnit, MilitaryMissionData* pMission);
         virtual void update(Player& player);
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
 
-    private:
+        static const int ID = IUnitsMission::GuardBonusesMissionID;
+    private:        
         int subArea_;
         std::map<XYCoords, BonusTypes> bonusMap_;
     };

@@ -33,6 +33,7 @@
 // AltAI
 #include "game.h"
 #include "player.h"
+#include "iters.h"
 
 // Public Functions...
 
@@ -4453,6 +4454,19 @@ void CvGame::setFinalInitialized(bool bNewValue)
 				if (GET_TEAM((TeamTypes)iI).isAlive())
 				{
 					GET_TEAM((TeamTypes)iI).AI_updateAreaStragies();
+
+                    AltAI::PlayerIDIter playerIter((TeamTypes)iI);
+                    PlayerTypes playerType = NO_PLAYER;
+                    while ((playerType = playerIter()) != NO_PLAYER)
+                    {
+                        if (GET_PLAYER(playerType).isUsingAltAI())
+                        {
+                            // recalc all plot info data as we have updated irrigatable area data
+                            // which can change plot keys and players have already had starting visible plots
+                            // added when setFinalInitialized() is called
+                            GC.getGame().getAltAI()->getPlayer(playerType)->reinitPlotKeys();
+                        }
+                    }
 				}
 			}
 		}

@@ -1005,7 +1005,7 @@ namespace AltAI
 
                 boost::tuple<XYCoords, FeatureTypes, ImprovementTypes, int> bestImprovement = getNextImprovement_(city, conditions);
 
-                if (boost::get<0>(bestImprovement) != XYCoords(-1, -1) && boost::get<2>(bestImprovement) == getBonusImprovementType(gGlobals.getMap().plot(boost::get<0>(bestImprovement))->getBonusType(player_.getTeamID())))
+                if (!isEmpty(boost::get<0>(bestImprovement)) && boost::get<2>(bestImprovement) == getBonusImprovementType(gGlobals.getMap().plot(boost::get<0>(bestImprovement))->getBonusType(player_.getTeamID())))
                 {
                     PlotBuildData buildData(boost::get<0>(bestImprovement), boost::get<2>(bestImprovement), boost::get<1>(bestImprovement), routeType);
                     cityBonusTargetPlots_[cityIter->first].push_back(buildData);
@@ -1017,7 +1017,7 @@ namespace AltAI
 
                 bestImprovement = getNextImprovement_(city, seaConditions);
 
-                if (boost::get<0>(bestImprovement) != XYCoords(-1, -1))
+                if (!isEmpty(boost::get<0>(bestImprovement)))
                 {
                     PlotBuildData buildData(boost::get<0>(bestImprovement), boost::get<2>(bestImprovement), boost::get<1>(bestImprovement), NO_ROUTE);
                     cityWaterBonusTargetPlots_[cityIter->first].push_back(buildData);
@@ -1114,7 +1114,7 @@ namespace AltAI
                             {
                                 const CvImprovementInfo& improvementInfo = gGlobals.getImprovementInfo(cityIter->second[plotImpIndex].improvement);
                                 XYCoords buildCoords = city.getCityImprovementManager()->getIrrigationChainPlot(cityIter->second[plotImpIndex].coords);
-                                if (buildCoords != XYCoords(-1, -1))
+                                if (!isEmpty(buildCoords))
                                 {
                                     CvPlot* pBuildPlot = gGlobals.getMap().plot(buildCoords.iX, buildCoords.iY);
                                     if (player_.getCvPlayer()->canBuild(pBuildPlot, GameDataAnalysis::getBuildTypeForImprovementType(cityIter->second[plotImpIndex].improvement)))
@@ -1980,7 +1980,7 @@ namespace AltAI
                     }
                 }
 
-                if (shortestPath < MAX_INT && buildData.coords != XYCoords(-1, -1))
+                if (shortestPath < MAX_INT && !isEmpty(buildData.coords))
                 {
                     if (pushMission(pUnit, ::getCity(bestTargetCity), buildData, true))
                     {
@@ -2076,7 +2076,7 @@ namespace AltAI
                 }
             }
 
-            return boost::make_tuple(XYCoords(-1, -1), NO_FEATURE, NO_IMPROVEMENT, 0);
+            return boost::make_tuple(XYCoords(), NO_FEATURE, NO_IMPROVEMENT, 0);
         }
 
         Player& player_;

@@ -277,7 +277,7 @@ namespace AltAI
                     data_.getHappyHelper()->changeLargestCityHappiness(isAdding_ ? node.largestCityHappy : -node.largestCityHappy);
                 }
 
-                data_.getHappyHelper()->setMilitaryHappiness(node.happyPerUnit);
+                data_.getHappyHelper()->setMilitaryHappinessPerUnit(node.happyPerUnit);
             }
 
             void operator() (const CivicInfo::MiscEffectNode& node) const

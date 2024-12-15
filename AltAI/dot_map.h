@@ -34,7 +34,7 @@ namespace AltAI
             bool isPinned, isSelected, improvementMakesBonusValid;
             bool operator < (const DotMapPlotData& other) const { return coords < other.coords; }
             PlotYield getPlotYield() const { return workedImprovement == -1 ? currentYield : possibleImprovements[workedImprovement].first; }
-            PlotYield getProjectedPlotYield(const Player& player, const int timeHorizon) const;
+            PlotYield getProjectedPlotYield(const CvPlayer& player, const int timeHorizon) const;
 
             PlotYield getPlotYield(int index) const { return (index == -1 || possibleImprovements.empty()) ? currentYield : possibleImprovements[index].first; }
             ImprovementTypes getWorkedImprovement() const { return workedImprovement == -1 ? NO_IMPROVEMENT : possibleImprovements[workedImprovement].second; }
@@ -63,11 +63,13 @@ namespace AltAI
         PlotYield cityPlotYield, conditionalYield;
         bool isFreshWater;
         std::set<BonusTypes> bonusTypes;
+        std::map<BonusTypes, int> bonusTypesMap;
         int numDeadLockedBonuses;
         std::vector<std::pair<BuildingTypes, PlotYield> > requiredAdditionalYieldBuildings;
         int areaID, subAreaID;
         SortedPlots selectedPlots;
         PlotYield projectedYield;
+        int positiveFoodTotal;
         int projectedTurns;
 
         typedef std::set<DotMapPlotData> PlotDataSet;
@@ -153,8 +155,10 @@ namespace AltAI
         int getBaseFeatureHealth() const;
 
         DotMapPlotData getPlotData(XYCoords coords) const;
-        std::vector<int> getGrowthRates(const CvPlayer& player, size_t maxPop, int baseHealthyPop, int cultureLevel);
-        void debugOutputs(const Player& player, std::ostream& os) const;
+        std::vector<int> getGrowthRates(const CvPlayer& player, size_t maxPop, int baseHealthyPop, int cultureLevel) const;
+        std::pair<int, int> calculateGrowthRateData(const CvPlayer& player, XYCoords coords, int baseHealthyPop, const int timeHorizon) const;
+
+        void debugOutputs(const CvPlayer& player, std::ostream& os) const;
 
         struct BuildTimesData
         {
@@ -162,7 +166,7 @@ namespace AltAI
             std::vector<size_t> impIndices;
         };
 
-        void getBuildTimesData(BuildTimesData& impBuildData, PlayerTypes playerType, int cultureLevel, int baseHealthyPop);
-        PlotYield getUsablePlots(const Player& player, SortedPlots& sortedPlots, int baseHealthyPop, int lookAheadTurns, bool debug = false);
+        void getBuildTimesData(BuildTimesData& impBuildData, PlayerTypes playerType, int cultureLevel, int baseHealthyPop) const;
+        std::pair<PlotYield, int> getUsablePlots(const Player& player, SortedPlots& sortedPlots, int baseHealthyPop, int lookAheadTurns, bool debug = false) const;
     };
 }

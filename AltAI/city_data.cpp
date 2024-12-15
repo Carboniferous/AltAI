@@ -3,7 +3,6 @@
 #include "./city_data.h"
 #include "./iters.h"
 #include "./plot_info_visitors.h"
-#include "./building_info_visitors.h"
 #include "./spec_info_visitors.h"
 #include "./city_simulator.h"
 #include "./game.h"
@@ -151,7 +150,7 @@ namespace AltAI
         storedFood_ = 100 * pCity->getFoodKept();
         cityPopulation_ = pCity->getPopulation();
         workingPopulation_ = cityPopulation_ - getNonWorkingPopulation();
-        happyCap_ = happyHelper_->happyPopulation() - happyHelper_->angryPopulation(*this);
+        happyCap_ = happyHelper_->happyPopulation(*this) - happyHelper_->angryPopulation(*this);
 
         growthThreshold_ = 100 * pCity->growthThreshold();
         foodKeptPercent_ = pCity->getMaxFoodKeptPercent();
@@ -300,8 +299,8 @@ namespace AltAI
         PlotData plot(pPlotInfo, plotYield, Commerce(), plotOutput, GreatPersonOutput(), pPlot->getCoords(),
                       improvementType, bonusType, featureType, routeType, PlotData::CultureData(pPlot, owner_, pCity_));
 
-        plot.controlled = plot.cultureData.ownerAndCultureTrumpFlag.first == owner_ || plot.cultureData.ownerAndCultureTrumpFlag.first == NO_PLAYER && includeUnclaimedPlots_;
-        plot.ableToWork = true;
+        plot.controlled = plot.cultureData.ownerAndCultureTrumpFlag.first == owner_ || (plot.cultureData.ownerAndCultureTrumpFlag.first == NO_PLAYER && includeUnclaimedPlots_);
+        plot.ableToWork = true;  //in the sense of having suitable techs - might not actually control the plot culturally (see previous line)
 
         if (plot.improvementType != NO_IMPROVEMENT)
         {
@@ -538,7 +537,7 @@ namespace AltAI
             // TODO handle overflow properly using logic in HurryHelper
             accumulatedProduction_ = 0;
 
-            std::pair<BuildQueueTypes, int> buildItem = buildQueue_.top();
+            BuildQueueItem buildItem = buildQueue_.top();
 
             switch (buildItem.first)
             {
@@ -637,7 +636,7 @@ namespace AltAI
 
     int CityData::happyPopulation() const
     {
-        return getHappyHelper()->happyPopulation();
+        return getHappyHelper()->happyPopulation(*this);
     }
 
     int CityData::angryPopulation() const
@@ -652,7 +651,7 @@ namespace AltAI
 
     int CityData::getNonWorkingPopulation() const
     {
-        return range(happyHelper_->angryPopulation(*this) - happyHelper_->happyPopulation(), 0, cityPopulation_);
+        return range(happyHelper_->angryPopulation(*this) - happyHelper_->happyPopulation(*this), 0, cityPopulation_);
     }
 
     void CityData::changePopulation(int change)
@@ -705,7 +704,7 @@ namespace AltAI
 
     void CityData::checkHappyCap()
     {
-        int newHappyCap = happyHelper_->happyPopulation() - happyHelper_->angryPopulation(*this);
+        int newHappyCap = happyHelper_->happyPopulation(*this) - happyHelper_->angryPopulation(*this);
         if (newHappyCap != happyCap_)
         {
             events_.push(CitySimulationEventPtr(new HappyCapChange(newHappyCap - happyCap_)));
@@ -766,7 +765,7 @@ namespace AltAI
     {
 #ifdef ALTAI_DEBUG
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-        os << "Pop: " << cityPopulation_ << ", angry = " << happyHelper_->angryPopulation(*this) << ", happy = " << happyHelper_->happyPopulation()
+        os << "Pop: " << cityPopulation_ << ", angry = " << happyHelper_->angryPopulation(*this) << ", happy = " << happyHelper_->happyPopulation(*this)
            << ", working = " << workingPopulation_ << ", happyCap_ = " << happyCap_ << ", unhealthy = " << healthHelper_->badHealth() << ", healthy = " << healthHelper_->goodHealth()
            << ", current food = " << currentFood_ << ", stored food = " << storedFood_ << ", surplus = " << (getFood() - getLostFood() - 100 * (cityPopulation_ * foodPerPop))
            << ", threshold = " << growthThreshold_ << ", production = " << getOutput() << " ";
@@ -828,7 +827,7 @@ namespace AltAI
         int productionModifier = 0;
         if (!buildQueue_.empty())
         {
-            std::pair<BuildQueueTypes, int> buildItem = buildQueue_.top();
+            BuildQueueItem buildItem = buildQueue_.top();
             switch (buildItem.first)
             {
             case BuildingItem:
@@ -1061,6 +1060,9 @@ namespace AltAI
                 }
             }
         }
+
+        // commerce (culture usually) from religions present in city
+        cityCommerce += religionHelper_->getCityReligionCommerce();
 
         // add free specialists (e.g. free priest from TofA, scientists from GLib, but not free spec slots)
         const CvPlayer& player = CvPlayerAI::getPlayer(owner_);
@@ -1329,6 +1331,7 @@ namespace AltAI
             int requiredYield = 100 * (getPopulation() - std::max<int>(0, angryPopulation() - happyPopulation())) * foodPerPop + getLostFood();
             production += currentOutput[OUTPUT_FOOD] - requiredYield;
         }
+
         return production;
     }
 

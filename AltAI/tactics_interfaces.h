@@ -11,8 +11,14 @@ namespace AltAI
     struct TacticSelectionData;
 
     typedef std::pair<int, int> DependencyItem;
+    typedef std::set<DependencyItem> DependencyItemSet;
 
+    // todo - combine build items into an enhanced dependency class
+    void debugDepItemSet(const DependencyItemSet& depItemSet, std::ostream& os);
     void debugDepItem(const DependencyItem& depItem, std::ostream& os);
+    void debugBuildItem(const BuildQueueItem& buildQueueItem, std::ostream& os);
+
+    DependencyItemSet getUnsatisfiedDeps(const DependencyItemSet& depItemSet, Player& player, City& city);
 
     inline bool operator < (const DependencyItem& first, const DependencyItem& second)
     {
@@ -29,29 +35,9 @@ namespace AltAI
         return !(first == second);
     }
 
-    typedef std::set<DependencyItem> DependencyItemSet;
-
     struct DependencyItemsComp
     {
-        bool operator() (const DependencyItemSet& first, const DependencyItemSet& second) const
-        {
-            if (first.size() != second.size())
-            {
-                return first.size() < second.size();
-            }
-            else
-            {
-                for (DependencyItemSet::const_iterator ci1(first.begin()), ci2(second.begin()), ci1End(first.end());
-                    ci1 != ci1End; ++ci1, ++ci2)
-                {
-                    if (*ci1 != *ci2)
-                    {
-                        return *ci1 < *ci2;
-                    }
-                }
-                return false;
-            }
-        }
+        bool operator() (const DependencyItemSet& first, const DependencyItemSet& second) const;
     };
 
     typedef std::map<DependencyItemSet, TacticSelectionData, DependencyItemsComp> TacticSelectionDataMap;
@@ -68,19 +54,29 @@ namespace AltAI
     {
     public:
 
-        enum IgnoreFlags
+        enum DepTacticFlags
         {
-            Ignore_None = 0, Ignore_Techs = (1 << 0), Ignore_City_Buildings = (1 << 1), Ignore_Civ_Buildings = (1 << 2),
-            Ignore_Religions = (1 << 3), Ignore_Resources = (1 << 4), Ignore_CivUnits = (1 << 5), Ignore_Resource_Techs = (1 << 6)
+            Ignore_None = 0, Tech_Dep = (1 << 0), City_Buildings_Dep = (1 << 1), Civ_Buildings_Dep = (1 << 2),
+            Religion_Dep = (1 << 3), Resource_Dep = (1 << 4), CivUnits_Dep = (1 << 5), Resource_Tech_Dep = (1 << 6),
+            All_Deps = 0xffffffff
+        };
+
+        enum DependentTacticTypes
+        {
+            ResearchTechDependencyID = 0, CityBuildingDependencyID = 1, CivBuildingDependencyID = 2,
+            ReligiousDependencyID = 3, StateReligionDependencyID = 4, CityBonusDependencyID = 5,
+            CivUnitDependencyID = 6, ResouceProductionBonusDependencyID = 7
         };
 
         virtual ~IDependentTactic() = 0 {}
         virtual void apply(const CityDataPtr&) = 0;
         virtual void remove(const CityDataPtr&) = 0;
-        virtual bool required(const CvCity*, int) const = 0;
-        virtual bool required(const Player&, int) const = 0;
+        // flags are those dependencies to ignore
+        virtual bool required(const CvCity*, int depTacticFlags) const = 0;
+        virtual bool required(const Player&, int depTacticFlags) const = 0;
         virtual bool removeable() const = 0;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const = 0;
+        virtual bool matches(int depTacticFlags) const = 0;
+        virtual BuildQueueItem getBuildItem() const = 0;
         virtual std::vector<DependencyItem> getDependencyItems() const = 0;
 
         virtual void debug(std::ostream&) const = 0;
@@ -92,22 +88,19 @@ namespace AltAI
         static IDependentTacticPtr factoryRead(FDataStreamBase*);
     };
 
-    std::string ignoreFlagToString(int ignoreFlags);
+    std::string depTacticFlagsToString(int depTacticFlags);
 
     struct IsNotRequired
     {
-        explicit IsNotRequired(const Player& player_, const CvCity* pCity_ = NULL, int ignoreFlags_ = 0) : player(player_), pCity(pCity_), ignoreFlags(ignoreFlags_)
+        explicit IsNotRequired(const Player& player_, const CvCity* pCity_ = NULL, int ignoreFlags_ = 0) : player(player_), pCity(pCity_), depTacticFlags(ignoreFlags_)
         {
         }
 
-        bool operator() (const IDependentTacticPtr& pDependentTactic) const
-        {
-            return pDependentTactic->removeable() && (pCity ? !pDependentTactic->required(pCity, ignoreFlags) : !pDependentTactic->required(player, ignoreFlags));
-        }
+        bool operator() (const IDependentTacticPtr& pDependentTactic) const;
 
         const Player& player;
         const CvCity* pCity;
-        int ignoreFlags;
+        int depTacticFlags;
     };
 
     class IWorkerBuildTactic;
@@ -125,6 +118,12 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         static IWorkerBuildTacticPtr factoryRead(FDataStreamBase*);
+
+        enum WorkerBuildTacticTypes
+        {
+            EconomicImprovementTacticID = 0, RemoveFeatureTacticID = 1, ProvidesResourceTacticID = 2, HappyImprovementTacticID = 3, 
+            HealthImprovementTacticID = 4, MilitaryImprovementTacticID = 5
+        };
     };
 
     class ICityBuildingTactics;
@@ -146,6 +145,15 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         static ICityBuildingTacticPtr factoryRead(FDataStreamBase*);
+
+        enum CityBuildingTacticTypes
+        {
+            EconomicBuildingTacticID = 0, FoodBuildingTacticID = 1, HappyBuildingTacticID = 2,
+            HealthBuildingTacticID = 3, ScienceBuildingTacticID = 4, GoldBuildingTacticID = 5,
+            CultureBuildingTacticID = 6, EspionageBuildingTacticID = 7, SpecialistBuildingTacticID = 8,
+            GovCenterTacticID = 9, UnitExperienceTacticID = 10, CityDefenceBuildingTacticID = 11,
+            FreeTechBuildingTacticID = 12, CanTrainUnitBuildingTacticID = 13
+        };
     };
 
     class UnitTactics;
@@ -172,6 +180,12 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         static IBuiltUnitTacticPtr factoryRead(FDataStreamBase*);
+
+        enum BuiltUnitTacticTypes
+        {
+            DiscoverTechUnitTacticID = 0, BuildSpecialBuildingUnitTacticID = 1, CreateGreatWorkUnitTacticID = 2,
+            TradeMissionUnitTacticID = 3, JoinCityUnitTacticID = 4, HurryBuildingUnitTacticID = 5 
+        };
     };
 
     class ICityUnitTactic
@@ -188,6 +202,13 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         static ICityUnitTacticPtr factoryRead(FDataStreamBase*);
+
+        enum UnitTacticTypes
+        {
+            CityDefenceUnitTacticID = 0, ThisCityDefenceUnitTacticID = 1, CityAttackUnitTacticID = 2, CollateralUnitTacticID = 3,
+            FieldDefenceUnitTacticID = 4, FieldAttackUnitTacticID = 5, BuildCityUnitTacticID = 6, BuildImprovementsUnitTacticID = 7,
+            SeaAttackUnitTacticID = 8, ScoutUnitTacticID = 9, SpreadReligionUnitTacticID = 10
+        };
     };
 
 	struct IProjectionEvent;
@@ -222,7 +243,7 @@ namespace AltAI
         virtual const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const = 0;
         virtual void update(Player&, const CityDataPtr&) = 0;
         virtual void updateDependencies(Player&, const CvCity*) = 0;
-        virtual bool areDependenciesSatisfied(int) const = 0;
+        virtual bool areDependenciesSatisfied(int depTacticFlags) const = 0;
         virtual void apply(TacticSelectionData&) = 0;
         virtual void apply(TacticSelectionDataMap&, int) = 0;
 
@@ -238,9 +259,16 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         // given the set of ignore flags, what dependent items do we have left?
-        std::vector<DependencyItem> getDepItems(int ignoreFlags) const;
+        std::vector<DependencyItem> getDepItems(int depTacticFlags) const;
+        // given the set of ignore flags, what build items does that generate?
+        std::vector<BuildQueueItem > getBuildItems(int depTacticFlags) const;
 
         static ICityBuildingTacticsPtr factoryRead(FDataStreamBase*);
+    };
+
+    struct ICityBuildingTacticsBuildingComp
+    {
+        bool operator() (const ICityBuildingTacticsPtr& pFirstTactic, const ICityBuildingTacticsPtr& pSecondTactic) const;
     };
 
     class IGlobalBuildingTactics;
@@ -254,7 +282,7 @@ namespace AltAI
         virtual void update(Player&) = 0;
         virtual void update(Player&, const CityDataPtr&) = 0;
         virtual void updateDependencies(Player&) = 0;
-        virtual bool areDependenciesSatisfied(IDInfo, int) const = 0;
+        virtual bool areDependenciesSatisfied(IDInfo city, int depTacticFlags) const = 0;
         virtual void addCityTactic(IDInfo, const ICityBuildingTacticsPtr&) = 0;
         virtual ICityBuildingTacticsPtr getCityTactics(IDInfo) const = 0;
         virtual void apply(TacticSelectionDataMap&, int) = 0;
@@ -289,7 +317,7 @@ namespace AltAI
         virtual void updateDependencies(const Player&) = 0;
         virtual ProjectionLadder getProjection(IDInfo) const = 0;
         virtual ProcessTypes getProcessType() const = 0;
-        virtual bool areDependenciesSatisfied(const Player& player, int ignoreFlags) const = 0;
+        virtual bool areDependenciesSatisfied(const Player& player, int depTacticFlags) const = 0;
 
         virtual void debug(std::ostream&) const = 0;
 
@@ -325,6 +353,12 @@ namespace AltAI
         virtual const int getID() const = 0;
 
         static ITechTacticPtr factoryRead(FDataStreamBase*);
+
+        enum TechTacticTypes
+        {
+            FreeTechTacticID = 0, FoundReligionTechTacticID = 1, ConnectsResourcesTechTacticID = 2, 
+            ConstructBuildingTechTacticID = 3, ProvidesResourceTechTacticID = 4, EconomicTechTacticID = 5
+        };
     };
 
     class ITechTactics
@@ -372,6 +406,11 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         static ICivicTacticPtr factoryRead(FDataStreamBase*);
+
+        enum CivicTacticTypes
+        {
+            EconomicCivicTacticID = 0, HurryCivicTacticID = 1, HappyPoliceCivicTacticID = 2            
+        };
     };
 
     class ResourceTactics;
@@ -395,5 +434,38 @@ namespace AltAI
         virtual void read(FDataStreamBase*) = 0;
 
         static IResourceTacticPtr factoryRead(FDataStreamBase*);
+
+        enum ResourceTacticTypes
+        {
+            EconomicResourceTacticID = 0, UnitResourceTacticID = 1, BuildingResourceTacticID = 2
+        };
+    };
+
+    class ReligionTactics;
+    typedef boost::shared_ptr<ReligionTactics> ReligionTacticsPtr;
+
+    class IReligionTactic;
+    typedef boost::shared_ptr<IReligionTactic> IReligionTacticPtr;
+
+    class IReligionTactic
+    {
+    public:
+        virtual ~IReligionTactic() = 0 {}
+
+        virtual void debug(std::ostream& os) const = 0;
+
+        virtual void update(const ReligionTacticsPtr&, Player&) = 0;
+        virtual void update(const ReligionTacticsPtr&, City&) = 0;
+        virtual void apply(const ReligionTacticsPtr&, TacticSelectionData&) = 0;
+
+        virtual void write(FDataStreamBase*) const = 0;
+        virtual void read(FDataStreamBase*) = 0;
+
+        static IReligionTacticPtr factoryRead(FDataStreamBase*);
+
+        enum ReligionTacticTypes
+        {
+            EconomicReligionTacticID = 0, UnitReligionTacticID = 1
+        };
     };
 }

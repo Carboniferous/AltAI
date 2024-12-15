@@ -105,6 +105,7 @@ namespace AltAI
     };
 
     std::vector<UnitData> makeUnitData(const std::set<IDInfo>& units);
+    std::vector<UnitData> makeUnitData(const std::vector<const CvUnit*>& units);
 
     struct CombatData
     {

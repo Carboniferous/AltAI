@@ -16,9 +16,9 @@
 
 namespace AltAI
 {
-    void ResourceTactics::addTactic(const IResourceTacticPtr& pCivicTactic)
+    void ResourceTactics::addTactic(const IResourceTacticPtr& pResourceTactic)
     {
-        resourceTactics_.push_back(pCivicTactic);
+        resourceTactics_.push_back(pResourceTactic);
     }
 
     void ResourceTactics::setTechDependency(const ResearchTechDependencyPtr& pTechDependency)
@@ -45,6 +45,7 @@ namespace AltAI
             (*tacticIter)->update(shared_from_this(), player);
         }
 
+        lastTurnCalculated_ = gGlobals.getGame().getGameTurn();
     }
 
     void ResourceTactics::updateDependencies(const Player& player)
@@ -55,9 +56,9 @@ namespace AltAI
         }
     }
 
-    void ResourceTactics::apply(TacticSelectionDataMap& selectionDataMap, int ignoreFlags)
+    void ResourceTactics::apply(TacticSelectionDataMap& selectionDataMap, int depTacticFlags)
     {
-        if (!(ignoreFlags & IDependentTactic::Ignore_Techs))
+        if (!(depTacticFlags & IDependentTactic::Tech_Dep))
         {
             PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
             if (pPlayer->getTechResearchDepth(techDependency_->getResearchTech()) > 3)
@@ -84,6 +85,7 @@ namespace AltAI
     void ResourceTactics::apply(TacticSelectionData& selectionData)
     {
         PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
+
         if (pPlayer->getTechResearchDepth(techDependency_->getResearchTech()) > 2)
         {
             return;
@@ -111,6 +113,11 @@ namespace AltAI
         return techDependency_;
     }
 
+    int ResourceTactics::getTurnLastUpdated() const
+    {
+        return lastTurnCalculated_;
+    }
+
     void ResourceTactics::debug(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
@@ -128,7 +135,7 @@ namespace AltAI
 
     void ResourceTactics::write(FDataStreamBase* pStream) const
     {
-        pStream->Write(ID);
+        pStream->Write(ResourceTacticsID);
         pStream->Write(bonusType_);
     }
 
@@ -150,7 +157,7 @@ namespace AltAI
             pResourceTactics = ResourceTacticsPtr(new ResourceTactics());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in ResourceTactics::factoryRead");
+            FAssertMsg(false, "Unexpected ID in ResourceTactics::factoryRead");
             break;
         }
 
@@ -219,8 +226,8 @@ namespace AltAI
                 continue;
             }
 
+            accumulatedDelta += ci->second.first.getOutput();
             accumulatedBase += ci->second.second.getOutput();
-            accumulatedDelta += ci->second.first.getOutput() - ci->second.second.getOutput();
 
             /*if (!isEmpty(delta))
             {
@@ -234,7 +241,7 @@ namespace AltAI
             }*/
         }
         selectionData.potentialResourceOutputDeltas[pResourceTactics->getBonusType()].first += accumulatedDelta;
-        selectionData.potentialResourceOutputDeltas[pResourceTactics->getBonusType()].second += asPercentageOf(accumulatedDelta, accumulatedBase);
+        selectionData.potentialResourceOutputDeltas[pResourceTactics->getBonusType()].second += accumulatedBase;
     }
 
     void EconomicResourceTactic::write(FDataStreamBase* pStream) const
@@ -324,7 +331,7 @@ namespace AltAI
 
     void BuildingResourceTactic::apply(const ResourceTacticsPtr& pResourceTactics, TacticSelectionData& selectionData)
     {
-        selectionData.potentialAcceleratedBuildings[pResourceTactics->getBonusType()].push_back(buildingType_);
+        //selectionData.potentialAcceleratedBuildings[pResourceTactics->getBonusType()].push_back(buildingType_);
 //#ifdef ALTAI_DEBUG
 //        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pResourceTactics->getPlayerType()))->getStream();
 //        os << " found building: " << gGlobals.getBuildingInfo(buildingType_).getType()

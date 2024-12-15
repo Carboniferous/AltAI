@@ -40,6 +40,11 @@ namespace AltAI
         return os << (node.isWater ? "requires water, " : "") << " min area size = " << node.minimumSize;
     }
 
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::IsHolyCity& node)
+    {
+        return os << "requires city to have founded religion: " << gGlobals.getReligionInfo(node.religionType).getType();
+    }
+
     std::ostream& operator << (std::ostream& os, const BuildingInfo::BuildOrCondition& node)
     {
         for (size_t i = 0, count = node.conditions.size(); i < count; ++i)
@@ -264,22 +269,32 @@ namespace AltAI
         return os;
     }
 
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::UnitNode& node)
+    {
+        os << "\n\t";
+        if (node.enabledUnitType != NO_UNIT)
+        {
+            os << " enables: " << gGlobals.getUnitInfo(node.enabledUnitType).getType();
+        }
+		return os;
+    }
+
     std::ostream& operator << (std::ostream& os, const BuildingInfo::SpecialistSlotNode& node)
     {
         ShowPos showpos(os);
         os << "\n\t";
         for (size_t i = 0, count = node.specialistTypes.size(); i < count; ++i)
         {
-            os << " gives " << node.specialistTypes[i].second << (node.specialistTypes[i].second == 1 ? " slot" :  " slots")
+            os << node.specialistTypes[i].second << (node.specialistTypes[i].second == 1 ? " slot" :  " slots")
                 << " for type: " << gGlobals.getSpecialistInfo(node.specialistTypes[i].first).getType();
         }
         for (size_t i = 0, count = node.freeSpecialistTypes.size(); i < count; ++i)
         {
-            os << " gives " << node.freeSpecialistTypes[i].second << " free specialists of type: " << gGlobals.getSpecialistInfo(node.freeSpecialistTypes[i].first).getType();
+            os << node.freeSpecialistTypes[i].second << " free specialists of type: " << gGlobals.getSpecialistInfo(node.freeSpecialistTypes[i].first).getType();
         }
         for (size_t i = 0, count = node.improvementFreeSpecialists.size(); i < count; ++i)
         {
-            os << " gives " << node.improvementFreeSpecialists[i].second << " free specialists for improvement: " << gGlobals.getImprovementInfo(node.improvementFreeSpecialists[i].first).getType();
+            os << node.improvementFreeSpecialists[i].second << " free specialists for improvement: " << gGlobals.getImprovementInfo(node.improvementFreeSpecialists[i].first).getType();
         }
         return os;
     }
@@ -488,5 +503,10 @@ namespace AltAI
             os << " global happy change = " << node.globalHappy;
         }
         return os;
+    }
+
+    void streamBuildingInfo(std::ostream& os, const boost::shared_ptr<BuildingInfo>& pBuildingInfo)
+    {
+        os << pBuildingInfo->getInfo();
     }
 }

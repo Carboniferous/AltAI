@@ -10,6 +10,7 @@
 #include "./unit.h"
 #include "./plot_info.h"
 #include "./gamedata_analysis.h"
+#include "./religion_tactics.h"
 #include "./player_analysis.h"
 #include "./opponents.h"
 #include "./map_analysis.h"
@@ -104,6 +105,24 @@ namespace AltAI
         pSettlerManager_->analysePlotValues();
 
         //calcCivics_();
+
+        // todo - save this data so we don't need to recalc it
+        TeamIter teamIter;
+        const CvTeamAI& refOurTeam = CvTeamAI::getTeam(pPlayer_->getTeam());
+        while (const CvTeamAI* pTeam = teamIter())
+        {
+            if (pTeam->getID() != refOurTeam.getID() && refOurTeam.isHasMet(pTeam->getID()))
+            {
+                PlayerIter playerIter(pTeam->getID());
+                while (const CvPlayerAI* player = playerIter())
+                {
+                    pOpponentsAnalysis_->addPlayer(player);
+#ifdef ALTAI_DEBUG
+                    os << "\nAdding met team: " << pTeam->getID() << " player: " << narrow(player->getName());
+#endif
+                }
+            }
+        }
     }
 
     void Player::doTurn()
@@ -126,6 +145,8 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             {
                 std::ostream& os = CivLog::getLog(*pPlayer_)->getStream();
+                pOpponentsAnalysis_->debug(os);
+
                 for (CityMap::iterator iter(cities_.begin()), endIter(cities_.end()); iter != endIter; ++iter)
                 {
                     std::pair<int, int> rank = getCityRank(iter->second->getCvCity()->getIDInfo(), OUTPUT_PRODUCTION);
@@ -142,7 +163,7 @@ namespace AltAI
             {
                 boost::shared_ptr<UnitLog> pUnitLog = UnitLog::getLog(*pPlayer_);
                 std::ostream& os = pUnitLog->getStream();
-                os << "\nTurn = " << gGlobals.getGame().getGameTurn() << __FUNCTION__;
+                os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " " << __FUNCTION__;
                 pUnitLog->logSelectionGroups();
             }
 
@@ -154,6 +175,12 @@ namespace AltAI
     // called from load game and init game
     void Player::addCity(CvCity* pCity)
     {
+        // to workaround having to dynamically call addCity in some city capture scenarios
+        // where tactic initialisation requires the City object
+        if (cities_.find(pCity->getID()) != cities_.end())
+        {
+            return;
+        }
         CityPtr ptrCity(new City(pCity));
         CityMap::iterator cityIter = cities_.insert(std::make_pair(pCity->getID(), ptrCity)).first;
 
@@ -167,6 +194,7 @@ namespace AltAI
                 pPlayerAnalysis_->analyseSpecialists();
             }*/
             pPlayerAnalysis_->getMilitaryAnalysis()->addOurCity(pCity);
+            pPlayerAnalysis_->getReligionAnalysis()->addCity(pCity);
         }
 
         citiesToInit_.insert(pCity->getID());
@@ -229,6 +257,16 @@ namespace AltAI
         pPlayerAnalysis_->getMapAnalysis()->recalcPlotInfo();
     }
 
+    void Player::reinitDotMap()
+    {
+        pPlayerAnalysis_->getMapAnalysis()->reinitDotMap();
+    }
+
+    void Player::reinitPlotKeys()
+    {
+        pPlayerAnalysis_->getMapAnalysis()->reinitPlotKeys();
+    }
+
     City& Player::getCity(const CvCity* pCity)
     {
         return getCity(pCity->getID());
@@ -251,17 +289,26 @@ namespace AltAI
         {
             return *iter->second;
         }
-
+        else
         {
-            FAssertMsg(false, "Failed to find city entry");
-            boost::shared_ptr<ErrorLog> pErrorLog = ErrorLog::getLog(*pPlayer_);
-            std::ostream& os = pErrorLog->getStream();
-
-            std::ostringstream oss;
-            oss << "\nFailed to find city with ID: " << ID << "\n";
-            os << oss.str();
-            throw std::runtime_error(oss.str());  // todo - change this to fatal error message
+            // assume ID refers to a valid CvCity object to just call addCity using that first
+            // this happens for example if capturing a city which has a religion we didn't already have
+            // which in turn creates some tactic objects which loop over our cities
+            // this mess indicates problems with complex initialisation logic
+            addCity(::getCity(IDInfo(pPlayer_->getID(), ID)));
+            return getCity(ID);
         }
+
+        //{
+        //    FAssertMsg(false, "Failed to find city entry");
+        //    boost::shared_ptr<ErrorLog> pErrorLog = ErrorLog::getLog(*pPlayer_);
+        //    std::ostream& os = pErrorLog->getStream();
+
+        //    std::ostringstream oss;
+        //    oss << "\nFailed to find city with ID: " << ID << "\n";
+        //    os << oss.str();
+        //    throw std::runtime_error(oss.str());  // todo - change this to fatal error message
+        //}
     }
 
     const City& Player::getCity(const int ID) const
@@ -314,7 +361,7 @@ namespace AltAI
             CvWString unitAITypeString;
             getUnitAIString(unitAITypeString, pUnit->AI_getUnitAIType());
 
-            os << "\nUnit (ID=" << pUnit->getID() << ") created, player = " << pUnit->getOwner()
+            os << "\nTurn: " << gGlobals.getGame().getGameTurn() << " Unit (ID=" << pUnit->getID() << ") created, player = " << pUnit->getOwner()
                 << ", ai type = " << narrow(unitAITypeString)
                 << ", target = " << unit.getAction().targetPlot << "\n";
 #endif
@@ -1376,7 +1423,7 @@ namespace AltAI
         debugSelectionGroup(pGroup, os);
         os << ", pushed mission: " << narrow(missionString.GetCString())
            << " type = " << narrow(missionTypeString.GetCString())
-           << " to plot: " << (pMissionAIPlot ? pMissionAIPlot->getCoords() : XYCoords(-1, -1))
+           << " to plot: " << (pMissionAIPlot ? pMissionAIPlot->getCoords() : XYCoords())
            << " for unit: " << (pMissionAIUnit ? gGlobals.getUnitInfo(pMissionAIUnit->getUnitType()).getType() : "NO_UNIT")
            << " (iData1 = " << missionData.iData1 << ", iData2 = " << missionData.iData2 << ", iFlags = " << missionData.iFlags << ")";
         if (callingFunction)
@@ -1552,7 +1599,7 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                 os << "\nMet team: " << teamType << " player: " << narrow(player->getName());
 #endif
-           }
+            }
         }
     }
 
@@ -1766,6 +1813,11 @@ namespace AltAI
             researchTech_ = researchTech;
         }
         return researchTech.techType;
+    }
+
+    CivicTypes Player::chooseCivic(CivicOptionTypes civicOptionType)
+    {
+        return pPlayerAnalysis_->chooseCivic(civicOptionType);
     }
 
     std::pair<int, int> Player::getCityRank(IDInfo city, OutputTypes outputType) const

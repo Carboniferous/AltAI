@@ -5,6 +5,40 @@
 
 namespace AltAI
 {
+    ProjectionLadder::PlotDiff::PlotDiff(const PlotData& plotData, bool isNewWorked_, bool isOldWorked_)
+        : coords(plotData.coords), improvementType(plotData.improvementType), 
+          plotYield(plotData.plotYield), actualOutput(plotData.actualOutput),
+          isWorked(isNewWorked_), wasWorked(isOldWorked_)
+    {
+    }
+
+    void ProjectionLadder::PlotDiff::debug(std::ostream& os) const
+    {
+        bool isActualPlot = coords.iX != -1;
+        if (isWorked && !wasWorked)
+        {
+            os << " new: ";
+        }
+        else if (!isWorked && wasWorked)
+        {
+            os << " old: ";
+        }
+        else
+        {
+            os << " change: ";
+        }
+
+        if (isActualPlot)
+        {            
+            os << coords << " " << plotYield << "" << actualOutput;
+        }
+        else
+        {
+            const CvSpecialistInfo& specInfo = gGlobals.getSpecialistInfo((SpecialistTypes)coords.iY);
+            os << " " << specInfo.getType() << " " << actualOutput;
+        }
+    }
+
     void ProjectionLadder::ConstructedUnit::debug(std::ostream& os) const
     {
         os << " Unit: " << (unitType == NO_UNIT ? "none" : gGlobals.getUnitInfo(unitType).getType())
@@ -84,6 +118,25 @@ namespace AltAI
             os << "\n\t" << comparisons.size() << " comparisons: ";
             comparisons[0].debug(os);
         }*/
+    }
+
+    void ProjectionLadder::debugDiffs(std::ostream& os) const
+    {
+        int turn = 0;
+        for (size_t i = 0, count = workedPlotDiffs.size(); i < count; ++i)
+        {
+            turn += entries[i].turns;
+            os << "\n\t t = " << turn;
+            if (workedPlotDiffs[i].empty())
+            {
+                os << " (none) ";
+            }
+            for (PlotDiffList::const_iterator iter(workedPlotDiffs[i].begin()), endIter(workedPlotDiffs[i].end());
+                iter != endIter; ++iter)
+            {
+                iter->debug(os);
+            }
+        }
     }
 
     TotalOutput ProjectionLadder::getOutput() const

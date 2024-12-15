@@ -1,14 +1,23 @@
 #include "AltAI.h"
 
 #include "./military_tactics.h"
+#include "./unit_history.h"
 #include "./unit_mission.h"
+#include "./unit_mission_helper.h"
+#include "./unit_counter_mission.h"
+#include "./unit_escort_mission.h"
+#include "./unit_city_defence_mission.h"
+#include "./coastal_defence_mission.h"
 #include "./city_defence.h"
 #include "./worker_tactics.h"
 #include "./player_analysis.h"
+#include "./religion_tactics.h"
 #include "./unit_analysis.h"
 #include "./unit_tactics.h"
+#include "./city_unit_tactics.h"
 #include "./game.h"
 #include "./player.h"
+#include "./city.h"
 #include "./settler_manager.h"
 #include "./unit_explore.h"
 #include "./map_analysis.h"
@@ -19,46 +28,10 @@
 #include "./unit_log.h"
 #include "./helper_fns.h"
 
-#include "../CvGameCoreDLL/CvDLLEngineIFaceBase.h"
-#include "../CvGameCoreDLL/CvDLLFAStarIFaceBase.h"
-#include "../CvGameCoreDLL/CvGameCoreUtils.h"
-#include "../CvGameCoreDLL/FAStarNode.h"
-
-
 namespace AltAI
 {
     namespace
     {
-        void getOverlapAndNeighbourPlots(const PlotSet& theirPlots, const PlotSet& ourPlots, 
-            PlotSet& sharedPlots, PlotSet& neighbourPlots)
-        {
-            for (PlotSet::const_iterator ourIter(ourPlots.begin()), ourEndIter(ourPlots.end()); ourIter != ourEndIter; ++ourIter)
-            {
-                PlotSet::const_iterator theirIter(theirPlots.find(*ourIter));
-                if (theirIter != theirPlots.end())
-                {
-                    sharedPlots.insert(*ourIter);
-                }
-                else
-                {
-                    NeighbourPlotIter plotIter(*ourIter);
-
-                    while (IterPlot pLoopPlot = plotIter())
-                    {
-                        if (pLoopPlot.valid())
-                        {
-                            theirIter = theirPlots.find(pLoopPlot);
-                            if (theirIter != theirPlots.end())
-                            {
-                                neighbourPlots.insert(*ourIter);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }    
-
         std::set<IDInfo> getNearbyCities(const Player& player, int subArea, const PlotSet& plots)
         {
             std::set<IDInfo> nearbyCities;
@@ -94,23 +67,6 @@ namespace AltAI
             std::vector<IDInfo> existingUnits;
         };
 
-        struct CanFoundP
-        {
-            bool operator () (IDInfo unit) const
-            {
-                const CvUnit* pUnit = ::getUnit(unit);
-                return pUnit && pUnit->isFound();
-            }
-        };
-
-        struct GroupPathComp
-        {
-            bool operator () (const std::pair<CvSelectionGroup*, UnitPathData>& groupPathData1, const std::pair<CvSelectionGroup*, UnitPathData>& groupPathData2) const
-            {
-                return groupPathData1.second.pathTurns < groupPathData2.second.pathTurns;
-            }
-        };
-
         struct UnitAttackOrderComp
         {
             bool operator () (const CvUnit* pUnit1, const CvUnit* pUnit2) const
@@ -132,56 +88,81 @@ namespace AltAI
             std::list<std::pair<XYCoords, CombatGraph::Data> > defenceData;
         };
 
-        struct MissionFinder
+        struct CityDistanceComp
         {
-            MissionFinder() : missionType(NO_MISSIONAI) {}
-            MissionAITypes missionType;
-            IDInfo city, targetUnit, ourUnit;
-            XYCoords targetCoords;
-
-            bool operator() (const MilitaryMissionDataPtr& pMission) const
+            bool operator() (const std::pair<IDInfo, int>& first, const std::pair<IDInfo, int>& second) const
             {
-                bool isMatch = true;
-                if (missionType != NO_MISSIONAI)
-                {
-                    isMatch = isMatch && pMission->missionType == missionType;
-                }
-
-                if (city != IDInfo())
-                {
-                    isMatch = isMatch && pMission->targetCity == city;
-                }
-
-                if (targetUnit != IDInfo())
-                {
-                    bool found = pMission->targetUnits.find(targetUnit) != pMission->targetUnits.end();
-                    if (!found && !pMission->specialTargets.empty())
-                    {
-                        found = pMission->specialTargets.find(targetUnit) != pMission->specialTargets.end();
-                    }
-                    isMatch = isMatch && found;
-                }
-
-                if (ourUnit != IDInfo())
-                {
-                    isMatch = isMatch && pMission->assignedUnits.find(ourUnit) != pMission->assignedUnits.end();;
-                }
-
-                return isMatch;
+                return first.second < second.second;
             }
         };
 
-        struct MissionPlotProximity
+        struct CounterMissionPriorityComp
         {
-            MissionPlotProximity(int maxStepDistance_, XYCoords targetCoords_) : maxStepDistance(maxStepDistance_), targetCoords(targetCoords_) {}
-
-            bool operator() ( XYCoords coords) const
+            bool operator() (const MilitaryMissionDataPtr& pFirstMission, const MilitaryMissionDataPtr& pSecondMission) const
             {
-                return stepDistance(coords.iX, coords.iY, targetCoords.iX, targetCoords.iY) <= maxStepDistance;
+                // if missions have calculated city attack odds, choose one with highest chances
+                float firstMissionMaxHostileAttackOdds = 0.0f, secondMissionMaxHostileAttackOdds = 0.0f;
+                for (std::map<IDInfo, CombatGraph::Data>::const_iterator aIter(pFirstMission->cityAttackOdds.begin()), aEndIter(pFirstMission->cityAttackOdds.end()); aIter != aEndIter; ++aIter)
+                {
+                    firstMissionMaxHostileAttackOdds = std::max<float>(firstMissionMaxHostileAttackOdds, aIter->second.pWin);
+                }
+                for (std::map<IDInfo, CombatGraph::Data>::const_iterator aIter(pSecondMission->cityAttackOdds.begin()), aEndIter(pSecondMission->cityAttackOdds.end()); aIter != aEndIter; ++aIter)
+                {
+                    secondMissionMaxHostileAttackOdds = std::max<float>(secondMissionMaxHostileAttackOdds, aIter->second.pWin);
+                }
+                if (firstMissionMaxHostileAttackOdds > 0.0 || secondMissionMaxHostileAttackOdds > 0.0)
+                {
+                    return firstMissionMaxHostileAttackOdds > secondMissionMaxHostileAttackOdds;
+                }
+
+                int firstClosestCityDistance = MAX_INT, secondClosestCityDistance = MAX_INT;
+                if (!isEmpty(pFirstMission->closestCity))
+                {
+                    const CvCity* pCity = ::getCity(pFirstMission->closestCity);
+                    firstClosestCityDistance = stepDistance(pCity->plot()->getX(), pCity->plot()->getY(), newUnitCoords.iX, newUnitCoords.iY);
+                }
+                if (!isEmpty(pSecondMission->closestCity))
+                {
+                    const CvCity* pCity = ::getCity(pSecondMission->closestCity);
+                    secondClosestCityDistance = stepDistance(pCity->plot()->getX(), pCity->plot()->getY(), newUnitCoords.iX, newUnitCoords.iY);
+                }
+                if (firstClosestCityDistance != secondClosestCityDistance)
+                {
+                    return firstClosestCityDistance < secondClosestCityDistance;
+                }
+
+                int firstMinTargetDistance = MAX_INT, secondMinTargetDistance = MAX_INT;
+                for (std::set<IDInfo>::const_iterator tIter(pFirstMission->targetUnits.begin()), tEndIter(pFirstMission->targetUnits.end()); tIter != tEndIter; ++tIter)
+                {
+                    const CvUnit* pUnit = ::getUnit(*tIter);
+                    if (pUnit)
+                    {
+                        int thisTargetDistance = stepDistance(pUnit->plot()->getX(), pUnit->plot()->getY(), newUnitCoords.iX, newUnitCoords.iY);
+                        firstMinTargetDistance = std::min<int>(firstMinTargetDistance, thisTargetDistance);
+                    }
+                }
+                for (std::set<IDInfo>::const_iterator tIter(pSecondMission->targetUnits.begin()), tEndIter(pSecondMission->targetUnits.end()); tIter != tEndIter; ++tIter)
+                {
+                    const CvUnit* pUnit = ::getUnit(*tIter);
+                    if (pUnit)
+                    {
+                        int thisTargetDistance = stepDistance(pUnit->plot()->getX(), pUnit->plot()->getY(), newUnitCoords.iX, newUnitCoords.iY);
+                        secondMinTargetDistance = std::min<int>(secondMinTargetDistance, thisTargetDistance);
+                    }
+                }
+                if (firstMinTargetDistance != secondMinTargetDistance)
+                {
+                    return firstMinTargetDistance < secondMinTargetDistance;
+                }
+
+                const CvPlot* pFirstTarget = pFirstMission->getTargetPlot();
+                const CvPlot* pSecondTarget = pSecondMission->getTargetPlot();
+                firstMinTargetDistance = pFirstTarget ? stepDistance(pFirstTarget->getX(), pFirstTarget->getY(), newUnitCoords.iX, newUnitCoords.iY) : MAX_INT;
+                secondMinTargetDistance = pSecondTarget ? stepDistance(pSecondTarget->getX(), pSecondTarget->getY(), newUnitCoords.iX, newUnitCoords.iY) : MAX_INT;
+                return firstMinTargetDistance < secondMinTargetDistance;
             }
 
-            int maxStepDistance;
-            XYCoords targetCoords;
+            XYCoords newUnitCoords;
         };
     }
 
@@ -194,45 +175,6 @@ namespace AltAI
         };
         static const size_t CategoryCount = 9;
 
-        struct UnitHistory
-        {
-            UnitHistory() {}
-            UnitHistory(const IDInfo& unit_, XYCoords coords) : unit(unit_)
-            {
-                locationHistory.push_front(std::make_pair(gGlobals.getGame().getGameTurn(), coords));
-            }
-
-            void write(FDataStreamBase* pStream) const
-            {
-                unit.write(pStream);
-                pStream->Write(locationHistory.size());
-                for (std::list<std::pair<int, XYCoords> >::const_iterator ci(locationHistory.begin()), ciEnd(locationHistory.end()); ci != ciEnd; ++ci)
-                {
-                    pStream->Write(ci->first);
-                    ci->second.write(pStream);
-                }
-            }
-
-            void read(FDataStreamBase* pStream)
-            {
-                unit.read(pStream);
-                locationHistory.clear();
-                size_t count = 0;
-                pStream->Read(&count);
-                for (size_t i = 0; i < count; ++i)
-                {
-                    int turn;
-                    XYCoords coords;
-                    pStream->Read(&turn);
-                    coords.read(pStream);
-                    locationHistory.push_back(std::make_pair(turn, coords));
-                }
-            }
-
-            IDInfo unit;
-            std::list<std::pair<int, XYCoords> > locationHistory;
-        };
-
         explicit MilitaryAnalysisImpl(Player& player)
             : player_(player), pCityDefenceAnalysis_(new CityDefenceAnalysis(player))
         {   
@@ -240,340 +182,19 @@ namespace AltAI
 
         void update()
         {
-            const int currentTurn = gGlobals.getGame().getGameTurn();
 #ifdef ALTAI_DEBUG
             std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
-            os << "\nTurn = " << currentTurn << " " << __FUNCTION__;
+            os << "\nTurn = " << gGlobals.getGame().getGameTurn() << " " << __FUNCTION__;
 #endif
             updateStacks_();
+            updateMissionRequirements_();
             
-            std::vector<std::pair<IDInfo, XYCoords> > targetsToErase;
-            // loop over all our missions - updating requirements
-            // todo - sort mission list by priority
-            for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()); missionsIter != missionList_.end();)
-            {
-                MissionAITypes missionAIType = (*missionsIter)->missionType;
-                if (missionAIType == MISSIONAI_COUNTER || missionAIType == MISSIONAI_COUNTER_CITY || 
-                    missionAIType == MISSIONAI_GUARD_CITY || missionAIType == MISSIONAI_RESERVE || missionAIType == MISSIONAI_EXPLORE)
-                {
-                    (*missionsIter)->resetDynamicData();
+            updateAttackCombatMap_();
+            updateDefenceCombatMap_();            
 
-                    if (missionAIType == MISSIONAI_COUNTER || missionAIType == MISSIONAI_COUNTER_CITY)
-                    {
-                        int subAreaId = -1;
-                        bool updateRequiredUnits = (*missionsIter)->assignedUnits.empty(), updateHostiles = false;
-                        PlotUnitsMap targetStacks;
+            updateMissions_();
 
-                        // update our reachable plots
-                        (*missionsIter)->updateReachablePlots(player_, true, true, true);
-
-                        for (std::set<IDInfo>::iterator targetsIter((*missionsIter)->targetUnits.begin()), targetsEndIter((*missionsIter)->targetUnits.end());
-                            targetsIter != targetsEndIter;)
-                        {
-                            std::map<IDInfo, UnitHistory>::iterator hIter = unitHistories_.find(*targetsIter);
-                            if (hIter != unitHistories_.end() && !hIter->second.locationHistory.empty())
-                            {
-                                int whenLastSeen = currentTurn - hIter->second.locationHistory.begin()->first;
-                                updateHostiles = whenLastSeen == 0;
-
-                                XYCoords whereLastSeen = hIter->second.locationHistory.begin()->second;
-                                const CvPlot* pStackPlot = gGlobals.getMap().plot(whereLastSeen.iX, whereLastSeen.iY);
-                                subAreaId = pStackPlot->getSubArea();
-
-                                const CvUnit* pTargetUnit = ::getUnit(*targetsIter);
-                                if (pTargetUnit)
-                                {
-                                    // may want to be smarter here to handle a partial update...?
-                                    // as unit was seen in order to be in unitHistory, don't need to recheck for visibility
-                                    targetStacks[pStackPlot].push_back(pTargetUnit);  
-                                }
-
-                                bool stackPlotIsCity = pStackPlot->isCity(); // presume we've seen the city if there is one
-                                CombatGraph::Data endStates = getNearestCityAttackOdds(*missionsIter);
-                                updateRequiredUnits = stackPlotIsCity || endStates.pWin > hostileAttackThreshold;  // indicates less than 80% chance of our units' survival
-#ifdef ALTAI_DEBUG
-                            
-                                const CvPlot* pClosestCityPlot = player_.getAnalysis()->getMapAnalysis()->getClosestCity(pStackPlot, pStackPlot->getSubArea(), false);
-                                os << "\nTarget: " << *targetsIter << " last seen " << whenLastSeen << " turn(s) ago at: " << whereLastSeen
-                                    << " closest city: " << safeGetCityName(pClosestCityPlot->getPlotCity());
-                                if (stackPlotIsCity) os << " target in city: " << safeGetCityName(pStackPlot->getPlotCity());
-                                if (pClosestCityPlot)
-                                {
-                                    os << " distance = " << plotDistance(whereLastSeen.iX, whereLastSeen.iY, pClosestCityPlot->getX(), pClosestCityPlot->getY());
-                                    endStates.debug(os);
-                                }
-#endif
-                                if (pClosestCityPlot)
-                                {
-                                    (*missionsIter)->closestCity = pClosestCityPlot->getPlotCity()->getIDInfo();
-                                }
-                                
-                                if (!stackPlotIsCity && whenLastSeen > 2 || stackPlotIsCity && whenLastSeen > 10)
-                                {
-#ifdef ALTAI_DEBUG
-                                    os << "\n clearing hostile's reachable plots for mission: " << (unsigned long)(missionsIter->get());
-#endif
-                                    (*missionsIter)->hostilesReachablePlots.clear();
-
-                                    if (whenLastSeen > 4)
-                                    {
-#ifdef ALTAI_DEBUG
-                                        os << "\nRemoving target from mission (" << *missionsIter << ") - target lost " << *targetsIter;
-                                        if (hostileUnitsMissionMap_.find(*targetsIter) != hostileUnitsMissionMap_.end())
-                                        {
-                                            os << " erasing mission target from map " << *targetsIter;
-                                        }
-#endif
-                                        targetsToErase.push_back(std::make_pair(*targetsIter, whereLastSeen));
-                                    }
-                                }
-                            }
-                            else
-                            {
-#ifdef ALTAI_DEBUG
-                                os << "\nTarget unit for mission not found in history for mission: " << *missionsIter;
-#endif
-                                if (!(*missionsIter)->hostilesReachablePlots.empty())
-                                {
-#ifdef ALTAI_DEBUG
-                                    os << "\n clearing hostile's reachable plots for mission: " << (unsigned long)(missionsIter->get());
-#endif
-                                    (*missionsIter)->hostilesReachablePlots.clear();
-                                }
-
-                            }
-                            ++targetsIter;
-                        }
-
-                        const CvPlot* pTargetPlot = (*missionsIter)->getTargetPlot();
-                        if (subAreaId == -1 && pTargetPlot)
-                        {
-                            subAreaId = pTargetPlot->getSubArea();
-                        }
-
-                        if (updateHostiles)  // update reachable plots
-                        {
-                            (*missionsIter)->hostilesReachablePlots.clear();
-#ifdef ALTAI_DEBUG
-                            os << "\n recalculating reachable plots for mission: " << *missionsIter;
-#endif
-                            for (PlotUnitsMap::const_iterator targetsIter(targetStacks.begin()), targetsEndIter(targetStacks.end()); targetsIter != targetsEndIter; ++targetsIter)
-                            {
-                                (*missionsIter)->updateReachablePlots(player_, false, true, true);
-                            }
-                        }
-
-                        if (subAreaId != -1 && updateRequiredUnits)
-                        {
-                            std::set<IDInfo> availableUnits = getAssignedUnits(MISSIONAI_RESERVE, subAreaId);
-                            std::vector<IDInfo> unitsToReassign = (*missionsIter)->updateRequiredUnits(player_, availableUnits);
-                            for (size_t i = 0, count = unitsToReassign.size(); i < count; ++i)
-                            {
-                                reassignOurUnit_(::getUnit(unitsToReassign[i]), *missionsIter);
-                            }
-                        }
-                    }
-                }
-
-                // temp hack to unlink escort missions for incompatible unit domains
-                if (missionAIType == MISSIONAI_ESCORT_WORKER)
-                {
-                    if (!(*missionsIter)->targetUnits.empty())
-                    {
-                        const CvUnit* pTargetUnit = ::getUnit(*(*missionsIter)->targetUnits.begin());
-                        if (pTargetUnit && pTargetUnit->getDomainType() != DOMAIN_LAND)
-                        {
-#ifdef ALTAI_DEBUG
-                            os << "\nerasing escort mission with incompatible unit domains: ";                      
-#endif
-                            eraseMission_(*missionsIter++);
-                            continue;
-                        }
-                    }
-                }
-
-#ifdef ALTAI_DEBUG
-                (*missionsIter)->debug(os);
-#endif
-                ++missionsIter;
-            }
-
-            for (size_t i = 0, count = targetsToErase.size(); i < count; ++i)
-            {
-                // deletes history completely - may want to reconsider this
-                deletePlayerUnit(targetsToErase[i].first, gGlobals.getMap().plot(targetsToErase[i].second));
-            }
-
-            attackCombatData_.clear();
-            attackCombatMap_ = getAttackableUnitsMap_();
-            for (std::map<XYCoords, CombatData>::const_iterator attIter(attackCombatMap_.begin()), attEndIter(attackCombatMap_.end()); attIter != attEndIter; ++attIter)
-            {
-                CombatGraph combatGraph = getCombatGraph(player_, attIter->second.combatDetails, attIter->second.attackers, attIter->second.defenders);
-                combatGraph.analyseEndStates();
-
-                std::set<MilitaryMissionDataPtr> updatedMissions;
-                for (size_t i = 0, count = attIter->second.defenders.size(); i < count; ++i)
-                {
-                    std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = hostileUnitsMissionMap_.find(attIter->second.defenders[i].unitId);
-                    FAssertMsg(missionIter != hostileUnitsMissionMap_.end(), "Missing hostile unit mission?");
-                    // store which of our units hostile units can attack in hostiles' missions
-                    /*for (size_t j = 0, count = attIter->second.attackers.size(); j < count; ++j)
-                    {                        
-                        missionIter->second->attackableUnits.push_back(attIter->second.attackers[j].unitId);
-                    }*/
-
-                    if (updatedMissions.find(missionIter->second) == updatedMissions.end())
-                    {
-                        missionIter->second->ourAttackOdds = combatGraph.endStatesData;
-                        missionIter->second->ourAttackers = attIter->second.attackers;
-                        if (!attIter->second.attackers.empty())
-                        {
-                            missionIter->second->firstAttacker = attIter->second.attackers[combatGraph.getFirstUnitIndex(true)].unitId;
-                        }
-                        updatedMissions.insert(missionIter->second);
-                        break;
-                    }
-                }
-
-                for (size_t i = 0, count = attIter->second.attackers.size(); i < count; ++i)
-                {
-                    // store which units we can attack in our units' missions
-                    std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = ourUnitsMissionMap_.find(attIter->second.attackers[i].unitId);
-                    FAssertMsg(missionIter != ourUnitsMissionMap_.end(), "Missing our unit mission?");
-                    for (size_t j = 0, count = attIter->second.defenders.size(); j < count; ++j)
-                    {                        
-                        missionIter->second->attackableUnits.insert(attIter->second.defenders[j].unitId);
-                    }
-                }
-                attackCombatData_[attIter->first] = combatGraph.endStatesData;
-
-#ifdef ALTAI_DEBUG
-                os << " \npotential attack combat results for plot: " << attIter->first;
-                combatGraph.endStatesData.debug(os);
-                combatGraph.debugEndStates(os);
-                std::list<IDInfo> attackOrder = combatGraph.getUnitOrdering(combatGraph.endStates.begin());
-                size_t index = 0;
-                for (std::list<IDInfo>::const_iterator attackOrderIter = attackOrder.begin(); attackOrderIter != attackOrder.end(); ++attackOrderIter)
-                {
-                    if (attackOrderIter == attackOrder.begin()) os << "\nAttack order: ";
-                    else os << ", ";
-                    const CvUnit* pUnit = ::getUnit(*attackOrderIter);
-                    os << index++ << ": " << *attackOrderIter << pUnit->getUnitInfo().getType();
-                }
-
-                std::pair<std::list<IDInfo>, std::list<IDInfo> > longestAndShortestAttackOrder = combatGraph.getLongestAndShortestAttackOrder();
-
-                for (std::list<IDInfo>::const_iterator attackOrderIter = longestAndShortestAttackOrder.first.begin(); attackOrderIter != longestAndShortestAttackOrder.first.end(); ++attackOrderIter)
-                {
-                    if (attackOrderIter == longestAndShortestAttackOrder.first.begin()) os << "\nLongest attack order: ";
-                    else os << ", ";
-                    const CvUnit* pUnit = ::getUnit(*attackOrderIter);
-                    os << index++ << ": " << *attackOrderIter << pUnit->getUnitInfo().getType();
-                }
-
-                for (std::list<IDInfo>::const_iterator attackOrderIter = longestAndShortestAttackOrder.second.begin(); attackOrderIter != longestAndShortestAttackOrder.second.end(); ++attackOrderIter)
-                {
-                    if (attackOrderIter == longestAndShortestAttackOrder.second.begin()) os << "\nShortest attack order: ";
-                    else os << ", ";
-                    const CvUnit* pUnit = ::getUnit(*attackOrderIter);
-                    os << index++ << ": " << *attackOrderIter << pUnit->getUnitInfo().getType();
-                }
-#endif
-                //for (size_t defenderIndex = 0, defenderCount = attIter->second.defenders.size(); defenderIndex < defenderCount; ++defenderIndex)
-                //{
-                //    // store combat data v. each hostile
-                //    hostilesCombatData[attIter->second.defenders[defenderIndex].unitId].attackData = std::make_pair(attIter->first, combatGraph.endStatesData);
-                //}
-            }
-
-            defenceCombatData_.clear();
-            defenceCombatMap_ = getAttackingUnitsMap_();
-            std::list<std::pair<XYCoords, double> > plotSurvivalOdds;
-            for (std::map<XYCoords, CombatData>::const_iterator defIter(defenceCombatMap_.begin()), defEndIter(defenceCombatMap_.end()); defIter != defEndIter; ++defIter)
-            {
-                CombatGraph combatGraph = getCombatGraph(player_, defIter->second.combatDetails, defIter->second.attackers, defIter->second.defenders);
-                combatGraph.analyseEndStates();
-                plotSurvivalOdds.push_back(std::make_pair(defIter->first, combatGraph.endStatesData.pLoss));  // we are the defenders; odds are wrt attackers
-
-                std::set<MilitaryMissionDataPtr> updatedHostilesMissions, ourUpdatedMissions;
-                for (size_t i = 0, count = defIter->second.attackers.size(); i < count; ++i)
-                {
-                    std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = hostileUnitsMissionMap_.find(defIter->second.attackers[i].unitId);
-                    FAssertMsg(missionIter != hostileUnitsMissionMap_.end(), "Missing hostile unit mission?");
-                    if (updatedHostilesMissions.find(missionIter->second) == updatedHostilesMissions.end())
-                    {
-                        // todo - check logic if missions's units end up spread over more than one plot and how we handle this in general
-                        missionIter->second->hostileAttackOdds = combatGraph.endStatesData;
-                        missionIter->second->ourDefenders = defIter->second.defenders;
-                        updatedHostilesMissions.insert(missionIter->second);
-                        break;
-                    }
-                }
-                for (size_t i = 0, count = defIter->second.defenders.size(); i < count; ++i)
-                {
-                    std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = ourUnitsMissionMap_.find(defIter->second.defenders[i].unitId);
-                    FAssertMsg(missionIter != ourUnitsMissionMap_.end(), "Missing our unit mission?");
-                    if (ourUpdatedMissions.find(missionIter->second) == ourUpdatedMissions.end())
-                    {
-                        // todo - check logic if missions's units end up spread over more than one plot and how we handle this in general
-                        missionIter->second->ourAttackOdds = combatGraph.endStatesData;
-                        missionIter->second->ourAttackers = defIter->second.attackers;
-                        ourUpdatedMissions.insert(missionIter->second);
-                        break;
-                    }
-                }
-                defenceCombatData_[defIter->first] = combatGraph.endStatesData;
-
-#ifdef ALTAI_DEBUG
-                os << " \npotential defensive combat results for plot: " << defIter->first;
-                combatGraph.endStatesData.debug(os);
-                combatGraph.debugEndStates(os);
-#endif
-                /*for (size_t attackerIndex = 0, attackerCount = defIter->second.attackers.size(); attackerIndex < attackerCount; ++attackerIndex)
-                {
-                    std::map<IDInfo, CombatResultsData>::iterator hostilesCombatMapIter = hostilesCombatData.find(defIter->second.attackers[attackerIndex].unitId);
-                    if (hostilesCombatMapIter == hostilesCombatData.end())
-                    {
-						hostilesCombatMapIter = hostilesCombatData.insert(std::make_pair(defIter->second.attackers[attackerIndex].unitId, CombatResultsData())).first;
-                    }
-                    hostilesCombatMapIter->second.defenceData.push_back(std::make_pair(defIter->first, combatGraph.endStatesData));
-                }*/
-            }
-
-            for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()); missionsIter != missionList_.end(); ++missionsIter)
-            {
-                if ((*missionsIter)->pUnitsMission)
-                {
-                    (*missionsIter)->pUnitsMission->update(player_);
-                }
-            }
-
-            std::map<UnitCategories, std::set<IDInfo> >::const_iterator landCombatUnitsIter = units_.find(LandCombat);
-            std::map<int, std::set<IDInfo> > unassignedUnitsBySubarea;
-            if (landCombatUnitsIter != units_.end())
-            {
-                for (std::set<IDInfo>::const_iterator iter(landCombatUnitsIter->second.begin()), endIter(landCombatUnitsIter->second.end());
-                    iter != endIter; ++iter)
-                {
-                    std::map<IDInfo, MilitaryMissionDataPtr>::const_iterator missionIter = ourUnitsMissionMap_.find(*iter);
-                    if (missionIter == ourUnitsMissionMap_.end())
-                    {
-                        const CvUnit* pUnit = ::getUnit(*iter);
-                        if (pUnit)
-                        {
-                            unassignedUnitsBySubarea[pUnit->plot()->getSubArea()].insert(*iter);
-                        }
-                    }
-                }
-            }
-#ifdef ALTAI_DEBUG
-            for (std::map<int, std::set<IDInfo> >::const_iterator uIter(unassignedUnitsBySubarea.begin()), uEndIter(unassignedUnitsBySubarea.end());
-                uIter != uEndIter; ++uIter)
-            {
-                os << "\nUnassigned units for area: " << uIter->first;
-                debugUnitSet(os, uIter->second);
-            }
-#endif
+            checkUnassignedUnits_();
         }
 
         void addOurUnit(CvUnitAI* pUnit, const CvUnit* pUpgradingUnit)
@@ -605,6 +226,12 @@ namespace AltAI
                 pUnitMission = addWorkerUnitMission_(pUnit);
             }
 
+            if (!pUnitMission && (pUnit->AI_getUnitAIType() == UNITAI_MISSIONARY || pUnit->AI_getUnitAIType() == UNITAI_MISSIONARY_SEA))
+            {
+                pUnitMission = addMissionaryUnitMission_(pUnit);
+            }
+
+            // check any cities need guard unit (logic is a bit too greedy)
             const CvPlot* pPlot = pUnit->plot();
             if (!pUnitMission && pPlot->isCity() && unitCategory == LandCombat)
             {
@@ -714,7 +341,7 @@ namespace AltAI
             if (pUnitMission)
             {
                 os << "\nAssigned unit to mission structure";
-                pUnitMission->debug(os);
+                pUnitMission->debug(os, true);
             }
             else
             {
@@ -728,133 +355,130 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
 #endif
-            if (pUnit->getDomainType() == DOMAIN_LAND)
+            IDInfo ourUnitInfo = pUnit->getIDInfo();
+            if (pUnit->isFound())
             {
-                IDInfo ourUnitInfo = pUnit->getIDInfo();
-                if (pUnit->isFound())
-                {
-                    player_.getSettlerManager()->eraseUnit(ourUnitInfo);  // remove any entry from settler dest map
-                }
-                std::map<IDInfo, UnitCategories>::iterator categoryIter = unitCategoryMap_.find(ourUnitInfo);
-                if (categoryIter != unitCategoryMap_.end())
-                {
-                    units_[categoryIter->second].erase(ourUnitInfo);
-                    unitCategoryMap_.erase(categoryIter);
+                player_.getSettlerManager()->eraseUnit(ourUnitInfo);  // remove any entry from settler dest map
+            }
+            std::map<IDInfo, UnitCategories>::iterator categoryIter = unitCategoryMap_.find(ourUnitInfo);
+            if (categoryIter != unitCategoryMap_.end())
+            {
+                units_[categoryIter->second].erase(ourUnitInfo);
+                unitCategoryMap_.erase(categoryIter);
 #ifdef ALTAI_DEBUG
-                    os << "\nDeleted land unit from analysis: "
-                       << gGlobals.getUnitInfo(pUnit->getUnitType()).getType()
-                       << " with category: " << categoryIter->second;
+                os << "\nDeleted unit from analysis: "
+                    << gGlobals.getUnitInfo(pUnit->getUnitType()).getType()
+                    << " with category: " << categoryIter->second;
 #endif
-                }
-                else
-                {
+            }
+            else
+            {
 #ifdef ALTAI_DEBUG
-                    os << "\nError deleting land unit from analysis: "
-                       << gGlobals.getUnitInfo(pUnit->getUnitType()).getType();
+                os << "\nError deleting land unit from analysis: "
+                    << gGlobals.getUnitInfo(pUnit->getUnitType()).getType();
 #endif
-                }
+            }
 
-                std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = ourUnitsMissionMap_.find(ourUnitInfo);
-                if (missionIter != ourUnitsMissionMap_.end())
-                {
-                    std::set<IDInfo>::iterator assignedUnitsIter(missionIter->second->assignedUnits.find(ourUnitInfo));
+            std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = ourUnitsMissionMap_.find(ourUnitInfo);
+            if (missionIter != ourUnitsMissionMap_.end())
+            {
+                std::set<IDInfo>::iterator assignedUnitsIter(missionIter->second->assignedUnits.find(ourUnitInfo));
                 
-                    if (assignedUnitsIter != missionIter->second->assignedUnits.end())
-                    {
+                if (assignedUnitsIter != missionIter->second->assignedUnits.end())
+                {
 #ifdef ALTAI_DEBUG
-                        os << "\nDeleting assigned unit: " << ourUnitInfo << " from mission";
+                    os << "\nDeleting assigned unit: " << ourUnitInfo << " from mission";
 #endif
-                        missionIter->second->assignedUnits.erase(assignedUnitsIter);
-                        missionIter->second->recalcOdds = true;
+                    missionIter->second->assignedUnits.erase(assignedUnitsIter);
+                    missionIter->second->recalcOdds = true;
 
-                        if (eraseDefenceCombatMapEntry_(pPlot->getCoords(), pUnit->getIDInfo(), false))
+                    if (eraseDefenceCombatMapEntry_(pPlot->getCoords(), pUnit->getIDInfo(), false))
+                    {
+                        std::map<XYCoords, CombatData>::iterator defCombatIter = defenceCombatMap_.find(pPlot->getCoords());
+                        if (defCombatIter != defenceCombatMap_.end())
                         {
-                            std::map<XYCoords, CombatData>::iterator defCombatIter = defenceCombatMap_.find(pPlot->getCoords());
-                            if (defCombatIter != defenceCombatMap_.end())
+                            CombatGraph combatGraph = getCombatGraph(player_, defCombatIter->second.combatDetails, defCombatIter->second.attackers, defCombatIter->second.defenders);
+                            combatGraph.analyseEndStates();
+                            missionIter->second->hostileAttackOdds = combatGraph.endStatesData;
+                            defenceCombatData_[pPlot->getCoords()] = combatGraph.endStatesData;
+                        }
+                    }
+
+                    if (pUnit->isMadeAttack())
+                    {
+                        // annoyingly the attack plot is gone from the unit's data by this stage, so we don't know where we attacked
+                        // but, since we want to update the combat odds for all the possible attacks this unit could have made, 
+                        // check all missions's attackable units (should prob filter by this unit's formerly reachable plots)
+                        std::set<XYCoords> attackablePlots;
+                        for (std::set<IDInfo>::const_iterator attackableUnitsIter(missionIter->second->attackableUnits.begin()), attackableUnitsEndIter(missionIter->second->attackableUnits.end());
+                            attackableUnitsIter != attackableUnitsEndIter; ++attackableUnitsIter)
+                        {
+                            const CvUnit* pAttackableUnit = ::getUnit(*attackableUnitsIter);
+                            if (pAttackableUnit && pAttackableUnit->canFight())
                             {
-                                CombatGraph combatGraph = getCombatGraph(player_, defCombatIter->second.combatDetails, defCombatIter->second.attackers, defCombatIter->second.defenders);
-                                combatGraph.analyseEndStates();
-                                missionIter->second->hostileAttackOdds = combatGraph.endStatesData;
-                                defenceCombatData_[pPlot->getCoords()] = combatGraph.endStatesData;
+                                attackablePlots.insert(pAttackableUnit->plot()->getCoords());
                             }
                         }
 
-                        if (pUnit->isMadeAttack())
+                        for (std::set<XYCoords>::const_iterator attackCoordsIter(attackablePlots.begin()), attackCoordsEndIter(attackablePlots.end());
+                            attackCoordsIter != attackCoordsEndIter; ++attackCoordsIter)
                         {
-                            // annoyingly the attack plot is gone from the unit's data by this stage, so we don't know where we attacked
-                            // but, since we want to update the combat odds for all the possible attacks this unit could have made, 
-                            // check all missions's attackable units (should prob filter by this unit's formerly reachable plots)
-                            std::set<XYCoords> attackablePlots;
-                            for (std::set<IDInfo>::const_iterator attackableUnitsIter(missionIter->second->attackableUnits.begin()), attackableUnitsEndIter(missionIter->second->attackableUnits.end());
-                                attackableUnitsIter != attackableUnitsEndIter; ++attackableUnitsIter)
+                            if (eraseAttackCombatMapEntry_(*attackCoordsIter, pUnit->getIDInfo(), true))
                             {
-                                const CvUnit* pAttackableUnit = ::getUnit(*attackableUnitsIter);
-                                if (pAttackableUnit && pAttackableUnit->canFight())
+                                std::map<XYCoords, CombatData>::iterator attCombatIter(attackCombatMap_.find(*attackCoordsIter));
+                                if (attCombatIter != attackCombatMap_.end())
                                 {
-                                    attackablePlots.insert(pAttackableUnit->plot()->getCoords());
+                                    updateUnitData(attCombatIter->second.defenders);
+                                    CombatGraph combatGraph = getCombatGraph(player_, attCombatIter->second.combatDetails, attCombatIter->second.attackers, attCombatIter->second.defenders);
+                                    combatGraph.analyseEndStates();
+                                    attackCombatData_[*attackCoordsIter] = combatGraph.endStatesData;
                                 }
-                            }
-
-                            for (std::set<XYCoords>::const_iterator attackCoordsIter(attackablePlots.begin()), attackCoordsEndIter(attackablePlots.end());
-                                attackCoordsIter != attackCoordsEndIter; ++attackCoordsIter)
-                            {
-                                if (eraseAttackCombatMapEntry_(*attackCoordsIter, pUnit->getIDInfo(), true))
-                                {
-                                    std::map<XYCoords, CombatData>::iterator attCombatIter(attackCombatMap_.find(*attackCoordsIter));
-                                    if (attCombatIter != attackCombatMap_.end())
-                                    {
-                                        updateUnitData(attCombatIter->second.defenders);
-                                        CombatGraph combatGraph = getCombatGraph(player_, attCombatIter->second.combatDetails, attCombatIter->second.attackers, attCombatIter->second.defenders);
-                                        combatGraph.analyseEndStates();
-                                        attackCombatData_[*attackCoordsIter] = combatGraph.endStatesData;
-                                    }
-                                }
-                            }
-                        }
-
-                        ourUnitsMissionMap_.erase(ourUnitInfo);
-
-                        if (missionIter->second->missionType == MISSIONAI_ESCORT)
-                        {
-                            if (pUnit->isFound())  // assume only one settler per mission
-                            {
-                                eraseMission_(missionIter->second);                                
-                            }
-                            else
-                            {
-                                for (std::set<IDInfo>::const_iterator missionUnitsIter(missionIter->second->assignedUnits.begin()); missionUnitsIter != missionIter->second->assignedUnits.end(); ++missionUnitsIter)
-                                {
-                                    CvUnit* pMissionUnit = player_.getCvPlayer()->getUnit(missionUnitsIter->iID);
-                                    if (pMissionUnit && pMissionUnit->isFound())
-                                    {
-                                        addEscortUnitMission_(pMissionUnit, NULL);  // try and find a new escort -  will update required units
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        else if (missionIter->second->missionType == MISSIONAI_COUNTER || missionIter->second->missionType == MISSIONAI_COUNTER_CITY)
-                        {
-                            std::set<IDInfo> availableUnits = getAssignedUnits(MISSIONAI_RESERVE, pPlot->getSubArea());
-                            std::vector<IDInfo> unitsToReassign = missionIter->second->updateRequiredUnits(player_, availableUnits);
-                            for (size_t i = 0, count = unitsToReassign.size(); i < count; ++i)
-                            {
-                                reassignOurUnit_(::getUnit(unitsToReassign[i]), missionIter->second);
-                            }
-                        }
-                        else if (missionIter->second->missionType == MISSIONAI_GUARD_CITY)
-                        {
-                            if (!isEmpty(missionIter->second->targetCity))
-                            {
-                                // reset required units (todo - check this is ok if city is also being captured due to loss of this unit
-                                missionIter->second->requiredUnits = pCityDefenceAnalysis_->getRequiredUnits(missionIter->second->targetCity);
                             }
                         }
                     }
-                }
 
-                eraseUnit_(ourUnitInfo, pPlot);  // don't use unit plot fn as it's set to NULL in unit deletion
+                    ourUnitsMissionMap_.erase(ourUnitInfo);
+
+                    if (missionIter->second->missionType == MISSIONAI_ESCORT)
+                    {
+                        if (pUnit->isFound())  // assume only one settler per mission
+                        {
+                            eraseMission_(missionIter->second);                                
+                        }
+                        else
+                        {
+                            for (std::set<IDInfo>::const_iterator missionUnitsIter(missionIter->second->assignedUnits.begin()); missionUnitsIter != missionIter->second->assignedUnits.end(); ++missionUnitsIter)
+                            {
+                                CvUnit* pMissionUnit = player_.getCvPlayer()->getUnit(missionUnitsIter->iID);
+                                if (pMissionUnit && pMissionUnit->isFound())
+                                {
+                                    addEscortUnitMission_(pMissionUnit, NULL);  // try and find a new escort -  will update required units
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else if (missionIter->second->missionType == MISSIONAI_COUNTER || missionIter->second->missionType == MISSIONAI_COUNTER_CITY)
+                    {
+                        std::set<IDInfo> availableUnits = getAssignedUnits(MISSIONAI_RESERVE, pPlot->getSubArea());
+                        std::vector<IDInfo> unitsToReassign = missionIter->second->updateRequiredUnits(player_, availableUnits);
+                        for (size_t i = 0, count = unitsToReassign.size(); i < count; ++i)
+                        {
+                            reassignOurUnit_(::getUnit(unitsToReassign[i]), missionIter->second);
+                        }
+                    }
+                    else if (missionIter->second->missionType == MISSIONAI_GUARD_CITY)
+                    {
+                        if (!isEmpty(missionIter->second->targetCity))
+                        {
+                            // reset required units (todo - check this is ok if city is also being captured due to loss of this unit
+                            missionIter->second->requiredUnits = pCityDefenceAnalysis_->getRequiredUnits(missionIter->second->targetCity);
+                        }
+                    }
+                }
             }
+
+            eraseUnit_(ourUnitInfo, pPlot);  // don't use unit plot fn as it's set to NULL in unit deletion
         }
 
         void withdrawOurUnit(CvUnitAI* pUnit, const CvPlot* pAttackPlot)
@@ -886,7 +510,7 @@ namespace AltAI
             std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
 #endif
             XYCoords lastKnownCoords = unhideUnit_(pUnit->getIDInfo(), pPlot->getSubArea());
-            if (lastKnownCoords != XYCoords(-1, -1))
+            if (!isEmpty(lastKnownCoords))
             {
 #ifdef ALTAI_DEBUG
                 os << " unit previously seen at: " << lastKnownCoords;
@@ -1004,7 +628,7 @@ namespace AltAI
                     if (missionDataIter->second->targetUnits.empty())
                     {
 #ifdef ALTAI_DEBUG
-                        os << " erasing mission from map for unit: " << unit;
+                        os << "\n erasing mission from map for unit: " << unit;
 #endif
                         eraseMission_(missionDataIter->second);
                     }
@@ -1012,7 +636,7 @@ namespace AltAI
                     else
                     {
                         os << " remaining targets count = " << missionDataIter->second->targetUnits.size();
-                        missionDataIter->second->debug(os);
+                        missionDataIter->second->debug(os, true);
                     }
 #endif
                     hostileUnitsMissionMap_.erase(missionDataIter);
@@ -1049,7 +673,11 @@ namespace AltAI
 
             if (CvTeamAI::getTeam(player_.getTeamID()).isAtWar(pUnit->getTeam()))  // hostile unit
             {
-                addHostileUnitMission_(pToPlot->getSubArea(), pToPlot->getCoords(), pUnit->getIDInfo());
+                // todo - check this/tidy up logic to merge missions, etc... but in general if we already have a mission, keep the unit associated with it rather than creating a new one
+                if (hostileUnitsMissionMap_.find(pUnit->getIDInfo()) == hostileUnitsMissionMap_.end())
+                {
+                    addHostileUnitMission_(pToPlot->getSubArea(), pToPlot->getCoords(), pUnit->getIDInfo());
+                }
                 // update attackCombatMap_ - hostile unit can no longer be attacked at the 'from' plot
                 if (pFromPlot)
                 {
@@ -1227,7 +855,6 @@ namespace AltAI
             UnitTypes bestGuardUnit = NO_UNIT;
             {
                 DependencyItemSet di;
-                di.insert(DependencyItem(-1, -1));
                 const TacticSelectionData& tacticData = player_.getAnalysis()->getPlayerTactics()->tacticSelectionDataMap[di];
                 std::set<UnitTacticValue>::const_iterator tacticIter = TacticSelectionData::getBestUnitTactic(tacticData.cityDefenceUnits);
                 if (tacticIter != tacticData.cityDefenceUnits.end())
@@ -1268,6 +895,11 @@ namespace AltAI
                     }
                 }
             }
+
+            if (isCapture)
+            {
+                //deleteCity(
+            }
         }
 
         void deleteCity(const CvCity* pCity)
@@ -1304,8 +936,71 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                 os << "\nadded new mission to target city: " << safeGetCityName(pCity);
 #endif
-                MilitaryMissionDataPtr pMission = addMission_(MISSIONAI_COUNTER_CITY);
+                MilitaryMissionDataPtr pMission = UnitCounterMission::createMission(pCity->plot()->getSubArea(), true);
+                addMission_(pMission);
                 pMission->targetCity = pCity->getIDInfo();
+
+                UnitPlotIter unitPlotIter(pCity->plot());
+                while (CvUnit* pUnit = unitPlotIter())
+                {
+                    if (pUnit->getTeam() == pCity->getTeam())
+                    {
+                        std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionDataIter = hostileUnitsMissionMap_.find(pUnit->getIDInfo());
+                        if (missionDataIter != hostileUnitsMissionMap_.end())
+                        {
+                            missionDataIter->second->targetUnits.erase(missionDataIter->first);
+                            pMission->targetUnits.insert(missionDataIter->first);
+
+                            if (missionDataIter->second->targetUnits.empty())
+                            {
+                                for (std::set<IDInfo>::iterator assignedUnitsIter(missionDataIter->second->assignedUnits.begin()),
+                                    assignedUnitsEndIter(missionDataIter->second->assignedUnits.end()); assignedUnitsIter != assignedUnitsEndIter;
+                                    ++assignedUnitsIter)
+                                {
+                                    CvUnit* pUnit = ::getUnit(*assignedUnitsIter);
+                                    if (pUnit)
+                                    {
+                                        reassignOurUnit_(pUnit, pMission);
+                                    }
+                                }
+                                eraseMission_(missionDataIter->second);
+                            }
+                        }
+                    }
+                }
+
+                // need to remove any missions in the vicinity that are targetting coords (rather than units)
+                // and reassign any of their units to this new mission
+                finder.missionType = MISSIONAI_COUNTER;
+                finder.city = IDInfo();
+                finder.proximityData = MissionPlotProximity(4, pCity->plot()->getCoords());
+
+                for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()), missionsEndIter(missionList_.end());
+                    missionsIter != missionsEndIter;)
+                {
+                    if (finder(*missionsIter))
+                    {
+                        //if (isEmpty((*missionsIter)->getTargetCity()))
+                        //{
+                        // copy assigned units as reassignOurUnit_ calls unassignUnit which erases the units from the original set
+                        std::set<IDInfo> assignedUnits = (*missionsIter)->assignedUnits;
+
+                        for (std::set<IDInfo>::iterator assignedUnitsIter(assignedUnits.begin()),
+                            assignedUnitsEndIter(assignedUnits.end()); assignedUnitsIter != assignedUnitsEndIter;
+                            ++assignedUnitsIter)
+                        {
+                            CvUnit* pUnit = ::getUnit(*assignedUnitsIter);
+                            if (pUnit)
+                            {
+                                reassignOurUnit_(pUnit, pMission);
+                            }
+                        }
+                        eraseMission_(*missionsIter++);
+                        continue;
+                        //}
+                    }
+                    ++missionsIter;
+                }
             }
         }
 
@@ -1313,8 +1008,16 @@ namespace AltAI
         {
 #ifdef ALTAI_DEBUG
             std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
+            os << "\n deleting player city: " << safeGetCityName(pCity);
 #endif
-            // todo (remove mission against city possibly?)
+            MissionFinder finder;
+            finder.city = pCity->getIDInfo();
+
+            std::list<MilitaryMissionDataPtr>::iterator missionsIter = std::find_if(missionList_.begin(), missionList_.end(), finder);
+            if (missionsIter != missionList_.end())
+            {
+                removeMission_(missionsIter);
+            }
         }
 
         void addHostilePlotsWithUnknownCity(const std::vector<XYCoords>& coords)
@@ -1349,8 +1052,10 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
                 os << "\nadded new mission to target hostile coords: " << *remainingCoords.begin();
 #endif
-                MilitaryMissionDataPtr pMission = addMission_(MISSIONAI_COUNTER);
+                const CvPlot* pPlot = gGlobals.getMap().plot(*remainingCoords.begin());
+                MilitaryMissionDataPtr pMission = UnitCounterMission::createMission(pPlot->getSubArea(), false);
                 pMission->targetCoords = *remainingCoords.begin();
+                addMission_(pMission);                
             }
         }
 
@@ -1363,8 +1068,8 @@ namespace AltAI
             if (!pSubArea->isImpassable())
             {
                 FAssertMsg(subAreaResourceMissionsMap_.find(subArea) == subAreaResourceMissionsMap_.end(), "Expected not to find existing mission for sub area");
-                MilitaryMissionDataPtr pMission = addMission_(MISSIONAI_GUARD_BONUS);
-                pMission->pUnitsMission = IUnitsMissionPtr(new GuardBonusesMission(subArea));
+                MilitaryMissionDataPtr pMission = GuardBonusesMission::createMission(subArea);
+                addMission_(pMission);
 #ifdef ALTAI_DEBUG
                 os << "\nAdded new guard bonus mission for sub area: " << subArea;
 #endif
@@ -1379,28 +1084,12 @@ namespace AltAI
 #endif
             CvPlot* pUnitPlot = pUnit->plot();
 
-            for (std::map<XYCoords, std::list<IDInfo> >::const_iterator iter(enemyStacks_.begin()), endIter(enemyStacks_.end()); iter != endIter; ++iter)
-            {
-                const CvPlot* stackPlot = gGlobals.getMap().plot(iter->first.iX, iter->first.iY);
-                if (stackPlot->getSubArea() != pUnitPlot->getSubArea())
-                {
-                    continue;
-                }
-                else if (stepDistance(pUnit->getX(), pUnit->getY(), stackPlot->getX(), stackPlot->getY()) < 4)
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\nOur unit at: " << pUnitPlot->getCoords() << " ai = " << getUnitAIString(pUnit->AI_getUnitAIType()) << ", near stack at: " << stackPlot->getCoords()
-                        << " step dist = " << stepDistance(pUnit->getX(), pUnit->getY(), stackPlot->getX(), stackPlot->getY());
-#endif
-                }
-            }
-
             std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = ourUnitsMissionMap_.find(pUnit->getIDInfo());
             if (missionIter != ourUnitsMissionMap_.end())
             {   
 #ifdef ALTAI_DEBUG
                 os << "\nUpdating unit: " << pUnit->getID() << " with assigned mission: (" << missionIter->second << ") ";
-                missionIter->second->debug(os);
+                missionIter->second->debug(os, true);
 #endif
                 if (!missionIter->second->specialTargets.empty())
                 {
@@ -1424,9 +1113,11 @@ namespace AltAI
                     }
                 }
 
+                bool checkedMissionResult = false;
+                bool checkedMissionExecuted = false;
                 if (missionIter->second->missionType == MISSIONAI_BUILD)
                 {
-                    bool hasWorkerMission = doWorkerMove(player_, pUnit);
+                    bool hasWorkerMission = AltAI::doWorkerMove(player_, pUnit);
                     if (!hasWorkerMission && pUnit->getDomainType() == DOMAIN_SEA)
                     {
                         return AltAI::doCoastalUnitExplore(pUnit);
@@ -1435,6 +1126,10 @@ namespace AltAI
                     {
                         return hasWorkerMission;
                     }
+                }
+                else if (missionIter->second->missionType == MISSIONAI_SPREAD)
+                {
+                    return AltAI::doMissionaryMove(player_, pUnit);
                 }
                 else if (missionIter->second->missionType == MISSIONAI_EXPLORE)
 		        {
@@ -1450,28 +1145,70 @@ namespace AltAI
                 // todo - if unit is assigned to a new mission - want to go round this loop again
                 else if (missionIter->second->missionType == MISSIONAI_ESCORT)
                 {   
-                    return doUnitEscortMission(missionIter->second, pUnit);
+                    if (!missionIter->second->pUnitsMission)
+                    {
+                        missionIter->second->pUnitsMission = IUnitsMissionPtr(new SettlerEscortMission(player_.getCvPlayer()->getStartingPlot()->getSubArea()));
+                    }
+                    checkedMissionResult = missionIter->second->pUnitsMission->doUnitMission(pUnit, missionIter->second.get());
+                    checkedMissionExecuted = true;
                 }
                 else if (missionIter->second->missionType == MISSIONAI_ESCORT_WORKER)
-                {   
-                    return doUnitEscortWorkerMission(missionIter->second, pUnit);
+                {
+                    if (!missionIter->second->pUnitsMission)
+                    {
+                        missionIter->second->pUnitsMission = IUnitsMissionPtr(new WorkerEscortMission(player_.getCvPlayer()->getStartingPlot()->getSubArea()));
+                    }
+                    checkedMissionResult = missionIter->second->pUnitsMission->doUnitMission(pUnit, missionIter->second.get());
+                    checkedMissionExecuted = true;
                 }
                 else if (missionIter->second->missionType == MISSIONAI_GUARD_CITY)
                 {
-                    return doUnitCityDefendMission(missionIter->second, pUnit);
+                    if (!missionIter->second->pUnitsMission)
+                    {
+                        missionIter->second->pUnitsMission = IUnitsMissionPtr(new CityDefenceMission());
+                    }
+                    checkedMissionResult = missionIter->second->pUnitsMission->doUnitMission(pUnit, missionIter->second.get());
+                    checkedMissionExecuted = true;
                 }
                 else if (missionIter->second->missionType == MISSIONAI_COUNTER || missionIter->second->missionType == MISSIONAI_COUNTER_CITY)
                 {
-                    return doUnitCounterMission(missionIter->second, pUnit);
+                    if (!missionIter->second->pUnitsMission)
+                    {
+                        missionIter->second->pUnitsMission = IUnitsMissionPtr(new UnitCounterMission(player_.getCvPlayer()->getStartingPlot()->getSubArea()));
+                    }
+                    checkedMissionResult = missionIter->second->pUnitsMission->doUnitMission(pUnit, missionIter->second.get());
+                    checkedMissionExecuted = true;
                 }
                 else if (missionIter->second->missionType == MISSIONAI_RESERVE)
                 {
-                    return doUnitReserveMission(missionIter->second, pUnit);
+                    if (!missionIter->second->pUnitsMission)
+                    {
+                        missionIter->second->pUnitsMission = IUnitsMissionPtr(new ReserveMission());
+                    }
+                    return missionIter->second->pUnitsMission->doUnitMission(pUnit, missionIter->second.get());
+                }
+
+                if (checkedMissionExecuted && !checkedMissionResult)
+                {
+                    const CvCity* pCapital = player_.getCvPlayer()->getCapitalCity();
+                    MilitaryMissionDataPtr pNewMission = addReserveLandUnitMission_(pUnit, pCapital ? pCapital->plot() : pUnit->plot());
+                    pNewMission->pUnitsMission = IUnitsMissionPtr(new ReserveMission());
+                    if (pNewMission)
+                    {
+                        return pNewMission->pUnitsMission->doUnitMission(pUnit, pNewMission.get());
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return true;
                 }
             }
-            else  // no assigned mission
-            {
-            }
+            // no assigned mission
+            // includes great people currently - uses default civ core logic for now
             return false;
         }
 
@@ -1548,18 +1285,32 @@ namespace AltAI
             }
         }
 
+        MilitaryMissionDataPtr getCityDefenceMission(IDInfo city)
+        {
+            std::map<IDInfo, MilitaryMissionDataPtr>::iterator cityGuardMissionIter = cityGuardMissionsMap_.find(city);
+            if (cityGuardMissionIter != cityGuardMissionsMap_.end())  // may be in process of capturing city
+            {
+                return cityGuardMissionIter->second;
+            }
+            else
+            {
+                return MilitaryMissionDataPtr();
+            }
+        }
+
         std::pair<IDInfo, UnitTypes> getPriorityUnitBuild(IDInfo city)
         {
 #ifdef ALTAI_DEBUG
             std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
 #endif
-            std::pair<IDInfo, UnitTypes> cityAndUnit(IDInfo(), NO_UNIT);
-            FAStar* pStepFinder = gDLL->getFAStarIFace()->create();
-            CvMap& theMap = gGlobals.getMap();
-            gDLL->getFAStarIFace()->Initialize(pStepFinder, theMap.getGridWidth(), theMap.getGridHeight(), theMap.isWrapX(), theMap.isWrapY(), unitDataPathDestValid, stepHeuristic, unitDataPathCost, stepValid, unitDataPathAdd, NULL, NULL);
+            PlayerTactics& playerTactics = *player_.getAnalysis()->getPlayerTactics();
+            City& refCity = player_.getCity(city.iID);
 
+            std::pair<IDInfo, UnitTypes> cityAndUnit(IDInfo(), NO_UNIT);
             std::map<IDInfo, std::vector<std::list<UnitData> > > requiredUnitsCityMap;  // map of units required for counter mission against closest city threatened by that missions's hostiles
+            int totalRequiredBuilds = 0;
             std::map<IDInfo, int> timesToTargetMap;  // how long for hostile units to reach closest threatened cities
+            std::list<std::pair<IDInfo, int> > cityRoutingMap;  // how long for cities to reach threatened city (todo: too basic for multiple threats)
 
             for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()); missionsIter != missionList_.end(); ++missionsIter)
             {
@@ -1569,43 +1320,110 @@ namespace AltAI
                     {
                         if (aIter->second.pWin > hostileAttackThreshold)
                         {
-                            const CvCity* pTargetCity = ::getCity((*missionsIter)->closestCity);
+                            const CvCity* pOurTargetCity = ::getCity((*missionsIter)->closestCity);
+
                             std::vector<UnitData> hostileUnitData = makeUnitData((*missionsIter)->targetUnits);
-                            if (hostileUnitData.empty() || !pTargetCity)
+                            if (hostileUnitData.empty() || !pOurTargetCity)
                             {
                                 continue;
                             }
-                            int stepFinderInfo = MAKEWORD((short)hostileUnitData[0].unitId.eOwner, 0);
-                            const CvUnit* pFirstHostileUnit = ::getUnit(hostileUnitData[0].unitId);
+                            const CvPlot* pHostileUnitsPlot = ::getUnit(hostileUnitData.begin()->unitId)->plot();
 
                             // copy required units for missions which are tracking hostiles which threaten cities (and potentially other targets) into map keyed by city under threat
                             std::copy((*missionsIter)->requiredUnits.begin(), (*missionsIter)->requiredUnits.end(), std::back_inserter(requiredUnitsCityMap[(*missionsIter)->closestCity]));
-
-                            gDLL->getFAStarIFace()->SetData(pStepFinder, &hostileUnitData);
-
-                            // just assume one unit plot for hostile units for now
-                            if (gDLL->getFAStarIFace()->GeneratePath(pStepFinder, pFirstHostileUnit->getX(), pFirstHostileUnit->getY(), pTargetCity->getX(), pTargetCity->getY(), false, stepFinderInfo, true))
+                            totalRequiredBuilds += (*missionsIter)->requiredUnits.size();
+                            for (size_t i = 0, count = (*missionsIter)->tooDistantAssignedUnits.size(); i < count; ++i)
                             {
-                                FAStarNode* pNode = gDLL->getFAStarIFace()->GetLastNode(pStepFinder);
-                                // todo - make this work off multiple missions against the city with different turns to attack - also need to combine hostiles properly across missions in calculating attack prob in the first place
-                                // for now - take the worst case - i.e. shortest time
+                                const CvUnit* pLateUnit = ::getUnit((*missionsIter)->tooDistantAssignedUnits[i]);                                
+                                requiredUnitsCityMap[(*missionsIter)->closestCity].push_back(std::list<UnitData>(1, UnitData(pLateUnit)));
+                            }
+                            totalRequiredBuilds += (*missionsIter)->tooDistantAssignedUnits.size();
+
+                            if (requiredUnitsCityMap[(*missionsIter)->closestCity].rbegin()->empty())
+                            {
+#ifdef ALTAI_DEBUG
+                                os << "\n\t unable to find any units which mission requires even though city: " << safeGetCityName(pOurTargetCity)
+                                    << " is threatened with odds: " << aIter->second.pWin;
+#endif
+                                continue;
+                            }
+
+                            std::vector<UnitData> pathfinderUnitData(1, *requiredUnitsCityMap[(*missionsIter)->closestCity].rbegin()->begin());
+
+                            PlayerTactics::UnitTacticsMap::const_iterator tacticsIter = playerTactics.unitTacticsMap_.find(pathfinderUnitData[0].unitType);
+                            if (tacticsIter == playerTactics.unitTacticsMap_.end() || (tacticsIter->second && !tacticsIter->second->areDependenciesSatisfied(playerTactics.player, IDependentTactic::Ignore_None)))
+                            {
+                                continue;  // can't train unit anywhere (possibly an error)
+                            }                            
+
+                            // work out transit times for units
+                            // currently based on first required unit - todo: group units by movement data (UnitMovementData)
+                            CityIter cityIter(*player_.getCvPlayer());
+                            while (CvCity* pLoopCity = cityIter())
+                            {
+                                if (pLoopCity->plot()->getSubArea() == pOurTargetCity->plot()->getSubArea())
+                                {
+                                    CityUnitTacticsPtr pCityUnitTacticsPtr = tacticsIter->second->getCityTactics(pLoopCity->getIDInfo());
+                                    if (!pCityUnitTacticsPtr || !pCityUnitTacticsPtr->areDependenciesSatisfied(IDependentTactic::Ignore_None))
+                                    {
+#ifdef ALTAI_DEBUG
+                                        os << "\n\t can't train unit: " << gGlobals.getUnitInfo(tacticsIter->first).getType() << " in city: " << safeGetCityName(pLoopCity);
+#endif
+                                        if (pLoopCity->getIDInfo() == city)
+                                        {
+                                            return cityAndUnit;  // for now, if can't train return empty, todo: need to consider other, possibly defensive units
+                                        }
+                                        continue;
+                                    }
+
+                                    if (pLoopCity->getIDInfo() == city)  // update tactic data
+                                    {
+                                        pCityUnitTacticsPtr->update(player_, refCity.getCityData());
+                                        pCityUnitTacticsPtr->apply(playerTactics.tacticSelectionDataMap[DependencyItemSet()], IDependentTactic::Ignore_None);
+                                    }
+
+                                    UnitPathData unitPathData;
+                                    unitPathData.calculate(pathfinderUnitData, pLoopCity->plot(), pOurTargetCity->plot(), MOVE_MAX_MOVES | MOVE_IGNORE_DANGER, player_.getPlayerID(), player_.getTeamID());
+                                    if (unitPathData.valid)
+                                    {
+                                        cityRoutingMap.push_back(std::make_pair(pLoopCity->getIDInfo(), unitPathData.pathTurns));
+#ifdef ALTAI_DEBUG
+                                        os << "\n movement from: " << safeGetCityName(pLoopCity) << " to: " << safeGetCityName(pOurTargetCity);
+                                        unitPathData.debug(os);
+#endif
+                                    }
+                                }
+                            }
+                            cityRoutingMap.sort(CityDistanceComp());
+#ifdef ALTAI_DEBUG
+                            os << "\n city move times: ";
+                            for (std::list<std::pair<IDInfo, int> >::const_iterator crIter(cityRoutingMap.begin()), crEndIter(cityRoutingMap.end()); crIter != crEndIter; ++crIter)
+                            {
+                                os << " " << safeGetCityName(crIter->first) << " = " << crIter->second;
+                            }
+#endif
+
+                            UnitPathData hostileUnitPathData;
+                            hostileUnitPathData.calculate(hostileUnitData, pHostileUnitsPlot, pOurTargetCity->plot(), MOVE_MAX_MOVES | MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY, player_.getPlayerID(), player_.getTeamID());
+                            if (hostileUnitPathData.valid)
+                            {
                                 std::map<IDInfo, int>::iterator tIter = timesToTargetMap.find((*missionsIter)->closestCity);
                                 if (tIter != timesToTargetMap.end())
                                 {                                    
-                                    tIter->second = std::min<int>(tIter->second, pNode->m_iData2);  // if city has closer threat - keep its entry time
+                                    tIter->second = std::min<int>(tIter->second, hostileUnitPathData.pathTurns);  // if city has closer threat - keep its entry time
                                 }
                                 else
                                 {
-                                    timesToTargetMap[(*missionsIter)->closestCity] = pNode->m_iData2;
+                                    timesToTargetMap[(*missionsIter)->closestCity] = hostileUnitPathData.pathTurns;
                                 }
 #ifdef ALTAI_DEBUG
-                                os << "\nCalculated hostile units time to target city: " << safeGetCityName(pTargetCity) << " = " << pNode->m_iData2;
+                                os << "\nCalculated hostile units time to target city: " << safeGetCityName(pOurTargetCity) << " = " << hostileUnitPathData.pathTurns;
 #endif
                             }
 #ifdef ALTAI_DEBUG
                             else
                             {
-                                os << "\nFailed to hostile units calculate time to target city: " << safeGetCityName(pTargetCity) << " for unit: " << pFirstHostileUnit->getIDInfo();
+                                os << "\nFailed for hostile units to calculate time to target city: " << safeGetCityName(pOurTargetCity) << ", 1st unit: " << hostileUnitData[0].unitId;
                             }
 #endif
                         }
@@ -1613,185 +1431,125 @@ namespace AltAI
                 }
             }
 
+#ifdef ALTAI_DEBUG
+            for (std::map<IDInfo, std::vector<std::list<UnitData> > >::const_iterator rudmIter(requiredUnitsCityMap.begin()), rudmEndIter(requiredUnitsCityMap.end());
+                rudmIter != rudmEndIter; ++rudmIter)
+            {
+                os << "\n" << __FUNCTION__ << " required units for city: " << safeGetCityName(rudmIter->first);
+                for (size_t uIndex = 0, uCount = rudmIter->second.size(); uIndex < uCount; ++uIndex)
+                {
+                    os << " {";
+                    for (std::list<UnitData>::const_iterator lIter(rudmIter->second[uIndex].begin()), lEndIter(rudmIter->second[uIndex].end()); lIter != lEndIter; ++lIter)
+                    {
+                        os << " unit: " << gGlobals.getUnitInfo(lIter->unitType).getType();
+                    }
+                    os << "} ";
+                }
+            }
+#endif
             if (!requiredUnitsCityMap.empty())
             {
-                DependencyItemSet di;
-                di.insert(DependencyItem(-1, -1));
-                const TacticSelectionData& tacticData = player_.getAnalysis()->getPlayerTactics()->tacticSelectionDataMap[di];
-                std::map<UnitTypes, std::list<std::pair<IDInfo, size_t> > > unitCityBuildTimes;
-                
-                int stepFinderInfo = MAKEWORD((short)player_.getPlayerID(), 0);               
+                int ourPos = 1;
+                for (std::list<std::pair<IDInfo, int> >::const_iterator ci(cityRoutingMap.begin()), ciEnd(cityRoutingMap.end()); ci != ciEnd; ++ci)
+                {
+                    if (ci->first != city)
+                    {
+                        ++ourPos;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                if (ourPos > totalRequiredBuilds)
+                {
+#ifdef ALTAI_DEBUG
+                    os << "\n\t skipping city: " << safeGetCityName(city) << " as " << ourPos << " out of " << cityRoutingMap.size()
+                       << " by distance from threat and only require: " << totalRequiredBuilds << " units";
+#endif
+                    return cityAndUnit;
+                }
 
-                // loop over each threatened city and see if we can get the required counter units there in time:
-                // 1. check the city's entry in timesToTargetMap to see how long we have before the hostiles arrive)
-                // 2. for each required unit, see how long each city takes to build it and for those for which the build time < time to hostiles arrival...
-                // 3. ... compute how long to reach threatened city from build city (if they are not one and the same)
-                // 4. if total time < time to hostiles arrival, store city
                 for (std::map<IDInfo, std::vector<std::list<UnitData> > >::const_iterator ci(requiredUnitsCityMap.begin()), ciEnd(requiredUnitsCityMap.end()); ci != ciEnd; ++ci)
                 {
-                    const CvCity* pTargetCity = ::getCity(ci->first);
-                    if (!pTargetCity) // might have just lost city
-                    {
-                        continue;
-                    }
-                    std::map<IDInfo, int>::const_iterator tIter = timesToTargetMap.find(ci->first);
-                    if (tIter == timesToTargetMap.end())
-                    {
-                        continue;
-                    }
-                    const int hostileTurnsToCity = tIter->second;
-                    // for each required unit
                     for (size_t i = 0, count = ci->second.size(); i < count; ++i)
                     {
-                        // for each possible required unit choice
-                        for (std::list<UnitData>::const_iterator li(ci->second[i].begin()), liEnd(ci->second[i].end()); li != liEnd; ++li)
+                        std::vector<UnitData> pathfinderUnitData(1, *ci->second[i].begin());
+                        UnitTypes desiredUnitType = ci->second[i].begin()->unitType;
+
+                        PlayerTactics::UnitTacticsMap::iterator tacticIter = playerTactics.unitTacticsMap_.find(desiredUnitType);
+                        if (tacticIter != playerTactics.unitTacticsMap_.end())
                         {
-                            std::list<IDInfo> candidateCities;
-                            int minTimeToIntercept = MAX_INT;
-                            // get city build times for this choice of unit
-                            std::map<UnitTypes, std::list<std::pair<IDInfo, size_t> > >::const_iterator ubIter = unitCityBuildTimes.find(li->unitType);
-                            if (ubIter == unitCityBuildTimes.end())
+                            CityUnitTacticsPtr pCityUnitTactics = tacticIter->second->getCityTactics(city);
+                            if (pCityUnitTactics)
                             {
-                                // todo - make a separate fn to get unit builds times for a given city
-                                std::list<std::pair<IDInfo, size_t> > buildTimes = TacticSelectionData::getCityBuildTimes(tacticData.fieldAttackUnits, li->unitType);
-                                if (buildTimes.empty())
+                                //std::vector<DependencyItem> unitDeps = pCityUnitTactics->getDepItems(IDependentTactic::All_Deps);
+                                DependencyItemSet depSet; // (unitDeps.begin(), unitDeps.end());
+
+                                const TacticSelectionData& tacticData = playerTactics.tacticSelectionDataMap[depSet];
+                                // includes build time
+                                UnitTacticValue unitTacticValue = TacticSelectionData::getUnitValue(tacticData.cityAttackUnits, desiredUnitType);
+
+                                for (std::map<IDInfo, int>::const_iterator tIter(timesToTargetMap.begin()), tEndIter(timesToTargetMap.end()); tIter != tEndIter; ++tIter)
                                 {
-                                    buildTimes = TacticSelectionData::getCityBuildTimes(tacticData.cityDefenceUnits, li->unitType);
-                                }
-                                if (buildTimes.empty())
-                                {
-                                    continue;
-                                }
-                                ubIter = unitCityBuildTimes.insert(std::make_pair(li->unitType, buildTimes)).first;
-                            }
-                            // filter those which are close enough to the target city given how long they take to build and move                            
-                            std::vector<UnitData> pathfinderUnitData(1, *li);
-                            gDLL->getFAStarIFace()->SetData(pStepFinder, &pathfinderUnitData);
-
-                            // iterate over each city that can build the given unit
-                            for (std::list<std::pair<IDInfo, size_t> >::const_iterator buildCityIter(ubIter->second.begin()), endBuildCityIter(ubIter->second.end()); buildCityIter != endBuildCityIter; ++buildCityIter)
-                            {
-                                int thisCityBuildTime = buildCityIter->second;
-                                bool isTargetCity = buildCityIter->first == ci->first;
-
-                                int thisCityInterceptTime = thisCityBuildTime;
-                                if (thisCityBuildTime <= hostileTurnsToCity)
-                                {
-                                    if (!isTargetCity)  // skip path logic if this is the target city
+                                    if (unitTacticValue.nTurns <= 2 * tIter->second)
                                     {
-                                        const CvCity* pBuildCity = ::getCity(buildCityIter->first);
-                                        if (!pBuildCity)  // might have lost city
-                                        {
-                                            continue;
-                                        }
-
-                                        // check for path for unit from build city to target city
-                                        if (gDLL->getFAStarIFace()->GeneratePath(pStepFinder, pBuildCity->getX(), pBuildCity->getY(), pTargetCity->getX(), pTargetCity->getY(), false, stepFinderInfo, true))
-                                        {
-                                            FAStarNode* pNode = gDLL->getFAStarIFace()->GetLastNode(pStepFinder);
-                                            thisCityInterceptTime += pNode->m_iData2;  // add on cost of moving from build city to target city
+                                        cityAndUnit = std::make_pair(city, desiredUnitType);
 #ifdef ALTAI_DEBUG
-                                            os << "\n\t" << safeGetCityName(pBuildCity) << " time to build unit: " << pathfinderUnitData[0].pUnitInfo->getType() << " = " << buildCityIter->second << ", time to target city = " << pNode->m_iData2;
-#endif                                            
-                                        }
-                                        else
-                                        {
-#ifdef ALTAI_DEBUG                                        
-                                            os << "\nFailed to find path from city: " << safeGetCityName(buildCityIter->first) << " for unit: " << pathfinderUnitData[0].pUnitInfo->getType();
+                                        os << "\n" << __FUNCTION__ << " returning: " << gGlobals.getUnitInfo(desiredUnitType).getType() << " for city: " << safeGetCityName(city)
+                                            << " build turns: " << unitTacticValue.nTurns << " req time: " << tIter->second;
 #endif
-                                            continue;
-                                        }
-                                    }
-#ifdef ALTAI_DEBUG
-                                    else
-                                    {
-                                        os << "\n\t" << safeGetCityName(buildCityIter->first) << " time to build unit: " << pathfinderUnitData[0].pUnitInfo->getType() << " = " << buildCityIter->second;
-                                    }
-#endif
-
-                                    minTimeToIntercept = std::min<int>(minTimeToIntercept, thisCityInterceptTime);
-                                    if (thisCityInterceptTime <= hostileTurnsToCity)
-                                    {
-                                        candidateCities.push_back(buildCityIter->first);
-#ifdef ALTAI_DEBUG
-                                        os << " possible candidate " << safeGetCityName(buildCityIter->first) << " ";
-#endif
+                                        return cityAndUnit;
                                     }
                                 }
-                                else
-                                {
-#ifdef ALTAI_DEBUG
-                                    os << " city is too slow to build unit - "<< safeGetCityName(buildCityIter->first) << " i'cept t = " << thisCityBuildTime << " required: " << hostileTurnsToCity;
-#endif
-                                }
-                            }
-
-                            std::list<IDInfo>::const_iterator candidatesIter = std::find(candidateCities.begin(), candidateCities.end(), city);
-                            if (candidatesIter != candidateCities.end())
-                            {
-#ifdef ALTAI_DEBUG
-                                os << "\n\tmatched to candidate city: " << safeGetCityName(city) << " for unit: " << li->pUnitInfo->getType();
-#endif
-                                cityAndUnit = std::make_pair(city, li->unitType);
-                                break;  // don't want to build all the unit choices - todo - order choices by best odds
-                            }
-                            // todo - add check for ability to rush units
-                            else if (city == ci->first)  // targetted city is city we are checking emergency build for, but we can't slow-build in time
-                            {
-#ifdef ALTAI_DEBUG
-                                os << "\n\tpushed build for targetted city: " << safeGetCityName(city) << " for unit: " << li->pUnitInfo->getType();
-#endif
-                                // return anyway - hopefully can build one turn and then rush
-                                cityAndUnit = std::make_pair(city, li->unitType);
-                                break;
                             }
                         }
-                    }                    
+                    }
                 }
             }
-            gDLL->getFAStarIFace()->destroy(pStepFinder);
 
             return cityAndUnit;
         }
 
-        UnitTypes getUnitRequestBuild(const CvCity* pCity, const TacticSelectionData& tacticSelectionData)
+        UnitRequestData getUnitRequestBuild(const CvCity* pCity, const TacticSelectionData& tacticSelectionData)
         {
 #ifdef ALTAI_DEBUG
             PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(pCity->getOwner());
             std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(pCity->getOwner()))->getStream();
             os << "\nChecking unit builds for: " << narrow(pCity->getName());
 #endif
+            UnitRequestData requestData;
+
             std::map<UnitTypes, int> unitRequestCounts;
+            std::map<UnitTypes, std::pair<IDInfo, int> > unitBestBuildCities;
+
+            IDInfo bestCity;
+            int bestBuildTime = -1;
             for (std::set<UnitTacticValue>::const_iterator ci(tacticSelectionData.cityAttackUnits.begin()), ciEnd(tacticSelectionData.cityAttackUnits.end()); ci != ciEnd; ++ci)
             {
+                unitRequestCounts.insert(std::make_pair(ci->unitType, 0));
+                unitBestBuildCities[ci->unitType] = updateUnitBuildData_(pCity->getIDInfo(), *ci); 
 #ifdef ALTAI_DEBUG
                 os << "\nUnit: " << gGlobals.getUnitInfo(ci->unitType).getType() << ", turns = " << ci->nTurns << ", value = " << ci->unitAnalysisValue
                     << ", count = " << pPlayer->getUnitCount(ci->unitType) << ", incl. under construction count = " << pPlayer->getUnitCount(ci->unitType, true);
+
+                os << " best build time = " << unitBestBuildCities[ci->unitType].second << ", city = " << safeGetCityName(unitBestBuildCities[ci->unitType].first);
 #endif
-                unitRequestCounts.insert(std::make_pair(ci->unitType, 0));
-                cityBuildsTimes_[pCity->getIDInfo()][ci->unitType] = ci->nTurns;
+            }
 
-                int bestBuildTime = ci->nTurns;
-                IDInfo bestCity = pCity->getIDInfo();
-
-                for (std::map<IDInfo, std::map<UnitTypes, int> >::const_iterator buildTimesIter(cityBuildsTimes_.begin()), buildTimesEndIter(cityBuildsTimes_.end());
-                    buildTimesIter != buildTimesEndIter; ++buildTimesIter)
+            if (pCity->isCoastal(gGlobals.getMIN_WATER_SIZE_FOR_OCEAN()))
+            {
+                for (std::set<UnitTacticValue>::const_iterator ci(tacticSelectionData.seaCombatUnits.begin()), ciEnd(tacticSelectionData.seaCombatUnits.end()); ci != ciEnd; ++ci)
                 {
-                    std::map<UnitTypes, int>::const_iterator unitBuildTimeIter = buildTimesIter->second.find(ci->unitType);
-                    if (unitBuildTimeIter != buildTimesIter->second.end())
-                    {
-                        if (unitBuildTimeIter->second < bestBuildTime)
-                        {
-                            bestBuildTime = unitBuildTimeIter->second;
-                            bestCity = buildTimesIter->first;
-                        }
-                    }
-                }
+                    unitRequestCounts.insert(std::make_pair(ci->unitType, 0));
+                    unitBestBuildCities[ci->unitType] = updateUnitBuildData_(pCity->getIDInfo(), *ci); 
 #ifdef ALTAI_DEBUG
-                const CvCity* pBestCity = CvPlayerAI::getPlayer(pCity->getOwner()).getCity(bestCity.iID);
-                os << " best build time = " << bestBuildTime << ", city = " << (pBestCity ? narrow(pBestCity->getName()) : " null");
+                    os << "\nUnit: " << gGlobals.getUnitInfo(ci->unitType).getType() << ", turns = " << ci->nTurns << ", value = " << ci->unitAnalysisValue
+                        << ", count = " << pPlayer->getUnitCount(ci->unitType) << ", incl. under construction count = " << pPlayer->getUnitCount(ci->unitType, true);
+
+                    os << " best build time = " << unitBestBuildCities[ci->unitType].second << ", city = " << safeGetCityName(unitBestBuildCities[ci->unitType].first);
 #endif
-                //getOddsAgainstHostiles_(pCity, *ci);
+                }
             }
             
             std::map<UnitTypes, std::vector<MilitaryMissionDataPtr> > unitMissionRequests;
@@ -1820,7 +1578,10 @@ namespace AltAI
             for (std::map<UnitTypes, int>::const_iterator uIter(unitRequestCounts.begin()), uEndIter(unitRequestCounts.end()); uIter != uEndIter; ++uIter)
             {
 #ifdef ALTAI_DEBUG
-                os << " unit " << gGlobals.getUnitInfo(uIter->first).getType() << " req count = " << uIter->second;
+                if (uIter->second > 0)
+                {
+                    os << "\n\t unit " << gGlobals.getUnitInfo(uIter->first).getType() << " req count = " << uIter->second;
+                }
 #endif
                 if (uIter->second > mostRequestedCount)
                 {
@@ -1828,6 +1589,11 @@ namespace AltAI
                     mostRequestedUnit = uIter->first;
                 }
             }
+            requestData.unitType = mostRequestedUnit;
+            requestData.missionRequestCount = unitRequestCounts[mostRequestedUnit];
+            requestData.bestCity = unitBestBuildCities[mostRequestedUnit].first;
+            requestData.bestCityBuildTime = unitBestBuildCities[mostRequestedUnit].second;
+
 #ifdef ALTAI_DEBUG
             if (mostRequestedUnit != NO_UNIT)
             {
@@ -1847,7 +1613,7 @@ namespace AltAI
             }
             os << "\ngetUnitRequestBuild returning: " << (mostRequestedUnit == NO_UNIT ? " (none) " : gGlobals.getUnitInfo(mostRequestedUnit).getType());
 #endif
-            return mostRequestedUnit;
+            return requestData;
         }
 
         PlotUnitsMap getNearbyHostileStacks(const CvPlot* pPlot, int range)
@@ -1961,9 +1727,55 @@ namespace AltAI
             return targetsMap;
         }
 
-        const std::map<XYCoords, CombatData>& getAttackableUnitsMap()
+        const std::map<XYCoords, std::list<IDInfo> >& getEnemyStacks() const
+        {
+            return enemyStacks_;
+        }
+
+        PlotUnitDataMap getEnemyUnitData(int subArea) const
+        {
+            PlotUnitDataMap unitDataMap;
+            const CvMap& map = gGlobals.getMap();
+
+            for (std::map<XYCoords, std::list<IDInfo> >::const_iterator coordIter(enemyStacks_.begin()), coordEndIter(enemyStacks_.end());
+                coordIter != coordEndIter; ++coordIter)
+            {
+                const CvPlot* pPlot = map.plot(coordIter->first);
+                // todo - deal with ships in port
+                if (pPlot->getSubArea() == subArea)
+                {
+                    for (std::list<IDInfo>::const_iterator lIter(coordIter->second.begin()), lEndIter(coordIter->second.end()); lIter != lEndIter; ++lIter)
+                    {
+                        const CvUnit* pUnit = ::getUnit(*lIter);
+                        if (pUnit)
+                        {
+                            unitDataMap[pPlot].push_back(UnitData(pUnit));
+                        }
+                    }
+                }
+            }
+
+            return unitDataMap;
+        }
+
+        const std::map<XYCoords, CombatData>& getAttackCombatMap() const
         {
             return attackCombatMap_;
+        }
+
+        const std::map<XYCoords, CombatData>& getDefenceCombatMap() const
+        {
+            return defenceCombatMap_;
+        }
+
+        const std::map<XYCoords, CombatGraph::Data>& getAttackCombatData() const
+        {
+            return attackCombatData_;
+        }
+
+        const std::map<XYCoords, CombatGraph::Data>& getDefenceCombatData() const
+        {
+            return defenceCombatData_;
         }
 
         CvUnit* getNextAttackUnit()
@@ -2159,6 +1971,9 @@ namespace AltAI
                 {
                     if (iter->second.pWin > attThreshold)
                     {
+#ifdef ALTAI_DEBUG
+                        os << "\nChecking possible attack coords: " << iter->first << " odds: " << iter->second.pWin;
+#endif
                         for (std::list<IDInfo>::iterator li(iter->second.longestAndShortestAttackOrder.first.begin()); li != iter->second.longestAndShortestAttackOrder.first.end(); ++li)
                         {
                             CvUnit* pPossibleAttackUnit = ::getUnit(*li);
@@ -2172,6 +1987,7 @@ namespace AltAI
                             {
                                 if (pPossibleAttackUnit)
                                 {
+                                    pPossibleAttackUnit->getGroup()->clearMissionQueue(__FUNCTION__);
 #ifdef ALTAI_DEBUG
                                     os << "\nReturning next attacker: " << pPossibleAttackUnit->getIDInfo() << " remaining count = " << iter->second.longestAndShortestAttackOrder.first.size()
                                         << " with attack coords: " << iter->first << " and pWin = " << iter->second.pWin;
@@ -2182,7 +1998,17 @@ namespace AltAI
                                     std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = ourUnitsMissionMap_.find(pAttackUnit->getIDInfo());
                                     if (missionIter != ourUnitsMissionMap_.end())
                                     {
-                                        if (isEmpty(missionIter->second->nextAttack.first))
+                                        const CvCity* pTargetCity = missionIter->second->getTargetCity();
+                                        if (pTargetCity && pTargetCity->isBarbarian() && pTargetCity->getCultureLevel() == 1 && pTargetCity->getPopulation() == 1)
+                                        {
+#ifdef ALTAI_DEBUG
+                                            os << "\nDelaying attack on target to avoid razing city...";
+                                            pAttackUnit = NULL;
+                                            continue;
+#endif
+                                        }
+                                        if (isEmpty(missionIter->second->nextAttack.first) || 
+                                            missionIter->second->nextAttack.first == pAttackUnit->getIDInfo() && missionIter->second->nextAttack.second == iter->first)
                                         {
 #ifdef ALTAI_DEBUG
                                             os << "\nSet attack unit and coords for unit's mission";
@@ -2196,10 +2022,11 @@ namespace AltAI
                                                << " for coords: " << missionIter->second->nextAttack.second << " clearing and not returning an attack unit ";
 #endif
                                             missionIter->second->nextAttack = std::make_pair(IDInfo(), XYCoords());
-                                            return NULL;
+                                            pAttackUnit = NULL;
+                                            continue;
                                         }
                                     }
-                                    break;
+                                    if (pAttackUnit) break;
                                 }
                             }
                         }
@@ -2208,6 +2035,12 @@ namespace AltAI
                         {
                             break;
                         }
+                    }
+                    else
+                    {
+#ifdef ALTAI_DEBUG
+                        os << "\nSkipping possible attack coords: " << iter->first << " as odds too low: " << iter->second.pWin;
+#endif 
                     }
                 }
             }
@@ -2231,6 +2064,16 @@ namespace AltAI
             return coords;
         }
 
+        const std::map<IDInfo, UnitHistory>& getUnitHistories() const
+        {
+            return unitHistories_;
+        }
+
+        const std::list<MilitaryMissionDataPtr>& getMissions() const
+        {
+            return missionList_;
+        }
+
         std::map<int /* sub area */, std::set<XYCoords> > getLandScoutMissionRefPlots() const
         {
             std::map<int /* sub area */, std::set<XYCoords> > subAreaRefPlotsMap;
@@ -2240,7 +2083,7 @@ namespace AltAI
             {
                 if (missionIter->second->missionType == MISSIONAI_EXPLORE)
                 {
-                    if (missionIter->second->targetCoords != XYCoords(-1, -1))
+                    if (!isEmpty(missionIter->second->targetCoords))
                     {
                         const CvPlot* pTargetPlot = gGlobals.getMap().plot(missionIter->second->targetCoords.iX, missionIter->second->targetCoords.iY);
                         if (!pTargetPlot->isWater())
@@ -2609,6 +2452,40 @@ namespace AltAI
             return category;
         }
 
+        void checkUnassignedUnits_()
+        {
+#ifdef ALTAI_DEBUG
+            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
+            std::map<UnitCategories, std::set<IDInfo> >::const_iterator landCombatUnitsIter = units_.find(LandCombat);
+            std::map<int, std::set<IDInfo> > unassignedUnitsBySubarea;
+            if (landCombatUnitsIter != units_.end())
+            {
+                for (std::set<IDInfo>::const_iterator iter(landCombatUnitsIter->second.begin()), endIter(landCombatUnitsIter->second.end());
+                    iter != endIter; ++iter)
+                {
+                    std::map<IDInfo, MilitaryMissionDataPtr>::const_iterator missionIter = ourUnitsMissionMap_.find(*iter);
+                    if (missionIter == ourUnitsMissionMap_.end())
+                    {
+                        const CvUnit* pUnit = ::getUnit(*iter);
+                        if (pUnit)
+                        {
+                            unassignedUnitsBySubarea[pUnit->plot()->getSubArea()].insert(*iter);
+                        }
+                    }
+                }
+            }
+
+#ifdef ALTAI_DEBUG
+            for (std::map<int, std::set<IDInfo> >::const_iterator uIter(unassignedUnitsBySubarea.begin()), uEndIter(unassignedUnitsBySubarea.end());
+                uIter != uEndIter; ++uIter)
+            {
+                os << "\nUnassigned units for area: " << uIter->first;
+                debugUnitSet(os, uIter->second);
+            }
+#endif
+        }
+
         MilitaryMissionDataPtr checkCityGuard_(CvUnitAI* pUnit, const CvCity* pCity)
         {
             std::map<IDInfo, MilitaryMissionDataPtr>::iterator cityGuardMissionIter = cityGuardMissionsMap_.find(pCity->getIDInfo());
@@ -2833,6 +2710,498 @@ namespace AltAI
 #endif
         }
 
+        void updateMissionRequirements_()
+        {
+#ifdef ALTAI_DEBUG
+            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
+#endif 
+            const int currentTurn = gGlobals.getGame().getGameTurn();
+            std::vector<std::pair<IDInfo, XYCoords> > targetsToErase;
+
+            // loop over all our missions - updating requirements
+            // todo - sort mission list by priority
+            for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()); missionsIter != missionList_.end();)
+            {
+                MissionAITypes missionAIType = (*missionsIter)->missionType;
+                if (missionAIType == MISSIONAI_COUNTER || missionAIType == MISSIONAI_COUNTER_CITY || 
+                    missionAIType == MISSIONAI_GUARD_CITY || missionAIType == MISSIONAI_RESERVE || missionAIType == MISSIONAI_EXPLORE)
+                {
+                    (*missionsIter)->resetDynamicData();
+                    bool updateRequiredUnits = false;
+                    int subAreaId = -1;
+
+                    if (missionAIType == MISSIONAI_COUNTER || missionAIType == MISSIONAI_COUNTER_CITY)
+                    {
+                        if ((*missionsIter)->targetUnits.empty() && isEmpty((*missionsIter)->targetCity))
+                        {
+                            if (!isEmpty((*missionsIter)->targetCoords))
+                            {
+                                const CvPlot* pTargetPlot = (*missionsIter)->getTargetPlot();
+                                bool plotIsNoLongerATarget = false;
+                                if (pTargetPlot && pTargetPlot->isVisible(player_.getTeamID(), false))
+                                {
+                                    CvTeamAI& ourTeam = CvTeamAI::getTeam(player_.getTeamID());
+                                    PlayerTypes revealedOwner = pTargetPlot->getRevealedOwner(player_.getTeamID(), false);
+                                    if (revealedOwner == NO_PLAYER || revealedOwner == player_.getPlayerID())
+                                    {
+                                        plotIsNoLongerATarget = true;
+                                    }
+                                    else
+                                    {
+                                        if (!ourTeam.isAtWar(PlayerIDToTeamID(revealedOwner)))
+                                        {
+                                            plotIsNoLongerATarget = true;
+                                        }
+                                    }
+                                    if (plotIsNoLongerATarget)
+                                    {
+#ifdef ALTAI_DEBUG
+                                        os << "\n clearing required units for mission: ";
+                                        (*missionsIter)->debug(os);
+#endif
+                                        (*missionsIter)->requiredUnits.clear();
+                                        (*missionsIter)->targetCoords = XYCoords();
+                                    }
+                                }
+                            }
+                        }
+                        updateRequiredUnits = (*missionsIter)->assignedUnits.empty();
+                        bool updateHostiles = false;
+                        PlotUnitsMap targetStacks;
+                        const CvPlot* pFirstStackPlot = NULL;
+
+                        // update our reachable plots
+                        (*missionsIter)->updateReachablePlots(player_, true, true, true);
+
+                        for (std::set<IDInfo>::iterator targetsIter((*missionsIter)->targetUnits.begin()), targetsEndIter((*missionsIter)->targetUnits.end());
+                            targetsIter != targetsEndIter;)
+                        {
+                            std::map<IDInfo, UnitHistory>::iterator hIter = unitHistories_.find(*targetsIter);
+                            if (hIter != unitHistories_.end() && !hIter->second.locationHistory.empty())
+                            {
+                                int whenLastSeen = currentTurn - hIter->second.locationHistory.begin()->first;
+                                updateHostiles = whenLastSeen == 0;
+
+                                XYCoords whereLastSeen = hIter->second.locationHistory.begin()->second;
+                                const CvPlot* pStackPlot = gGlobals.getMap().plot(whereLastSeen.iX, whereLastSeen.iY);
+                                bool stackPlotIsCity = pStackPlot->isCity(); // presume we've seen the city if there is one
+#ifdef ALTAI_DEBUG
+                                os << "\nTarget: " << *targetsIter << " last seen " << whenLastSeen << " turn(s) ago at: " << whereLastSeen;
+#endif
+
+                                if (!stackPlotIsCity && whenLastSeen > 2 || stackPlotIsCity && whenLastSeen > 10)
+                                {
+#ifdef ALTAI_DEBUG
+                                    os << "\n clearing hostile's reachable plots for mission: " << (unsigned long)(missionsIter->get());
+#endif
+                                    (*missionsIter)->hostilesReachablePlots.clear();
+
+                                    if (whenLastSeen > 4)
+                                    {
+#ifdef ALTAI_DEBUG
+                                        os << "\nRemoving target from mission (" << *missionsIter << ") - target lost " << *targetsIter;
+                                        if (hostileUnitsMissionMap_.find(*targetsIter) != hostileUnitsMissionMap_.end())
+                                        {
+                                            os << "\n erasing mission target from map " << *targetsIter;
+                                        }
+#endif
+                                        targetsToErase.push_back(std::make_pair(*targetsIter, whereLastSeen));
+                                    }
+                                }
+                                else
+                                {
+                                    // probably want to move to UnitData objects for tracking targets
+                                    // as removes this reliance on getting the real unit
+                                    const CvUnit* pTargetUnit = ::getUnit(*targetsIter);
+                                    if (pTargetUnit)  // a bit of a cheat as we know the unit is still alive even if we have the wrong location
+                                    {
+                                        if (!pFirstStackPlot)
+                                        {
+                                            pFirstStackPlot = pStackPlot;
+                                        }
+                                        // may want to be smarter here to handle a partial update...?
+                                        // as unit was seen in order to be in unitHistory, don't need to recheck for visibility
+                                        targetStacks[pStackPlot].push_back(pTargetUnit);  
+                                    }
+                                }
+                            }
+                            else
+                            {
+#ifdef ALTAI_DEBUG
+                                os << "\nTarget unit for mission not found in history for mission: " << *missionsIter;
+#endif
+                                if (!(*missionsIter)->hostilesReachablePlots.empty())
+                                {
+#ifdef ALTAI_DEBUG
+                                    os << "\n clearing hostile's reachable plots for mission: " << (unsigned long)(missionsIter->get());
+#endif
+                                    (*missionsIter)->hostilesReachablePlots.clear();
+                                }
+                            }
+                            ++targetsIter;
+                        }
+
+                        float closestCityHostileAttackOdds = 0.0f;
+                        for (PlotUnitsMap::iterator stackIter(targetStacks.begin()), stackEndIter(targetStacks.end()); stackIter != stackEndIter; ++stackIter)
+                        {
+                            const CvPlot* pStackPlot = stackIter->first;
+                            bool stackPlotIsCity = pStackPlot->isCity();
+#ifdef ALTAI_DEBUG
+                            if (pStackPlot->isWater())
+                            {
+                                os << "\nPotential water based stack";
+                            }
+#endif
+                            CombatGraph::Data endStates = getNearestCityAttackOdds(player_, *missionsIter, pStackPlot);
+                            closestCityHostileAttackOdds = endStates.pWin;
+                            updateRequiredUnits = stackPlotIsCity || endStates.pWin > hostileAttackThreshold;  // indicates less than 80% chance of our units' survival
+#ifdef ALTAI_DEBUG
+                            const CvPlot* pClosestCityPlot = player_.getAnalysis()->getMapAnalysis()->getClosestCity(pStackPlot, pStackPlot->getSubArea(), false);
+                            os << "\nHostile units at: " << pStackPlot->getCoords() << ", our closest city: " << safeGetCityName(pClosestCityPlot->getPlotCity());
+                            if (stackPlotIsCity) os << " hostile units in city: " << safeGetCityName(pStackPlot->getPlotCity());
+
+                            if (pClosestCityPlot)
+                            {
+                                os << "\nHostile units' distance to our closest city = " << plotDistance(pStackPlot->getX(), pStackPlot->getY(), pClosestCityPlot->getX(), pClosestCityPlot->getY());
+                                endStates.debug(os);
+                            }
+#endif
+                            if (pClosestCityPlot)
+                            {
+#ifdef ALTAI_DEBUG
+                                if (!isEmpty((*missionsIter)->closestCity) && (*missionsIter)->closestCity != pClosestCityPlot->getPlotCity()->getIDInfo())
+                                {
+                                    os << "\n mission: " << *missionsIter << " closest city changing from: " << safeGetCityName((*missionsIter)->closestCity) << " to: " << safeGetCityName(pClosestCityPlot->getPlotCity()->getIDInfo());
+                                }
+                                else
+                                {
+                                    os << "\n mission: " << *missionsIter << " setting closest city to: " << safeGetCityName(pClosestCityPlot->getPlotCity()->getIDInfo());
+                                }
+#endif
+                                (*missionsIter)->closestCity = pClosestCityPlot->getPlotCity()->getIDInfo();
+                            }
+
+                            if ((*missionsIter)->getTargetPlot() && (*missionsIter)->getTargetPlot()->getCoords() != stackIter->first->getCoords())
+                            {
+#ifdef ALTAI_DEBUG
+                                os << "\n target plot changing from: " << (*missionsIter)->getTargetPlot()->getCoords() << " to: " << stackIter->first->getCoords();
+#endif
+                            }
+                        }
+
+                        const CvPlot* pTargetPlot = (*missionsIter)->getTargetPlot();
+                        if (subAreaId == -1 && pTargetPlot)
+                        {
+                            subAreaId = pTargetPlot->getSubArea();
+                        }
+
+                        if (updateHostiles)  // update reachable plots
+                        {
+                            (*missionsIter)->hostilesReachablePlots.clear();
+#ifdef ALTAI_DEBUG
+                            os << "\n recalculating reachable plots for mission: " << *missionsIter;
+#endif
+                            for (PlotUnitsMap::const_iterator targetsIter(targetStacks.begin()), targetsEndIter(targetStacks.end()); targetsIter != targetsEndIter; ++targetsIter)
+                            {
+                                (*missionsIter)->updateReachablePlots(player_, false, true, true);
+                            }
+                        }
+
+                        // see if we grab any nearby units
+                        if (closestCityHostileAttackOdds > hostileAttackThreshold && !(*missionsIter)->tooDistantAssignedUnits.empty() && !isEmpty((*missionsIter)->closestCity) && pFirstStackPlot)
+                        {
+                            const CvCity* pRallyCity = ::getCity((*missionsIter)->closestCity);
+                            const CvPlot* pRallyTarget = pRallyCity ? pRallyCity->plot() : pFirstStackPlot;
+                            std::set<IDInfo> availableUnits = getAssignedUnits(MISSIONAI_RESERVE, subAreaId);
+                            MissionFinder missionFinder;
+                            missionFinder.missionType = MISSIONAI_ESCORT_WORKER;
+                            missionFinder.unitProximityData = UnitPlotProximity(5, pRallyTarget->getCoords());
+
+                            std::list<MilitaryMissionDataPtr>::iterator helperMissionsIter = std::find_if(missionList_.begin(), missionList_.end(), missionFinder);
+
+                            while (helperMissionsIter != missionList_.end())
+                            {
+                                availableUnits.insert((*helperMissionsIter)->assignedUnits.begin(), (*helperMissionsIter)->assignedUnits.end());
+                                std::advance(helperMissionsIter, 1);
+                                helperMissionsIter = std::find_if(helperMissionsIter, missionList_.end(), missionFinder);
+                            }
+
+                            missionFinder.missionType = MISSIONAI_ESCORT;
+                            helperMissionsIter = std::find_if(missionList_.begin(), missionList_.end(), missionFinder);
+                            while (helperMissionsIter != missionList_.end())
+                            {
+                                for (std::set<IDInfo>::iterator aIter((*helperMissionsIter)->assignedUnits.begin()), aEndIter((*helperMissionsIter)->assignedUnits.end());
+                                    aIter != aEndIter; ++aIter)
+                                {
+                                    const CvUnit* pUnit = ::getUnit(*aIter);
+                                    if (pUnit && pUnit->canFight())
+                                    {
+                                        availableUnits.insert(*aIter);
+                                    }                                    
+                                }
+                                std::advance(helperMissionsIter, 1);
+                                helperMissionsIter = std::find_if(helperMissionsIter, missionList_.end(), missionFinder);
+                            }
+
+                            for (std::set<IDInfo>::iterator aIter(availableUnits.begin()), aEndIter(availableUnits.end()); aIter != aEndIter; ++aIter)
+                            {
+                                CvUnit* pUnit = ::getUnit(*aIter);
+                                if (pUnit)
+                                {
+                                    std::map<IDInfo, MilitaryMissionDataPtr>::const_iterator unitMissionMapIter = ourUnitsMissionMap_.find(*aIter);
+                                    FAssertMsg(unitMissionMapIter != ourUnitsMissionMap_.end() && unitMissionMapIter->second.get() != missionsIter->get(), "reassigning unit to its own mission?");
+                                    reassignOurUnit_(pUnit, *missionsIter);
+                                }
+                            }
+#ifdef ALTAI_DEBUG
+                            os << "\n available extra units: ";
+                            debugUnitSet(os, availableUnits);
+#endif                            
+                        }
+                    }
+                    else if (missionAIType == MISSIONAI_GUARD_CITY)
+                    {
+                        bool updateRequiredUnits = (*missionsIter)->assignedUnits.empty();
+                        subAreaId = (*missionsIter)->getTargetPlot()->getSubArea();
+                    }
+
+                    if (subAreaId != -1 && updateRequiredUnits)
+                    {
+                        std::set<IDInfo> availableUnits = getAssignedUnits(MISSIONAI_RESERVE, subAreaId);
+                        std::vector<IDInfo> unitsToReassign = (*missionsIter)->updateRequiredUnits(player_, availableUnits);
+                        for (size_t i = 0, count = unitsToReassign.size(); i < count; ++i)
+                        {
+                            reassignOurUnit_(::getUnit(unitsToReassign[i]), *missionsIter);
+                        }
+                    }
+                }
+
+                // temp hack to unlink escort missions for incompatible unit domains
+                if (missionAIType == MISSIONAI_ESCORT_WORKER)
+                {
+                    if (!(*missionsIter)->targetUnits.empty())
+                    {
+                        const CvUnit* pTargetUnit = ::getUnit(*(*missionsIter)->targetUnits.begin());
+                        if (pTargetUnit && pTargetUnit->getDomainType() != DOMAIN_LAND)
+                        {
+#ifdef ALTAI_DEBUG
+                            os << "\n erasing escort mission with incompatible unit domains: ";                      
+#endif
+                            eraseMission_(*missionsIter++);
+                            continue;
+                        }
+                    }
+                }
+
+#ifdef ALTAI_DEBUG
+                (*missionsIter)->debug(os);
+#endif
+                ++missionsIter;
+            }
+
+            for (size_t i = 0, count = targetsToErase.size(); i < count; ++i)
+            {
+                // deletes history completely - may want to reconsider this
+                deletePlayerUnit(targetsToErase[i].first, gGlobals.getMap().plot(targetsToErase[i].second));
+            }
+        }
+
+        void updateMissions_()
+        {
+            std::list<MilitaryMissionDataPtr> missionsToErase;
+            for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()); missionsIter != missionList_.end(); ++missionsIter)
+            {
+                // #temp remove obsolete missions - todo ensure these cases are properly cleaned up
+                if ((*missionsIter)->missionType == MISSIONAI_EXPLORE && (*missionsIter)->assignedUnits.empty())
+                {
+                    missionsToErase.push_back(*missionsIter);
+                    continue;
+                }
+                if ((*missionsIter)->missionType == MISSIONAI_COUNTER_CITY)
+                {
+                    const CvCity* pCity = ::getCity((*missionsIter)->targetCity);
+                    if (!pCity)
+                    {
+                        missionsToErase.push_back(*missionsIter);
+                        continue;
+                    }
+                }
+                if ((*missionsIter)->missionType == MISSIONAI_COUNTER && (*missionsIter)->targetUnits.empty() && (*missionsIter)->assignedUnits.empty())
+                {
+                    missionsToErase.push_back(*missionsIter);
+                    continue;
+                }
+                if ((*missionsIter)->missionType == MISSIONAI_COUNTER && (*missionsIter)->targetUnits.empty() && !(*missionsIter)->getTargetPlot())
+                {
+                    missionsToErase.push_back(*missionsIter);
+                    continue;
+                }
+
+                // ##temp hack to add in missing UnitsMission handler
+                if ((*missionsIter)->missionType == MISSIONAI_COUNTER || (*missionsIter)->missionType == MISSIONAI_COUNTER_CITY)
+                {
+                    (*missionsIter)->pUnitsMission = IUnitsMissionPtr(new UnitCounterMission(player_.getCvPlayer()->getStartingPlot()->getSubArea()));
+                }
+                else if ((*missionsIter)->missionType == MISSIONAI_ESCORT_WORKER)
+                {
+                    (*missionsIter)->pUnitsMission = IUnitsMissionPtr(new WorkerEscortMission(player_.getCvPlayer()->getStartingPlot()->getSubArea()));
+                }
+                else if ((*missionsIter)->missionType == MISSIONAI_ESCORT)
+                {
+                    (*missionsIter)->pUnitsMission = IUnitsMissionPtr(new SettlerEscortMission(player_.getCvPlayer()->getStartingPlot()->getSubArea()));
+                }
+                else if ((*missionsIter)->missionType == MISSIONAI_RESERVE)
+                {
+                    (*missionsIter)->pUnitsMission = IUnitsMissionPtr(new ReserveMission());
+                }
+                else if ((*missionsIter)->missionType == MISSIONAI_GUARD_CITY)
+                {
+                    (*missionsIter)->pUnitsMission = IUnitsMissionPtr(new CityDefenceMission());
+                }
+
+                if ((*missionsIter)->pUnitsMission)
+                {
+                    (*missionsIter)->pUnitsMission->update(player_);
+                }
+            }
+
+            for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionsToErase.begin()); missionsIter != missionsToErase.end();)
+            {
+                eraseMission_(*missionsIter++);
+            }
+        }
+
+        void updateAttackCombatMap_()
+        {
+#ifdef ALTAI_DEBUG
+            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
+            attackCombatData_.clear();
+            attackCombatMap_ = getAttackableUnitsMap_();
+
+            for (std::map<XYCoords, CombatData>::const_iterator attIter(attackCombatMap_.begin()), attEndIter(attackCombatMap_.end()); attIter != attEndIter; ++attIter)
+            {
+                CombatGraph combatGraph = getCombatGraph(player_, attIter->second.combatDetails, attIter->second.attackers, attIter->second.defenders);
+                combatGraph.analyseEndStates();
+
+                std::set<MilitaryMissionDataPtr> updatedMissions;
+                for (size_t i = 0, count = attIter->second.defenders.size(); i < count; ++i)
+                {
+                    std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = hostileUnitsMissionMap_.find(attIter->second.defenders[i].unitId);
+                    FAssertMsg(missionIter != hostileUnitsMissionMap_.end(), "Missing hostile unit mission?");
+
+                    if (updatedMissions.find(missionIter->second) == updatedMissions.end())
+                    {
+                        missionIter->second->ourAttackOdds = combatGraph.endStatesData;
+                        missionIter->second->ourAttackers = attIter->second.attackers;
+                        if (!attIter->second.attackers.empty())
+                        {
+                            missionIter->second->firstAttacker = attIter->second.attackers[combatGraph.getFirstUnitIndex(true)].unitId;
+                        }
+                        updatedMissions.insert(missionIter->second);
+                        break;
+                    }
+                }
+
+                for (size_t i = 0, count = attIter->second.attackers.size(); i < count; ++i)
+                {
+                    // store which units we can attack in our units' missions
+                    std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = ourUnitsMissionMap_.find(attIter->second.attackers[i].unitId);
+                    FAssertMsg(missionIter != ourUnitsMissionMap_.end(), "Missing our unit mission?");
+                    for (size_t j = 0, count = attIter->second.defenders.size(); j < count; ++j)
+                    {                        
+                        missionIter->second->attackableUnits.insert(attIter->second.defenders[j].unitId);
+                    }
+                }
+                attackCombatData_[attIter->first] = combatGraph.endStatesData;
+
+#ifdef ALTAI_DEBUG
+                os << " \npotential attack combat results for plot: " << attIter->first;
+                combatGraph.endStatesData.debug(os);
+                combatGraph.debugEndStates(os);
+                std::list<IDInfo> attackOrder = combatGraph.getUnitOrdering(combatGraph.endStates.begin());
+                size_t index = 0;
+                for (std::list<IDInfo>::const_iterator attackOrderIter = attackOrder.begin(); attackOrderIter != attackOrder.end(); ++attackOrderIter)
+                {
+                    if (attackOrderIter == attackOrder.begin()) os << "\nAttack order: ";
+                    else os << ", ";
+                    const CvUnit* pUnit = ::getUnit(*attackOrderIter);
+                    os << index++ << ": " << *attackOrderIter << pUnit->getUnitInfo().getType();
+                }
+
+                std::pair<std::list<IDInfo>, std::list<IDInfo> > longestAndShortestAttackOrder = combatGraph.getLongestAndShortestAttackOrder();
+
+                for (std::list<IDInfo>::const_iterator attackOrderIter = longestAndShortestAttackOrder.first.begin(); attackOrderIter != longestAndShortestAttackOrder.first.end(); ++attackOrderIter)
+                {
+                    if (attackOrderIter == longestAndShortestAttackOrder.first.begin()) os << "\nLongest attack order: ";
+                    else os << ", ";
+                    const CvUnit* pUnit = ::getUnit(*attackOrderIter);
+                    os << index++ << ": " << *attackOrderIter << pUnit->getUnitInfo().getType();
+                }
+
+                for (std::list<IDInfo>::const_iterator attackOrderIter = longestAndShortestAttackOrder.second.begin(); attackOrderIter != longestAndShortestAttackOrder.second.end(); ++attackOrderIter)
+                {
+                    if (attackOrderIter == longestAndShortestAttackOrder.second.begin()) os << "\nShortest attack order: ";
+                    else os << ", ";
+                    const CvUnit* pUnit = ::getUnit(*attackOrderIter);
+                    os << index++ << ": " << *attackOrderIter << pUnit->getUnitInfo().getType();
+                }
+#endif
+            }
+        }
+
+        void updateDefenceCombatMap_()
+        {
+#ifdef ALTAI_DEBUG
+            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
+            defenceCombatData_.clear();
+            defenceCombatMap_ = getAttackingUnitsMap_();
+
+            std::list<std::pair<XYCoords, double> > plotSurvivalOdds;
+            for (std::map<XYCoords, CombatData>::const_iterator defIter(defenceCombatMap_.begin()), defEndIter(defenceCombatMap_.end()); defIter != defEndIter; ++defIter)
+            {
+                CombatGraph combatGraph = getCombatGraph(player_, defIter->second.combatDetails, defIter->second.attackers, defIter->second.defenders);
+                combatGraph.analyseEndStates();
+                plotSurvivalOdds.push_back(std::make_pair(defIter->first, combatGraph.endStatesData.pLoss));  // we are the defenders; odds are wrt attackers
+
+                std::set<MilitaryMissionDataPtr> updatedHostilesMissions, ourUpdatedMissions;
+                for (size_t i = 0, count = defIter->second.attackers.size(); i < count; ++i)
+                {
+                    std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = hostileUnitsMissionMap_.find(defIter->second.attackers[i].unitId);
+                    FAssertMsg(missionIter != hostileUnitsMissionMap_.end(), "Missing hostile unit mission?");
+                    if (updatedHostilesMissions.find(missionIter->second) == updatedHostilesMissions.end())
+                    {
+                        // todo - check logic if missions's units end up spread over more than one plot and how we handle this in general
+                        missionIter->second->hostileAttackOdds = combatGraph.endStatesData;
+                        missionIter->second->ourDefenders = defIter->second.defenders;
+                        updatedHostilesMissions.insert(missionIter->second);
+                        break;
+                    }
+                }
+                for (size_t i = 0, count = defIter->second.defenders.size(); i < count; ++i)
+                {
+                    std::map<IDInfo, MilitaryMissionDataPtr>::iterator missionIter = ourUnitsMissionMap_.find(defIter->second.defenders[i].unitId);
+                    FAssertMsg(missionIter != ourUnitsMissionMap_.end(), "Missing our unit mission?");
+                    if (ourUpdatedMissions.find(missionIter->second) == ourUpdatedMissions.end())
+                    {
+                        // todo - check logic if missions's units end up spread over more than one plot and how we handle this in general
+                        missionIter->second->ourAttackOdds = combatGraph.endStatesData;
+                        missionIter->second->ourAttackers = defIter->second.attackers;
+                        ourUpdatedMissions.insert(missionIter->second);
+                        break;
+                    }
+                }
+                defenceCombatData_[defIter->first] = combatGraph.endStatesData;
+
+#ifdef ALTAI_DEBUG
+                os << " \npotential defensive combat results for plot: " << defIter->first;
+                combatGraph.endStatesData.debug(os);
+                combatGraph.debugEndStates(os);
+#endif
+            }
+        }
+
         void eraseUnit_(const IDInfo& info, const CvPlot* pPlot)
         {
             std::map<int, std::map<IDInfo, XYCoords> >::iterator unitsAreaIter = unitsMap_.find(pPlot->getSubArea());
@@ -2890,7 +3259,7 @@ namespace AltAI
 
         XYCoords addHistory_(const IDInfo& info, const CvPlot* pPlot)
         {
-            XYCoords previousCoords(-1, -1);
+            XYCoords previousCoords;
             std::map<IDInfo, UnitHistory>::iterator hIter = unitHistories_.find(info);
             if (hIter != unitHistories_.end())
             {                
@@ -2917,7 +3286,7 @@ namespace AltAI
         {
             std::map<int, std::map<IDInfo, XYCoords> >::iterator unitsAreaMapIter = hiddenUnitsMap_.end();
             std::map<IDInfo, XYCoords>::iterator unitsMapIter;
-            XYCoords foundCoords(-1, -1);
+            XYCoords foundCoords;
 
             if (areaHint != FFreeList::INVALID_INDEX)
             {
@@ -2965,10 +3334,13 @@ namespace AltAI
             std::map<XYCoords, std::set<IDInfo> >::const_iterator stackIter = stackAreaIter->second.find(currentCoords);
             FAssert(stackIter != stackAreaIter->second.end());  // expect unit to exist in the unit stacks map if we're here
             bool isAnimalStack = true;
+            bool isLandDomain = pUnit->getDomainType() == DOMAIN_LAND;
+            // todo - filter by team id of passed in unit
+            // track separate list of capture units
             for (std::set<IDInfo>::const_iterator unitsIter = stackIter->second.begin(), unitsEndIter = stackIter->second.end(); unitsIter != unitsEndIter; ++unitsIter)
             {
                 const CvUnit* pUnit = ::getUnit(*unitsIter);
-                if (pUnit)
+                if (pUnit && pUnit->canFight())
                 {
                     enemyStack.push_back(pUnit);
                     isAnimalStack = isAnimalStack && pUnit->isAnimal();
@@ -3000,6 +3372,10 @@ namespace AltAI
                 }
             }
 
+#ifdef ALTAI_DEBUG
+            os << "\nunitHasExistingMission: " << unitHasExistingMission << ", foundMissionAtPlot: " << foundMissionAtPlot;
+#endif
+
             if (!foundMissionAtPlot && pUnitPlot->isCity())
             {
                 MissionFinder missionFinder;
@@ -3013,7 +3389,19 @@ namespace AltAI
                 }
             }
 
+            // for coastal units - search nearby plots and join to mission for nearby hostiles if found
+            if (!foundMissionAtPlot && !isLandDomain)
+            {
+                MissionFinder missionFinder;
+                missionFinder.missionType = MISSIONAI_COUNTER_COASTAL;
+                missionFinder.domainType = DOMAIN_SEA;
+                missionFinder.proximityData = MissionPlotProximity(10, pUnit->plot()->getCoords());
+            }
+
             const bool unitHasNewMission = !foundMissionAtPlot && !unitHasExistingMission;
+#ifdef ALTAI_DEBUG
+            os << ", foundMissionAtPlot2: " << foundMissionAtPlot << ", unitHasNewMission: " << unitHasNewMission;
+#endif
             if (unitHasExistingMission) // existing mission
             {
                 pMission = pExistingMission;  // means we don't join even if we could - todo sort this out
@@ -3029,7 +3417,8 @@ namespace AltAI
             }
             else if (unitHasNewMission) // no existing mission and no mission found at plot to join                
             {
-                pMission = addMission_(MISSIONAI_COUNTER);
+                pMission = isLandDomain ? UnitCounterMission::createMission(subArea, false) : CoastalDefenceMission::createMission(subArea);
+                addMission_(pMission);
                 pMission->targetUnits.insert(info);
             }
             else  // mission found to join and no existing mission
@@ -3044,7 +3433,7 @@ namespace AltAI
 
                 if (!isAnimalStack)
                 {
-                    CombatGraph::Data endStates = getNearestCityAttackOdds(pMission);
+                    CombatGraph::Data endStates = getNearestCityAttackOdds(player_, pMission, pUnitPlot);
                     //if (endStates.pWin > hostileAttackThreshold)
                     {
                         isImmininentThreat = true;
@@ -3075,13 +3464,13 @@ namespace AltAI
             if (unitHasNewMission)
             {
                 os << "\nnew counter mission for target unit: " << info;
-                pMission->debug(os);
+                pMission->debug(os, true);
             }
             if (foundMissionAtPlot && unitHasExistingMission)
             {
                 os << " had existing mission and also found mission on plot ";
                 pFoundMission->debug(os);
-            }                
+            }
 #endif
             FAssert(pMission != NULL);
 
@@ -3111,7 +3500,8 @@ namespace AltAI
             {
                 if (pSettlerUnit->isFound())
                 {
-                    pMission = addMission_(MISSIONAI_ESCORT);
+                    pMission = SettlerEscortMission::createMission(pSettlerUnit->plot()->getSubArea());
+                    addMission_(pMission);
                     pMission->assignUnit(pSettlerUnit, false);
                     addOurUnitMission_(pMission, pSettlerUnit->getIDInfo());
                     isNewMission = true;
@@ -3140,7 +3530,6 @@ namespace AltAI
 
                 int bestUnitScore = 0, bestReserveUnitScore = 0, potentialEscortScore = 0;
                 DependencyItemSet di;
-                di.insert(DependencyItem(-1, -1));
                 const TacticSelectionData& tacticData = player_.getAnalysis()->getPlayerTactics()->tacticSelectionDataMap[di];
                 UnitTypes bestEscortUnitType = NO_UNIT;
                 std::map<UnitTypes, int> unitValues;
@@ -3193,7 +3582,7 @@ namespace AltAI
                     }
                 }
 #ifdef ALTAI_DEBUG
-                os << " bestReserveUnitScore: " << bestReserveUnitScore << ", bestReserveEscortUnit: " << bestReserveEscortUnit;
+                os << " bestReserveUnitScore: " << bestReserveUnitScore << ", bestReserveEscortUnit: " << bestReserveEscortUnit << "\n";
 #endif
 
                 if (pPotentialEscortUnit && bestReserveUnitScore > 0 && bestReserveUnitScore > 2 * bestUnitScore / 3)  // at least 2/3 of our best escort unit's score
@@ -3206,7 +3595,7 @@ namespace AltAI
                     for (std::map<UnitTypes, int>::const_iterator vi(unitValues.begin()), viEnd(unitValues.end()); vi != viEnd; ++vi)
                     {
 #ifdef ALTAI_DEBUG
-                        os << " checking escort unit: " << vi->first << " with value: " << vi->second;
+                        os << " checking escort unit: " << gGlobals.getUnitInfo(vi->first).getType() << " with value: " << vi->second;
 #endif
                         if (vi->second > 2 * bestUnitScore / 3)
                         {
@@ -3232,9 +3621,10 @@ namespace AltAI
                 if (unitDomain == DOMAIN_LAND)
                 {
                     XYCoords refCoords = getLandExploreRefPlot(pUnit);
-                    if (refCoords != XYCoords(-1, -1))
+                    if (!isEmpty(refCoords))
                     {
-                        MilitaryMissionDataPtr pMission = addMission_(MISSIONAI_EXPLORE);
+                        MilitaryMissionDataPtr pMission(new MilitaryMissionData(MISSIONAI_EXPLORE));
+                        addMission_(pMission);
                         pMission->assignUnit(pUnit);
                         pMission->targetCoords = refCoords;
                         addOurUnitMission_(pMission, pUnit->getIDInfo());
@@ -3249,7 +3639,8 @@ namespace AltAI
                 else if (unitDomain == DOMAIN_SEA)
                 {
                     // todo - track number of sea explore units
-                    MilitaryMissionDataPtr pMission = addMission_(MISSIONAI_EXPLORE);
+                    MilitaryMissionDataPtr pMission(new MilitaryMissionData(MISSIONAI_EXPLORE));
+                    addMission_(pMission);
                     pMission->assignUnit(pUnit);
                     addOurUnitMission_(pMission, pUnit->getIDInfo());
 #ifdef ALTAI_DEBUG
@@ -3273,7 +3664,8 @@ namespace AltAI
             UnitAITypes unitAIType = pWorkerUnit->AI_getUnitAIType();
             if (unitAIType == UNITAI_WORKER || unitAIType == UNITAI_WORKER_SEA)
             {
-                MilitaryMissionDataPtr pMission = addMission_(MISSIONAI_BUILD);
+                MilitaryMissionDataPtr pMission(new MilitaryMissionData(MISSIONAI_BUILD));
+                addMission_(pMission);
                 pMission->assignUnit(pWorkerUnit, false);
                 addOurUnitMission_(pMission, pWorkerUnit->getIDInfo());
 #ifdef ALTAI_DEBUG
@@ -3295,7 +3687,8 @@ namespace AltAI
                             // might want to limit this largesse to early game or other particular situations
                             os << " assigning escort unit: " << pEscortUnit->getIDInfo();
 #endif
-                            MilitaryMissionDataPtr pEscortMission = addMission_(MISSIONAI_ESCORT_WORKER);
+                            MilitaryMissionDataPtr pEscortMission = WorkerEscortMission::createMission(pWorkerUnit->plot()->getSubArea());
+                            addMission_(pEscortMission);
                             pEscortMission->targetUnits.insert(pWorkerUnit->getIDInfo());
                             reassignOurUnit_(pEscortUnit, pEscortMission);
                         }
@@ -3308,9 +3701,28 @@ namespace AltAI
             return MilitaryMissionDataPtr();
         }
 
+        MilitaryMissionDataPtr addMissionaryUnitMission_(const CvUnitAI* pMissionaryUnit)
+        {
+            UnitAITypes unitAIType = pMissionaryUnit->AI_getUnitAIType();
+            if (unitAIType == UNITAI_MISSIONARY || unitAIType == UNITAI_MISSIONARY_SEA)
+            {
+                MilitaryMissionDataPtr pMission(new MilitaryMissionData(MISSIONAI_SPREAD));
+                addMission_(pMission);
+                pMission->assignUnit(pMissionaryUnit, false);
+                addOurUnitMission_(pMission, pMissionaryUnit->getIDInfo());
+#ifdef ALTAI_DEBUG
+                std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
+                os << "\nnew missionary mission for unit: " << pMissionaryUnit->getIDInfo();
+                pMission->debug(os);
+#endif
+            }
+            return MilitaryMissionDataPtr();
+        }
+
         MilitaryMissionDataPtr addCityGuardMission_(const CvCity* pCity)
         {
-            MilitaryMissionDataPtr pMission = addMission_(MISSIONAI_GUARD_CITY);
+            MilitaryMissionDataPtr pMission(new MilitaryMissionData(MISSIONAI_GUARD_CITY));
+            addMission_(pMission);
             pMission->targetCity = pCity->getIDInfo();
 
             pMission->requiredUnits = pCityDefenceAnalysis_->getRequiredUnits(pCity->getIDInfo());
@@ -3320,7 +3732,8 @@ namespace AltAI
 
         MilitaryMissionDataPtr addEscortWorkerUnitMission_(const CvUnitAI* pUnit, const CvUnitAI* pWorkerUnit)
         {
-            MilitaryMissionDataPtr pMission = addMission_(MISSIONAI_ESCORT_WORKER);
+            MilitaryMissionDataPtr pMission = WorkerEscortMission::createMission(pWorkerUnit->plot()->getSubArea());            
+            addMission_(pMission);
             pMission->assignUnit(pUnit, false);
             pMission->targetUnits.insert(pWorkerUnit->getIDInfo());
             addOurUnitMission_(pMission, pUnit->getIDInfo());
@@ -3332,9 +3745,25 @@ namespace AltAI
             return pMission;
         }
 
-        MilitaryMissionDataPtr addReserveLandUnitMission_(const CvUnit* pUnit, const CvPlot* pTarget)
+        MilitaryMissionDataPtr addReserveLandUnitMission_(CvUnit* pUnit, const CvPlot* pTarget)
         {
             MilitaryMissionDataPtr pMission;
+
+            //MissionFinder missionFinder;
+            //missionFinder.missionType = MISSIONAI_RESERVE;
+            //if (pCapital)
+            //{
+            //    missionFinder.city = pCapital->getIDInfo();
+            //}
+            //else
+            //{
+            //    // might be initial unit assignment and we have no capital yet
+            //    // units start on the same plot (except for human players)
+            //    // but add proximity check anyway to avoid creating multiple reserver missions for one sub area
+            //    missionFinder.proximityData = MissionPlotProximity(2, pUnit->plot()->getCoords());
+            //}
+            //std::list<MilitaryMissionDataPtr>::const_iterator missionsIter = std::find_if(missionList_.begin(), missionList_.end(), missionFinder);
+
             for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()); missionsIter != missionList_.end(); ++missionsIter)
             {
                 if ((*missionsIter)->missionType == MISSIONAI_RESERVE)
@@ -3355,7 +3784,8 @@ namespace AltAI
 
             if (!pMission)
             {
-                pMission = addMission_(MISSIONAI_RESERVE);
+                pMission = ReserveMission::createMission();
+                addMission_(pMission);
                 if (pTarget->isCity())
                 {
                     pMission->targetCity = pTarget->getPlotCity()->getIDInfo();
@@ -3365,8 +3795,7 @@ namespace AltAI
                     pMission->targetCoords = pTarget->getCoords();
                 }
             }
-            pMission->assignUnit(pUnit, false);
-            addOurUnitMission_(pMission, pUnit->getIDInfo());
+            reassignOurUnit_(pUnit, pMission);
             return pMission;
         }
 
@@ -3378,30 +3807,59 @@ namespace AltAI
             if (unitsAreaIter == unitsMap_.end())
             {
                 return MilitaryMissionDataPtr();  //assert this? shouldn't ever happen as we should at least have our own unit?
-            }            
-
-            for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()); missionsIter != missionList_.end(); ++missionsIter)
-            {
-                if (!((*missionsIter)->missionType == MISSIONAI_COUNTER || (*missionsIter)->missionType == MISSIONAI_COUNTER_CITY))
-                {
-                    continue;
-                }
-
-                for (std::set<IDInfo>::const_iterator targetsIter((*missionsIter)->targetUnits.begin()); targetsIter != (*missionsIter)->targetUnits.end(); ++targetsIter)
-                {
-                    // need a way to ask if the mission relates to this sub area
-                    if (unitsAreaIter->second.find(*targetsIter) != unitsAreaIter->second.end() || hiddenUnitsAreaIter->second.find(*targetsIter) != hiddenUnitsAreaIter->second.end())
-                    {
-                        int requiredCount = (*missionsIter)->getRequiredUnitCount(pUnit->getUnitType());
-                        if (requiredCount > 0)
-                        {
-                            (*missionsIter)->assignUnit(pUnit);
-                            ourUnitsMissionMap_[pUnit->getIDInfo()] = *missionsIter;
-                            return *missionsIter;
-                        }
-                    }
-                }
             }
+
+            MissionFinder finder;
+            finder.domainType = pUnit->getDomainType();
+            finder.requestedUnitType = pUnit->getUnitType();
+            if (finder.domainType == DOMAIN_LAND)
+            {
+                finder.subArea = subArea;
+            }
+
+            std::list<MilitaryMissionDataPtr> possibleMissions;
+
+            std::list<MilitaryMissionDataPtr>::iterator candidateMissionsIter = std::find_if(missionList_.begin(), missionList_.end(), finder);
+            while (candidateMissionsIter != missionList_.end())
+            {
+                possibleMissions.push_back(*candidateMissionsIter);
+                std::advance(candidateMissionsIter, 1);
+                candidateMissionsIter = std::find_if(candidateMissionsIter, missionList_.end(), finder);
+            }
+
+            CounterMissionPriorityComp comp;
+            comp.newUnitCoords = pUnit->plot()->getCoords();
+            possibleMissions.sort(comp);
+
+            if (!possibleMissions.empty())
+            {
+                (*possibleMissions.begin())->assignUnit(pUnit);
+                ourUnitsMissionMap_[pUnit->getIDInfo()] = *possibleMissions.begin();
+                return *possibleMissions.begin();
+            }
+
+            //for (std::list<MilitaryMissionDataPtr>::iterator missionsIter(missionList_.begin()); missionsIter != missionList_.end(); ++missionsIter)
+            //{
+            //    if (!((*missionsIter)->missionType == MISSIONAI_COUNTER || (*missionsIter)->missionType == MISSIONAI_COUNTER_CITY))
+            //    {
+            //        continue;
+            //    }
+
+            //    for (std::set<IDInfo>::const_iterator targetsIter((*missionsIter)->targetUnits.begin()); targetsIter != (*missionsIter)->targetUnits.end(); ++targetsIter)
+            //    {
+            //        // need a way to ask if the mission relates to this sub area
+            //        if (unitsAreaIter->second.find(*targetsIter) != unitsAreaIter->second.end() || hiddenUnitsAreaIter->second.find(*targetsIter) != hiddenUnitsAreaIter->second.end())
+            //        {
+            //            int requiredCount = (*missionsIter)->getRequiredUnitCount(pUnit->getUnitType());
+            //            if (requiredCount > 0)
+            //            {
+            //                (*missionsIter)->assignUnit(pUnit);
+            //                ourUnitsMissionMap_[pUnit->getIDInfo()] = *missionsIter;
+            //                return *missionsIter;
+            //            }
+            //        }
+            //    }
+            //}
             return MilitaryMissionDataPtr();
         }
 
@@ -3411,6 +3869,8 @@ namespace AltAI
             std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
 #endif
             CvSelectionGroup* pGroup = pUnit->getGroup();
+            pGroup->clearMissionQueue(__FUNCTION__);
+
             if (pGroup->getNumUnits() > 1)
             {
                 pUnit->joinGroup(NULL);  // so we don't have units in same group in different missions
@@ -3418,8 +3878,7 @@ namespace AltAI
                 os << "\nRemoving unit from group: " << pGroup->getID() << " new group: " << pUnit->getGroupID();
 #endif
             }
-
-            pMission->assignUnit(pUnit);
+            
             std::map<IDInfo, MilitaryMissionDataPtr>::iterator unitMissionIter = ourUnitsMissionMap_.find(pUnit->getIDInfo());
             if (unitMissionIter != ourUnitsMissionMap_.end())
             {
@@ -3430,7 +3889,7 @@ namespace AltAI
                 unitMissionIter->second->unassignUnit(pUnit, false);
                 unitMissionIter->second = pMission;
 #ifdef ALTAI_DEBUG
-                os << " to mission: ";
+                os << "\n to mission: ";
                 pMission->debug(os);
 #endif
             }
@@ -3438,6 +3897,7 @@ namespace AltAI
             {
                 addOurUnitMission_(pMission, pUnit->getIDInfo());
             }
+            pMission->assignUnit(pUnit);
         }
 
         void eraseMission_(const MilitaryMissionDataPtr& pMission)
@@ -3471,7 +3931,7 @@ namespace AltAI
 
             std::set<IDInfo> assignedUnits = (*missionsIter)->assignedUnits;
 #ifdef ALTAI_DEBUG
-            os << " erasing mission from list (size = " << missionList_.size() << ") ";
+            os << "\n erasing mission from list (size = " << missionList_.size() << ") ";
 #endif
             missionList_.erase(missionsIter);
 #ifdef ALTAI_DEBUG
@@ -3507,7 +3967,7 @@ namespace AltAI
                     if (pMission)
                     {
 #ifdef ALTAI_DEBUG
-                        os << "\nReassigned our unit to mission structure: ";
+                        os << "\nReassigned our unit: " << pUnit->getIDInfo() << " to mission: ";
                         pMission->debug(os);
 #endif
                     }
@@ -3515,12 +3975,11 @@ namespace AltAI
             }
         }
 
-        MilitaryMissionDataPtr addMission_(MissionAITypes missionType)
+        MilitaryMissionDataPtr addMission_(const MilitaryMissionDataPtr& pMission)
         {
-            MilitaryMissionDataPtr pMission(new MilitaryMissionData(missionType));
 #ifdef ALTAI_DEBUG
             std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
-            os << "\nAdding mission: " << pMission << " " << getMissionAIString(missionType);
+            os << "\nAdding mission: " << pMission << " " << getMissionAIString(pMission->missionType);
 #endif
             missionList_.push_back(pMission);
             return pMission;
@@ -3546,735 +4005,6 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
             os << " result of adding mission to hostile units map for unit: " << unit << ", mission: " << pMission << " = " << inserted;
 #endif
-        }
-
-        bool doUnitCounterMission(const MilitaryMissionDataPtr& pMission, CvUnitAI* pUnit)
-        {
-#ifdef ALTAI_DEBUG
-            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
-            const int currentTurn = gGlobals.getGame().getGameTurn();
-#endif
-            const CvPlot* pUnitPlot = pUnit->plot();
-            pMission->updateReachablePlots(player_, true, false, true);
-            pMission->pushedAttack = std::pair<IDInfo, XYCoords>();
-
-            const CvPlot* pTargetPlot = NULL;
-            bool targetIsCity = false;
-            PlotUnitsMap targetStacks;
-
-            for (std::set<IDInfo>::const_iterator targetsIter(pMission->targetUnits.begin()), targetsEndIter(pMission->targetUnits.end());
-                targetsIter != targetsEndIter; ++targetsIter)
-            {
-                const CvUnit* pTargetUnit = ::getUnit(*targetsIter);
-                if (pTargetUnit)
-                {
-                    pTargetPlot = pTargetUnit->plot();
-                    if (pTargetPlot->isVisible(player_.getTeamID(), false))
-                    {
-                        targetStacks[pTargetPlot].push_back(pTargetUnit);
-                    }
-                }
-            }
-
-            if (!targetStacks.empty())
-            {
-                pMission->updateReachablePlots(player_, false, false, true);
-                pMission->updateRequiredUnits(player_, std::set<IDInfo>());
-            }
-            else
-            {
-                std::map<const CvPlot*, std::vector<IDInfo>, CvPlotOrderF> possibleTargetStacks;
-                for (std::set<IDInfo>::const_iterator targetsIter(pMission->targetUnits.begin()), targetsEndIter(pMission->targetUnits.end());
-                targetsIter != targetsEndIter; ++targetsIter)
-                {
-                    std::map<IDInfo, UnitHistory>::const_iterator histIter = unitHistories_.find(*targetsIter);
-                    FAssertMsg(histIter != unitHistories_.end() && !histIter->second.locationHistory.empty(), "Target unit without any history?");
-                    if (histIter != unitHistories_.end() && !histIter->second.locationHistory.empty())
-                    {
-                        const XYCoords coords = histIter->second.locationHistory.begin()->second;
-                        possibleTargetStacks[gGlobals.getMap().plot(coords.iX, coords.iY)].push_back(*targetsIter);
-                    }
-                }
-
-                if (!possibleTargetStacks.empty())
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\n selected possible target: " << possibleTargetStacks.begin()->first->getCoords();
-#endif
-                    pTargetPlot = possibleTargetStacks.begin()->first;
-                    targetIsCity = pTargetPlot->isCity();
-                }
-                else
-                {
-                    pTargetPlot = pMission->getTargetPlot();
-                }
-            }
-
-            PlotSet sharedPlots, borderPlots;
-            getOverlapAndNeighbourPlots(pMission->hostilesReachablePlots, pMission->ourReachablePlots, sharedPlots, borderPlots);
-
-#ifdef ALTAI_DEBUG
-            pMission->debugReachablePlots(os);
-            os << "\n attackable plots: " << sharedPlots.size() << ", bordering plots: " << borderPlots.size() << ", assigned units count: " << pMission->assignedUnits.size();
-#endif
-            bool isAttackMove = !isEmpty(pMission->nextAttack.first);
-            if (isAttackMove)
-            {
-
-                if (pTargetPlot && pMission->nextAttack.second != pTargetPlot->getCoords())
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\n target plot from mission: " << pTargetPlot->getCoords() << " overridding to: " << pMission->nextAttack.second;
-#endif
-                    pTargetPlot = gGlobals.getMap().plot(pMission->nextAttack.second);
-                }
-            }
-
-            bool joinClosestGroupIfNotAttacking = false;
-            XYCoords moveToCoords = !isEmpty(pMission->nextAttack.second) ? pMission->nextAttack.second : (pTargetPlot ? pTargetPlot->getCoords() : XYCoords(-1, -1));
-            CvSelectionGroup* pClosestGroup = NULL;
-
-            if (!pTargetPlot && isEmpty(moveToCoords))
-            {
-#ifdef ALTAI_DEBUG
-                os << "\nUnable to determine target plot for counter mission";
-#endif
-                return false;
-            }
-
-            bool finishedAttack = pUnit->isMadeAttack() && !pUnit->isBlitz();
-            if (finishedAttack)
-            {
-                isAttackMove = false;
-            }
-
-            std::map<XYCoords, CombatGraph::Data>::iterator oddsIter = attackCombatData_.find(pTargetPlot->getCoords());
-            if (!finishedAttack && oddsIter != attackCombatData_.end() && (oddsIter->second.pWin > attThreshold || !isEmpty(pMission->nextAttack.first)))
-            {
-                moveToCoords = pTargetPlot->getCoords();
-                isAttackMove = true;
-                FAssertMsg(*oddsIter->second.longestAndShortestAttackOrder.first.begin() == pUnit->getIDInfo(), "Unexpected attack unit?");
-                oddsIter->second.longestAndShortestAttackOrder.first.erase(oddsIter->second.longestAndShortestAttackOrder.first.begin());
-#ifdef ALTAI_DEBUG
-                os << "\nPlot: " << moveToCoords << " has combined attack odds of: ";
-                pMission->ourAttackOdds.debug(os);
-                os << "\n|attackCombatData_: ";
-                oddsIter->second.debug(os);
-                os << "\n\t first attacker: " << pMission->firstAttacker << " ";
-                const CvUnit* pDebugUnit = ::getUnit(pMission->firstAttacker);
-                if (pDebugUnit) os << pDebugUnit->getUnitInfo().getType();
-#endif
-            }
-            else
-            {
-                std::set<CvSelectionGroup*, CvSelectionGroupOrderF> groupsInMission = pMission->getAssignedGroups();
-                std::list<std::pair<CvSelectionGroup*, UnitPathData> > groupPathData;
-                std::list<std::pair<CvSelectionGroup*, UnitPathData> >::const_iterator ourGroupIter;                
-                int closestGroupTurnsToTarget = MAX_INT;
-                GroupCombatData combatData;
-                // need this as attack and defence combat map only cover static defence and active attacks, not moving for defence
-                combatData.calculate(player_, pMission->getAssignedUnits(true));
-
-                // iterate over all groups in mission
-                for (std::set<CvSelectionGroup*, CvSelectionGroupOrderF>::const_iterator groupIter(groupsInMission.begin()), groupEndIter(groupsInMission.end());
-                    groupIter != groupEndIter; ++groupIter)
-                {                    
-                    UnitPathData unitPathData;
-                    unitPathData.calculate(*groupIter, pTargetPlot, MOVE_MAX_MOVES | MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY);
-
-                    if (unitPathData.valid)
-                    {
-                        if (unitPathData.pathTurns < closestGroupTurnsToTarget)
-                        {
-                            pClosestGroup = *groupIter;
-                            closestGroupTurnsToTarget = unitPathData.pathTurns;
-                        }
-                    }
-
-                    std::list<std::pair<CvSelectionGroup*, UnitPathData> >::iterator groupPathIter = groupPathData.insert(groupPathData.begin(), std::make_pair(*groupIter, unitPathData));
-
-                    if (*groupIter ==  pUnit->getGroup())
-                    {
-                        // note our group's list positions
-                        ourGroupIter = groupPathIter;
-                    }
-#ifdef ALTAI_DEBUG
-                    os << "\nAdded group: " << (*groupIter)->getID() << " turns to target: " << unitPathData.pathTurns;
-#endif
-                }
-            
-                
-                if (pClosestGroup && pUnit->getGroup() != pClosestGroup && pUnitPlot == pClosestGroup->plot())
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\nUnit: " << pUnit->getIDInfo() << " will join group: " << pClosestGroup->getID() << " if not attacking";
-#endif
-                    joinClosestGroupIfNotAttacking = true;
-                    // now we split the group containing selected attack unit to prevent group attack
-                    // need to avoid this rejoin logic as it causes regrouping of remaining units back to the surviving attack unit
-                    // this means they skip their attack slot as getNextAttackUnit will move onto the next unit when called again
-                    // (the joinGroup uses up their first update slice)
-                    //pUnit->joinGroup(pClosestGroup);  
-                    //return true;
-                }
-
-                // determine in general where we want to go this turn
-                XYCoords stepCoords = ourGroupIter->second.getFirstTurnEndCoords();
-                groupPathData.sort(GroupPathComp());  // sort based on path turns
-                std::list<std::pair<CvSelectionGroup*, UnitPathData> >::const_iterator refGroupIter = groupPathData.begin();  // closest group            
-
-                // if one group - just direct towards target
-                // if multiple groups, possibly direct those further away to group with closest group
-                if (refGroupIter->first != ourGroupIter->first)  // our unit is not in the closest group - see if it's better to try and join the closest group to the target along its route
-                {
-                    const int ourGroupTurnsToReachTarget = ourGroupIter->second.pathTurns;
-                    int ourBestTurnCount = ourGroupTurnsToReachTarget;
-                    // iterate over each node in closest group's path to target
-                    for (std::list<UnitPathData::Node>::const_iterator nodeIter(refGroupIter->second.nodes.begin()); nodeIter != refGroupIter->second.nodes.end(); ++nodeIter)
-                    {
-                        if (nodeIter->movesLeft == 0)  // an end of turn plot
-                        {
-                            XYCoords refGroupStepCoords = nodeIter->coords;
-                            UnitPathData unitPathData;
-                            unitPathData.calculate(ourGroupIter->first, gGlobals.getMap().plot(refGroupStepCoords.iX, refGroupStepCoords.iY), 
-                                MOVE_MAX_MOVES | MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY);
-                            // if our turn count to this plot on closest group's route is less than or equal than that group (so we can wait or meet)
-                            // and turn count is less than our turn count to the target (so we're not going past the target to meet up)
-                            // of possible coords - pick those which are closest to our current location
-                            if (unitPathData.pathTurns <= nodeIter->turn && unitPathData.pathTurns < ourGroupTurnsToReachTarget && unitPathData.pathTurns < ourBestTurnCount)
-                            {
-                                ourBestTurnCount = unitPathData.pathTurns;
-                                stepCoords = unitPathData.getFirstTurnEndCoords();
-#ifdef ALTAI_DEBUG
-                                os << "\nSelected wait coords: " << stepCoords << " with turn count: " << ourBestTurnCount;
-#endif
-                            }
-                        }
-                    }
-                }
-            
-                std::list<CombatMoveData> noAttackMoveData, attackMoveData;
-                
-                for (PlotSet::const_iterator ci(pMission->ourReachablePlots.begin()), ciEnd(pMission->ourReachablePlots.end()); ci != ciEnd; ++ci)
-                {
-                    XYCoords coords = (*ci)->getCoords();
-                    const CvPlot* pReachablePlot = gGlobals.getMap().plot(coords);
-                    MilitaryMissionData::ReachablePlotDetails::const_iterator ri = pMission->ourReachablePlotDetails.find(pReachablePlot);
-                    if (ri != pMission->ourReachablePlotDetails.end())
-                    {
-                        if (std::find(ri->second.begin(), ri->second.end(), pUnit->getIDInfo()) == ri->second.end())
-                        {
-                            continue;  // this plot is not reachable by this unit
-                        }
-                    }
-
-                    CombatGraph::Data thisPlotDefenceOdds = combatData.getCombatData(coords, false), thisPlotAttackOdds = combatData.getCombatData(coords, true);
-                    CombatMoveData moveData(coords, stepDistance(coords.iX, coords.iY, stepCoords.iX, stepCoords.iY), thisPlotDefenceOdds, thisPlotAttackOdds);
-#ifdef ALTAI_DEBUG
-                    os << "\nodds for plot: " << coords;
-                    if (!thisPlotAttackOdds.isEmpty())
-                    {
-                        os << "\n\tattack: ";
-                        thisPlotAttackOdds.debug(os);
-                    }
-                    if (!thisPlotDefenceOdds.isEmpty())
-                    {
-                        os << "\n\tdefence: ";
-                        thisPlotDefenceOdds.debug(os);
-                    }
-                    if (thisPlotAttackOdds.isEmpty() && thisPlotDefenceOdds.isEmpty())
-                    {
-                        os << " (none) ";
-                    }
-#endif
-                    if (thisPlotAttackOdds.isEmpty())
-                    {                                
-                        noAttackMoveData.push_back(moveData);
-                    }
-                    else
-                    {
-                        attackMoveData.push_back(moveData);
-                    }
-                }
-            
-                if (!finishedAttack && !attackMoveData.empty())
-                {
-                    attackMoveData.sort(AttackMoveDataPred(attThreshold));
-                    const CombatMoveData& moveData = *attackMoveData.begin();
-                    if (moveData.attackOdds.pWin > attThreshold)
-                    {
-                        if (moveData.coords == pTargetPlot->getCoords())
-                        {
-#ifdef ALTAI_DEBUG
-                            os << " matched attack move from mission: ";
-                            moveData.attackOdds.debug(os);
-#endif
-                            moveToCoords = moveData.coords;
-                            isAttackMove = true;
-                        }
-                    }
-                }
-
-                if (moveToCoords == XYCoords())
-                {
-                    noAttackMoveData.sort(DefenceMoveDataPred(hostileAttackThreshold));
-#ifdef ALTAI_DEBUG
-                    for (std::list<CombatMoveData>::const_iterator cmi(noAttackMoveData.begin()), cmiEnd(noAttackMoveData.end()); cmi != cmiEnd; ++cmi)
-                    {
-                        os << "\n\t" << cmi->coords << " sd = " << cmi->stepDistanceFromTarget;
-                        if (!cmi->defenceOdds.isEmpty())
-                        {
-                            os << "\n";
-                            cmi->defenceOdds.debug(os);
-                        }
-                    }
-#endif
-                    std::list<CombatMoveData>::const_iterator noAttackIter = noAttackMoveData.begin();
-                    float bestSurvivalOdds = noAttackIter->defenceOdds.pLoss;  // odds are for us surviving hostiles attacking us
-                    // don't wait in position where have river crossing attack penalty on target
-                    // prob want to adjust this to wait until just before ready to attack, e.g. still grouping units
-                    while (pTargetPlot->isRiverCrossing(directionXY(pTargetPlot, gGlobals.getMap().plot(noAttackIter->coords.iX, noAttackIter->coords.iY))))
-                    {
-                        ++noAttackIter;
-                        if (noAttackIter == noAttackMoveData.end())
-                        {
-                            --noAttackIter;
-                            break;
-                        }
-                        if (noAttackIter != noAttackMoveData.begin() && noAttackIter->defenceOdds.pLoss < defThreshold && noAttackIter->defenceOdds.pLoss < bestSurvivalOdds)
-                        {
-                            --noAttackIter;
-                            break;
-                        }
-                    }
-#ifdef ALTAI_DEBUG
-                    os << "\n\t no attack move data first coords: " << noAttackMoveData.begin()->coords;
-                    if (noAttackIter != noAttackMoveData.begin())
-                    {
-                        os << "\nmoving coords from: " << noAttackMoveData.begin()->coords << " to avoid river crossing: " << noAttackIter->coords;
-                    }
-#endif
-                    moveToCoords = noAttackIter->coords;
-                }
-            }
-
-            // if we have a nearby group and we've already attacked (and aren't blitz) join it.
-            
-
-            if (joinClosestGroupIfNotAttacking && (!isAttackMove || finishedAttack))
-            {
-                pUnit->joinGroup(pClosestGroup);
-                return true;
-            }
-            else if (finishedAttack)  // units with moves remaining that have attacked but no coincident stack to rejoin
-            {
-                // attempt to create a new group to effectively hold unit until rest of attack is finished
-                // which means we can avoid finishing this unit's moves and instead return to the next selection group in the cycle
-                // can then hopefully move or hold as required - this is basically a clunky way of saying wait for orders
-                std::set<IDInfo>::iterator holdingUnitsIter = holdingUnits_.find(pUnit->getIDInfo());
-                if (holdingUnitsIter != holdingUnits_.end())
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\nremoving unit: " << pUnit->getIDInfo() << " to hold list";
-#endif
-                    holdingUnits_.erase(holdingUnitsIter);
-                }
-                else
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\nadding unit: " << pUnit->getIDInfo() << " from hold list";
-#endif
-                    holdingUnits_.insert(pUnit->getIDInfo());
-                    pUnit->joinGroup(NULL);
-                    return true;
-                }
-            }
-
-            const CvPlot* pMovePlot = gGlobals.getMap().plot(moveToCoords.iX, moveToCoords.iY);
-            std::pair<IDInfo, XYCoords> attackData = pMission->nextAttack;
-            pMission->nextAttack = std::make_pair(IDInfo(), XYCoords());  // clear next attacker so we don't loop
-            if (pMovePlot != pUnitPlot)
-            {
-                if (isAttackMove && pUnit->getGroupSize() > 1)
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\nsplitting group for attack unit: " << pUnit->getIDInfo();
-#endif
-                    pUnit->joinGroup(NULL);
-                }
-#ifdef ALTAI_DEBUG
-                
-                os << "\nTurn = " << currentTurn << " Unit: " << pUnit->getIDInfo() << " pushed counter mission "
-                   << (isAttackMove ? "attack" : "") << " move to: " << moveToCoords;
-#endif
-                pMission->pushedAttack = attackData;  // store this as useful for updating combat data after combat is resolved
-                pUnit->getGroup()->pushMission(MISSION_MOVE_TO, moveToCoords.iX, moveToCoords.iY, MOVE_IGNORE_DANGER, false, false, MISSIONAI_COUNTER,
-                    (CvPlot*)pMovePlot, 0, __FUNCTION__);
-            }
-            else
-            {
-#ifdef ALTAI_DEBUG
-                os << "\nTurn = " << currentTurn << " Unit: " << pUnit->getIDInfo() << " pushed counter mission skip ";
-#endif
-                pUnit->getGroup()->pushMission(MISSION_SKIP, pUnitPlot->getX(), pUnitPlot->getY(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
-            }
-            return true;
-        }
-
-        bool doUnitEscortMission(const MilitaryMissionDataPtr& pMission, CvUnitAI* pUnit)
-        {
-#ifdef ALTAI_DEBUG
-            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
-#endif
-            const CvPlot* pUnitPlot = pUnit->plot();
-
-            std::vector<IDInfo> settlerUnits = pMission->getOurMatchingUnits(CanFoundP());
-            const bool haveSettler = !settlerUnits.empty(), isSettler = pUnit->isFound();
-
-            if (haveSettler)
-            {
-                CvUnit* pSettlerUnit = ::getUnit(settlerUnits[0]);
-
-                if (!isSettler) // then we're an escort unit
-                {
-                    const CvPlot* pSettlerPlot = pSettlerUnit->plot();
-                    // at plot with settler - join its group
-                    if (pUnitPlot == pSettlerPlot && pUnit->getGroup() != pSettlerUnit->getGroup())
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nUnit: " << pUnit->getIDInfo() << " joined group: " << pSettlerUnit->getGroupID();
-#endif
-                        pUnit->joinGroup(pSettlerUnit->getGroup());
-                        return true;
-                    }
-                    // not at settler's plot, but in same sub area - try and move towards settler
-                    else if (pUnitPlot->getSubArea() == pSettlerPlot->getSubArea())
-                    {
-                        const CvPlot* pMovePlot = getNextMovePlot(player_, pUnit->getGroup(), pSettlerUnit->plot());
-                        CvUnit* pSettlerGroupHeadUnit = pSettlerUnit->getGroup()->getHeadUnit();
-                        if (pMovePlot && pSettlerGroupHeadUnit)
-                        {
-#ifdef ALTAI_DEBUG
-                            os << "\nUnit: " << pUnit->getIDInfo() << " pushed settler escort mission move to: " << pMovePlot->getCoords();
-#endif
-                            pUnit->getGroup()->pushMission(MISSION_MOVE_TO_UNIT, pSettlerGroupHeadUnit->getOwner(), pSettlerGroupHeadUnit->getID(),
-                                MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY, false, false, MISSIONAI_GROUP, (CvPlot*)pMovePlot, pSettlerGroupHeadUnit, __FUNCTION__);
-                            return true;
-                        }
-                    }
-                    else // todo - find transport
-                    {
-                        return false;
-                    }
-                }
-                else
-                {
-                    // assume just one settler per mission for now at least                            
-                    bool haveCurrentTarget = pMission->targetCoords != XYCoords(-1, -1);
-                    const CvPlot* pTargetPlot;
-                    if (haveCurrentTarget)
-                    {
-                        pTargetPlot = gGlobals.getMap().plot(pMission->targetCoords.iX, pMission->targetCoords.iY);
-                    }
-                    CvPlot* pDestPlot = player_.getBestPlot(pSettlerUnit, 
-                        haveCurrentTarget ? pTargetPlot->getSubArea() : pSettlerUnit->plot()->getSubArea());
-                    if (pDestPlot && pUnit->plot() == pDestPlot &&
-                        !pUnit->canFound(pDestPlot))  // don't want to push mission if we can't actually found here - otherwise risk getting stuck in a loop - need to find a new destination
-                    {
-                        // may want to mark this plot, as it's a plot we can't found at, but we can't see the offending city blocking it
-                        pDestPlot = player_.getSettlerManager()->getBestPlot(pSettlerUnit->plot()->getSubArea(), std::vector<CvPlot*>(1, pDestPlot));
-#ifdef ALTAI_DEBUG
-                        os << "\nUnit: " << pUnit->getIDInfo() << " reselecting target plot to: " << (pDestPlot ? pDestPlot->getCoords() : XYCoords());
-#endif
-                    }
-
-                    bool mayNeedEscort = player_.getCvPlayer()->getNumCities() > 0 && !pMission->requiredUnits.empty();
-                    if (pMission->assignedUnits.size() > 1)
-                    {
-                        std::set<CvSelectionGroup*, CvSelectionGroupOrderF> assignedGroups = pMission->getAssignedGroups();
-                        mayNeedEscort = assignedGroups.size() > 1;
-                    }
-                            
-                    if (pDestPlot)
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nUnit: " << pUnit->getIDInfo() << " updating target plot to: " << pDestPlot->getCoords();
-#endif                        
-                        pMission->targetCoords = pDestPlot->getCoords();
-
-                        // if at best plot - found if safe
-                        // otherwise move towards best plot, if not owned area step await escort
-                        if (pUnit->plot() == pDestPlot)
-                        {                            
-                            PlotSet moveToPlotSet;
-                            moveToPlotSet.insert(pDestPlot);
-                            std::set<IDInfo> hostileUnits = getUnitsThreateningPlots(moveToPlotSet);
-                            if (hostileUnits.empty())
-                            {
-                                pUnit->getGroup()->pushMission(MISSION_FOUND, -1, -1, 0, false, false, MISSIONAI_FOUND, 0, 0, __FUNCTION__);
-                                return true;
-                            }
-                            else
-                            {
-                                const CvPlot* pMovePlot = getNextMovePlot(player_, pUnit->getGroup(), pDestPlot);
-                                if (pMovePlot != pDestPlot)
-                                {
-                                    std::map<XYCoords, std::list<IDInfo> >::const_iterator stackIter = enemyStacks_.find(pMovePlot->getCoords());
-                                    if (stackIter != enemyStacks_.end())
-                                    {
-#ifdef ALTAI_DEBUG
-                                        os << "\nUnit: " << pUnit->getIDInfo() << " move plot has hostiles - pushed attack mission move to: " << pMovePlot->getCoords();
-#endif
-                                        pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pMovePlot->getX(), pMovePlot->getY(), MOVE_IGNORE_DANGER, false, false, NO_MISSIONAI,
-                                        (CvPlot*)pMovePlot, 0, __FUNCTION__);
-                                        return true;
-                                    }
-                                    else
-                                    {
-#ifdef ALTAI_DEBUG
-                                        os << "\nUnit: " << pUnit->getIDInfo() << " settle plot has hostiles - pushed mission move to: " << pMovePlot->getCoords();
-#endif
-                                        pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pMovePlot->getX(), pMovePlot->getY(), MOVE_IGNORE_DANGER, false, false, NO_MISSIONAI,
-                                            (CvPlot*)pMovePlot, 0, __FUNCTION__);
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if (pDestPlot->getRevealedOwner(player_.getTeamID(), false) == NO_PLAYER && mayNeedEscort)
-                            {
-                                if (pUnitPlot->isCity())
-                                {
-#ifdef ALTAI_DEBUG
-                                    os << "\nUnit: " << pUnit->getIDInfo() << " settle plot needs escort - pushed mission skip, settle plot = " << pDestPlot->getCoords();
-#endif
-                                    pUnit->getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
-                                    return true;
-                                }
-                                else if (pUnitPlot->getOwner() != player_.getPlayerID())
-                                {
-                                    PlotSet moveToPlotSet;
-                                    moveToPlotSet.insert(pUnitPlot);
-                                    const CvPlot* pMovePlot = getNextMovePlot(player_, pUnit->getGroup(), pDestPlot);
-                                    if (pMovePlot != pUnitPlot)
-                                    {
-#ifdef ALTAI_DEBUG
-                                        os << "\nUnit: " << pUnit->getIDInfo() << " pushed escape mission move to: " << pMovePlot->getCoords();
-#endif
-                                        pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pMovePlot->getX(), pMovePlot->getY(), MOVE_IGNORE_DANGER, false, false, NO_MISSIONAI,
-                                            (CvPlot*)pMovePlot, 0, __FUNCTION__);
-                                        return true;
-                                    }
-                                    else
-                                    {
-#ifdef ALTAI_DEBUG
-                                        os << "\nUnit: " << pUnit->getIDInfo() << " settle plot needs escort (outside city!) - pushed mission skip, settle plot = " << pDestPlot->getCoords();
-#endif
-                                        pUnit->getGroup()->pushMission(MISSION_SKIP, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
-                                        return true;
-                                    }
-                                }
-                            }
-
-                            const CvPlot* pMovePlot = getNextMovePlot(player_, pUnit->getGroup(), pDestPlot);
-
-                            if (pMovePlot)
-                            {
-#ifdef ALTAI_DEBUG
-                                os << "\nUnit: " << pUnit->getIDInfo() << " pushed mission move to: " << pMovePlot->getCoords();
-#endif
-                                pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pMovePlot->getX(), pMovePlot->getY(), MOVE_IGNORE_DANGER, false, false, NO_MISSIONAI,
-                                    (CvPlot*)pMovePlot, 0, __FUNCTION__);
-                                return true;
-                            }
-                        }                            
-                    }
-                }
-            }
-            else
-            {
-                // check for other missions which needs escort, otherwise maybe add to reserve?
-            }
-            return false;
-        }
-
-        bool doUnitEscortWorkerMission(const MilitaryMissionDataPtr& pMission, CvUnitAI* pUnit)
-        {
-#ifdef ALTAI_DEBUG
-            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
-#endif
-            const CvPlot* pUnitPlot = pUnit->plot();
-
-            if (!pMission->targetUnits.empty())
-            {
-                const CvUnit* pTargetUnit = ::getUnit(*pMission->targetUnits.begin());
-                if (pTargetUnit)
-                {
-                    const CvPlot* pTargetUnitPlot = pTargetUnit->plot();
-                    if (pUnitPlot == pTargetUnitPlot && pUnit->getGroup() != pTargetUnit->getGroup())
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nUnit: " << pUnit->getIDInfo() << " joined group: " << pTargetUnit->getGroupID();
-#endif
-                        pUnit->joinGroup(pTargetUnit->getGroup());
-                        player_.getAnalysis()->getWorkerAnalysis()->setEscort(pTargetUnit->getIDInfo());
-                        return true;
-                    }
-                    else
-                    {
-                        const CvPlot* pMovePlot = getNextMovePlot(player_, pTargetUnit->getGroup(), pTargetUnit->plot());
-                        CvUnit* pTargetGroupHeadUnit = pTargetUnit->getGroup()->getHeadUnit();
-                        if (pMovePlot && pTargetGroupHeadUnit)
-                        {
-#ifdef ALTAI_DEBUG
-                            os << "\nUnit: " << pUnit->getIDInfo() << " pushed escort mission move to: " << pMovePlot->getCoords();
-#endif
-                            pUnit->getGroup()->pushMission(MISSION_MOVE_TO_UNIT, pTargetGroupHeadUnit->getOwner(), pTargetGroupHeadUnit->getID(),
-                                MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY, false, false, MISSIONAI_GROUP, (CvPlot*)pMovePlot, pTargetGroupHeadUnit, __FUNCTION__);
-                            return true;
-                        }
-                    }
-                }
-            }
-            else // lost our target (hopefully because an escort is no longer needed, rather than it being killed)
-            {
-                const CvCity* pCapital = player_.getCvPlayer()->getCapitalCity();
-                // might be initial unit assignment and we have no capital yet
-                reassignOurUnit_(pUnit, addReserveLandUnitMission_(pUnit, pCapital ? pCapital->plot() : pUnit->plot()));
-                return true;
-            }
-
-            return false;
-        }
-
-        bool doUnitCityDefendMission(const MilitaryMissionDataPtr& pMission, CvUnitAI* pUnit)
-        {
-#ifdef ALTAI_DEBUG
-            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
-#endif
-            if (!pMission->assignedUnits.empty())
-            {
-                const CvCity* pTargetCity = pMission->getTargetCity();
-                if (pTargetCity)
-                {                        
-                    if (pUnit->at(pTargetCity->getX(), pTargetCity->getY()))
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nUnit: " << pUnit->getIDInfo() << " pushed mission skip for city (guard): " << safeGetCityName(pTargetCity);
-#endif
-                       
-                        pUnit->getGroup()->pushMission(MISSION_SKIP, pUnit->plot()->getX(), pUnit->plot()->getY(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
-                    }
-                    else
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nUnit: " << pUnit->getIDInfo() << " pushed mission move to for city (guard): " << safeGetCityName(pTargetCity);
-#endif
-                        pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pTargetCity->getX(), pTargetCity->getY(), MOVE_IGNORE_DANGER, false, false, MISSIONAI_GUARD_CITY,
-                            (CvPlot*)pTargetCity->plot(), 0, __FUNCTION__);
-                    }
-                    return true;
-                }
-            }
-            else
-            {
-                ourUnitsMissionMap_.erase(pUnit->getIDInfo());
-                removeMission_(std::find(missionList_.begin(), missionList_.end(), pMission));
-                return false;
-            }
-            // todo - give unit a chance to get new mission before returning false
-            return false;
-        }
-
-        bool doUnitReserveMission(const MilitaryMissionDataPtr& pMission, CvUnitAI* pUnit)
-        {
-#ifdef ALTAI_DEBUG
-            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
-#endif
-            const CvPlot* pTargetPlot = pMission->getTargetPlot();
-
-            if (!pTargetPlot->isCity())  // might not initially have had a city target ('spare' units from first turn)
-            {
-                const CvPlot* pClosestCityPlot = player_.getAnalysis()->getMapAnalysis()->getClosestCity(pTargetPlot, pTargetPlot->getSubArea(), false);
-                if (pClosestCityPlot)
-                {
-                    pMission->targetUnits.insert(pClosestCityPlot->getPlotCity()->getIDInfo());
-                    pTargetPlot = pClosestCityPlot;
-                }
-            }
-
-            if (pUnit->at(pTargetPlot->getX(), pTargetPlot->getY()))
-            {
-#ifdef ALTAI_DEBUG
-                os << "\nUnit: " << pUnit->getIDInfo() << " pushed mission sleep for city: " << safeGetCityName(pTargetPlot->getPlotCity());
-#endif
-                pUnit->getGroup()->pushMission(MISSION_SKIP, pUnit->plot()->getX(), pUnit->plot()->getY(), 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
-                return true;
-            }
-            else
-            {
-                if (pUnit->isHurt())
-                {
-                    const CvPlot* pClosestCityPlot = player_.getAnalysis()->getMapAnalysis()->getClosestCity(pUnit->plot(), pUnit->plot()->getSubArea(), true);
-                    if (pClosestCityPlot && pUnit->plot() != pClosestCityPlot)
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nUnit: " << pUnit->getIDInfo() << " pushed mission move to for city (for healing): " << safeGetCityName(pClosestCityPlot->getPlotCity());
-#endif
-                        pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pClosestCityPlot->getX(), pClosestCityPlot->getY(), MOVE_IGNORE_DANGER, false, false, MISSIONAI_COUNTER,
-                            (CvPlot*)pClosestCityPlot, 0, __FUNCTION__);
-                        return true;
-                            
-                    }
-#ifdef ALTAI_DEBUG
-                    os << "\nUnit: " << pUnit->getIDInfo() << " pushed mission heal ";
-#endif
-                    pUnit->getGroup()->pushMission(MISSION_HEAL, -1, -1, 0, false, false, NO_MISSIONAI, 0, 0, __FUNCTION__);
-                    return true;
-                }
-
-                CvSelectionGroup* pTargetGroup = NULL;
-                for (std::set<IDInfo>::const_iterator assignedIter(pMission->assignedUnits.begin()), assignedEndIter(pMission->assignedUnits.end());
-                    assignedIter != assignedEndIter; ++assignedIter)
-                {
-                    const CvUnit* pAssignedUnit = ::getUnit(*assignedIter);
-                    if (pAssignedUnit)
-                    {
-                        if (pAssignedUnit->at(pTargetPlot->getX(), pTargetPlot->getY()))
-                        {
-                            pTargetGroup = pAssignedUnit->getGroup();
-                            break;
-                        }
-                    }
-                }
-
-                if (pTargetGroup)
-                {
-                    CvUnit* pGroupHeadUnit = pTargetGroup->getHeadUnit();
-                    if (pGroupHeadUnit)
-                    {
-#ifdef ALTAI_DEBUG
-                        os << "\nUnit: " << pUnit->getIDInfo() << " pushed move to group mission for group: " << pGroupHeadUnit->getGroupID() << " led by: " << pGroupHeadUnit->getIDInfo();
-#endif
-                        pUnit->getGroup()->pushMission(MISSION_MOVE_TO_UNIT, pGroupHeadUnit->getOwner(), pGroupHeadUnit->getID(),
-                            MOVE_IGNORE_DANGER | MOVE_THROUGH_ENEMY, false, false, MISSIONAI_GROUP, pGroupHeadUnit->plot(), pGroupHeadUnit, __FUNCTION__);
-                        return true;
-                    }
-                }
-                else
-                {
-#ifdef ALTAI_DEBUG
-                    os << "\nUnit: " << pUnit->getIDInfo() << " pushed mission move to for city: " << safeGetCityName(pTargetPlot->getPlotCity());
-#endif
-                    pUnit->getGroup()->pushMission(MISSION_MOVE_TO, pTargetPlot->getX(), pTargetPlot->getY(), MOVE_IGNORE_DANGER, false, false, MISSIONAI_COUNTER,
-                        (CvPlot*)pTargetPlot, 0, __FUNCTION__);
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         std::map<XYCoords, CombatData> getAttackableUnitsMap_()
@@ -4492,103 +4222,28 @@ namespace AltAI
             return foundUnit && !erasedEntry;  // whether need to recalc combat map entry (true if we found unit, unless all entries are removed)
         }
 
-        CombatGraph::Data getNearestCityAttackOdds(const MilitaryMissionDataPtr& pMission)
+        std::pair<IDInfo, int> updateUnitBuildData_(IDInfo city, const UnitTacticValue& unitTactic)
         {
-#ifdef ALTAI_DEBUG
-            std::ostream& os = UnitLog::getLog(*player_.getCvPlayer())->getStream();
-#endif
-            PlotSet targetPlots = pMission->getTargetPlots();
-            if (targetPlots.empty())
+            cityBuildsTimes_[city][unitTactic.unitType] = unitTactic.nTurns;
+
+            int bestBuildTime = unitTactic.nTurns;
+            IDInfo bestCity = city;
+
+            for (std::map<IDInfo, std::map<UnitTypes, int> >::const_iterator buildTimesIter(cityBuildsTimes_.begin()), buildTimesEndIter(cityBuildsTimes_.end());
+                buildTimesIter != buildTimesEndIter; ++buildTimesIter)
             {
-                return CombatGraph::Data();
-            }
-            const CvPlot* pUnitPlot = *targetPlots.begin();
-
-            IDInfo nearestCity;
-            const CvPlot* pClosestCityPlot = player_.getAnalysis()->getMapAnalysis()->getClosestCity(pUnitPlot, pUnitPlot->getSubArea(), false, nearestCity);
-            if (pClosestCityPlot)
-            {
-                CombatData combatData(pClosestCityPlot);
-                for (std::set<IDInfo>::const_iterator hIter(pMission->targetUnits.begin()), hEndIter(pMission->targetUnits.end());  hIter != hEndIter; ++hIter)
+                std::map<UnitTypes, int>::const_iterator unitBuildTimeIter = buildTimesIter->second.find(unitTactic.unitType);
+                if (unitBuildTimeIter != buildTimesIter->second.end())
                 {
-                    const CvUnit* pHostileUnit = ::getUnit(*hIter);
-                    if (pHostileUnit && !pHostileUnit->isAnimal())  // animals can't attack cities
+                    if (unitBuildTimeIter->second < bestBuildTime)
                     {
-                        combatData.attackers.push_back(UnitData(pHostileUnit));
-                        // an approximation if not adjacent - todo - use path logic to deduce likely attack from plot
-                        // attack direction: we are at pClosestCityPlot - being attacked by pMission->targetUnits
-                        combatData.combatDetails.unitAttackDirectionsMap[pHostileUnit->getIDInfo()] = directionXY(pHostileUnit->plot(), pClosestCityPlot);
-                    }
-                }
-
-                // take units from assigned city guard mission, as other units on the city plot may be passing through                
-                std::map<IDInfo, MilitaryMissionDataPtr>::iterator cityGuardMissionIter = cityGuardMissionsMap_.find(nearestCity);
-                if (cityGuardMissionIter != cityGuardMissionsMap_.end())  // may be in process of capturing city
-                {
-                    for (std::set<IDInfo>::const_iterator uIter(cityGuardMissionIter->second->assignedUnits.begin()), uEndIter(cityGuardMissionIter->second->assignedUnits.end()); uIter != uEndIter; ++uIter)
-                    {
-                        const CvUnit* pOurUnit = ::getUnit(*uIter);
-                        combatData.defenders.push_back(UnitData(pOurUnit));
-                    }
-                }
-
-                // add in any assigned units for the passed in counter mission which are in the city
-                for (std::set<IDInfo>::const_iterator auIter(pMission->assignedUnits.begin()), auEndIter(pMission->assignedUnits.end()); auIter != auEndIter; ++auIter)
-                {
-                    const CvUnit* pOurUnit = ::getUnit(*auIter);
-                    if (pOurUnit && pOurUnit->plot()->getCoords() == pClosestCityPlot->getCoords())
-                    {
-                        combatData.defenders.push_back(UnitData(pOurUnit));
-                    }
-                }
-
-                CombatGraph combatGraph = getCombatGraph(player_, combatData.combatDetails, combatData.attackers, combatData.defenders);
-                combatGraph.analyseEndStates();
-#ifdef ALTAI_DEBUG
-                os << "\ncombat odds v. nearest city: " << safeGetCityName(nearestCity);
-                combatGraph.debugEndStates(os);
-#endif
-                pMission->cityAttackOdds[nearestCity] = combatGraph.endStatesData;
-                return combatGraph.endStatesData;
-            }
-            else
-            {
-                return CombatGraph::Data();
-            }
-        }
-
-        void getPromotionCombatValues_(const CvUnit* pUnit, const std::vector<PromotionTypes>& availablePromotions) const
-        {
-#ifdef ALTAI_DEBUG
-            std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-#endif
-            std::map<IDInfo, MilitaryMissionDataPtr>::const_iterator missionIter = ourUnitsMissionMap_.find(pUnit->getIDInfo());
-
-            if (missionIter != ourUnitsMissionMap_.end())
-            {
-                XYCoords coords = pUnit->plot()->getCoords();
-                std::set<XYCoords> reachablePlots = missionIter->second->getReachablePlots(pUnit->getIDInfo());
-
-                for (std::set<XYCoords>::const_iterator rIter(reachablePlots.begin()), rEndIter(reachablePlots.end()); rIter != rEndIter; ++rIter)
-                {
-                    std::map<XYCoords, CombatData>::const_iterator defCombatIter = defenceCombatMap_.find(*rIter);
-                    if (defCombatIter != defenceCombatMap_.end())
-                    {
-                        std::map<PromotionTypes, float> promotionValues = getPromotionValues(player_, pUnit, availablePromotions, defCombatIter->second.combatDetails, false, defCombatIter->second.attackers, defCombatIter->second.defenders);
-                    }
-
-                    std::map<XYCoords, CombatData>::const_iterator attCombatIter = attackCombatMap_.find(*rIter);
-                    if (attCombatIter != attackCombatMap_.end())
-                    {
-                        std::map<PromotionTypes, float> promotionValues = getPromotionValues(player_, pUnit, availablePromotions, attCombatIter->second.combatDetails, true, attCombatIter->second.attackers, attCombatIter->second.defenders);
+                        bestBuildTime = unitBuildTimeIter->second;
+                        bestCity = buildTimesIter->first;
                     }
                 }
             }
-        }
 
-        std::map<PromotionTypes, float> getPromotionCombatValues_(const CvUnit* pUnit, const std::vector<PromotionTypes>& availablePromotions, bool isAttacker, std::map<XYCoords, CombatData>::const_iterator combatMapIter)
-        {
-            return getPromotionValues(player_, pUnit, availablePromotions, combatMapIter->second.combatDetails, isAttacker, combatMapIter->second.attackers, combatMapIter->second.defenders);
+            return std::make_pair(bestCity, bestBuildTime);
         }
 
         void writeMissionIndexMap_(FDataStreamBase* pStream, const std::map<unsigned long, int>& missionPointersMap, const std::map<IDInfo, MilitaryMissionDataPtr>& unitsMissionMap, const std::string& mapName) const
@@ -4670,6 +4325,9 @@ namespace AltAI
     float MilitaryAnalysisImpl::attThreshold = 0.85f, MilitaryAnalysisImpl::defAttackThreshold = 0.50f, 
         MilitaryAnalysisImpl::defThreshold = 0.90f, MilitaryAnalysisImpl::hostileAttackThreshold = 0.20f;
 
+    float MilitaryAnalysis::attThreshold = 0.85f, MilitaryAnalysis::defAttackThreshold = 0.50f, 
+        MilitaryAnalysis::defThreshold = 0.90f, MilitaryAnalysis::hostileAttackThreshold = 0.20f;
+
     MilitaryAnalysis::MilitaryAnalysis(Player& player)
     {
         pImpl_ = boost::shared_ptr<MilitaryAnalysisImpl>(new MilitaryAnalysisImpl(player));
@@ -4695,12 +4353,27 @@ namespace AltAI
         return pImpl_->promoteUnit(pUnit);
     }
 
+    const std::map<IDInfo, UnitHistory>& MilitaryAnalysis::getUnitHistories() const
+    {
+        return pImpl_->getUnitHistories();
+    }
+
+    const std::list<MilitaryMissionDataPtr>& MilitaryAnalysis::getMissions() const
+    {
+        return pImpl_->getMissions();
+    }
+
     MilitaryMissionDataPtr MilitaryAnalysis::getMissionData(CvUnitAI* pUnit)
     {
         return pImpl_->getMissionData(pUnit);
     }
 
-    UnitTypes MilitaryAnalysis::getUnitRequestBuild(const CvCity* pCity, const TacticSelectionData& tacticSelectionData)
+    MilitaryMissionDataPtr MilitaryAnalysis::getCityDefenceMission(IDInfo city)
+    {
+        return pImpl_->getCityDefenceMission(city);
+    }
+
+    UnitRequestData MilitaryAnalysis::getUnitRequestBuild(const CvCity* pCity, const TacticSelectionData& tacticSelectionData)
     {
         return pImpl_->getUnitRequestBuild(pCity, tacticSelectionData);
     }
@@ -4790,6 +4463,36 @@ namespace AltAI
         pImpl_->read(pStream);
     }
 
+    const std::map<XYCoords, std::list<IDInfo> >& MilitaryAnalysis::getEnemyStacks() const
+    {
+        return pImpl_->getEnemyStacks();
+    }
+
+    PlotUnitDataMap MilitaryAnalysis::getEnemyUnitData(int subArea) const
+    {
+        return pImpl_->getEnemyUnitData(subArea);
+    }
+
+    const std::map<XYCoords, CombatData>& MilitaryAnalysis::getAttackCombatMap() const
+    {
+        return pImpl_->getAttackCombatMap();
+    }
+
+    const std::map<XYCoords, CombatData>& MilitaryAnalysis::getDefenceCombatMap() const
+    {
+        return pImpl_->getDefenceCombatMap();
+    }
+
+    const std::map<XYCoords, CombatGraph::Data>& MilitaryAnalysis::getAttackCombatData() const
+    {
+        return pImpl_->getAttackCombatData();
+    }
+
+    const std::map<XYCoords, CombatGraph::Data>& MilitaryAnalysis::getDefenceCombatData() const
+    {
+        return pImpl_->getDefenceCombatData();
+    }
+
     PlotSet MilitaryAnalysis::getThreatenedPlots() const
     {
         return pImpl_->getThreatenedPlots();
@@ -4803,11 +4506,6 @@ namespace AltAI
     PlotUnitsMap MilitaryAnalysis::getPlotsThreatenedByUnits(const PlotSet& plots) const
     {
         return pImpl_->getPlotsThreatenedByUnits(plots);
-    }
-
-    const std::map<XYCoords, CombatData>& MilitaryAnalysis::getAttackableUnitsMap() const
-    {
-        return pImpl_->getAttackableUnitsMap();
     }
 
     CvUnit* MilitaryAnalysis::getNextAttackUnit()
@@ -4827,25 +4525,25 @@ namespace AltAI
 
     PlotUnitsMap getNearbyHostileStacks(const Player& player, const CvPlot* pPlot, int range)
     {
-        boost::shared_ptr<MilitaryAnalysis> pMilitaryAnalysis = player.getAnalysis()->getMilitaryAnalysis();
+        MilitaryAnalysisPtr pMilitaryAnalysis = player.getAnalysis()->getMilitaryAnalysis();
         return pMilitaryAnalysis->getImpl()->getNearbyHostileStacks(pPlot, range);
     }
 
     std::set<XYCoords> getUnitHistory(const Player& player, IDInfo unit)
     {
-        boost::shared_ptr<MilitaryAnalysis> pMilitaryAnalysis = player.getAnalysis()->getMilitaryAnalysis();
+        MilitaryAnalysisPtr pMilitaryAnalysis = player.getAnalysis()->getMilitaryAnalysis();
         return pMilitaryAnalysis->getImpl()->getUnitHistory(unit);
     }
 
     void updateMilitaryAnalysis(Player& player)
     {
-        boost::shared_ptr<MilitaryAnalysis> pMilitaryAnalysis = player.getAnalysis()->getMilitaryAnalysis();
+        MilitaryAnalysisPtr pMilitaryAnalysis = player.getAnalysis()->getMilitaryAnalysis();
         pMilitaryAnalysis->update();
     }
 
     bool doUnitAnalysis(Player& player, CvUnitAI* pUnit)
     {
-        boost::shared_ptr<MilitaryAnalysis> pMilitaryAnalysis = player.getAnalysis()->getMilitaryAnalysis();
+        MilitaryAnalysisPtr pMilitaryAnalysis = player.getAnalysis()->getMilitaryAnalysis();
         return pMilitaryAnalysis->updateOurUnit(pUnit);
     }
 }

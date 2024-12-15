@@ -21,6 +21,9 @@
 #include "./iters.h"
 #include "./save_utils.h"
 
+#include "CvDLLEngineIFaceBase.h"
+#include "CvDLLFAStarIFaceBase.h"
+#include "CvGameCoreUtils.h"
 #include "FAStarNode.h"
 
 namespace AltAI
@@ -205,13 +208,19 @@ namespace AltAI
             return true;
         }
 
-        bool stackCanAttack(const std::vector<UnitData>& units)
+        bool stackCanAttack(const std::vector<UnitData>& attackUnits, const std::vector<UnitData>& defendingUnits)
         {
-            for (size_t i = 0, count = units.size(); i < count; ++i)
+            int maxDefendHP = 0;
+            for (size_t i = 0, count = defendingUnits.size(); i < count; ++i)
             {
-                if (units[i].baseCombat > 0 && !units[i].pUnitInfo->isOnlyDefensive() && units[i].moves > 0)
+                maxDefendHP = std::max<int>(maxDefendHP, defendingUnits[i].hp);
+            }
+
+            for (size_t i = 0, count = attackUnits.size(); i < count; ++i)
+            {
+                if (attackUnits[i].baseCombat > 0 && !attackUnits[i].pUnitInfo->isOnlyDefensive() && attackUnits[i].moves > 0)
                 {
-                    if (!units[i].hasAttacked || units[i].isBlitz)
+                    if (attackUnits[i].pUnitInfo->getCombatLimit() > 100 - maxDefendHP && (!attackUnits[i].hasAttacked || attackUnits[i].isBlitz))
                     {
                         return true;
                     }
@@ -410,7 +419,8 @@ namespace AltAI
     bool DefenceMoveDataPred::operator () (const CombatMoveData& first, const CombatMoveData& second) const
     {
         // chance that hostile units overwhelm our units is less than threshold
-        // (pLoss is chance attacker looses) - threshold is usually 0.2 for unit counter missions        
+        // odds are wrt to attacker which is the hostile party here
+        // (pWin is chance attacker wins, pLoss is chance attacker looses) - threshold is usually 0.2 for unit counter missions        
         if (first.defenceOdds.pWin < threshold)
         {
             if (first.stepDistanceFromTarget == second.stepDistanceFromTarget)
@@ -430,23 +440,59 @@ namespace AltAI
             }
             else
             {
-                return first.defenceOdds.pLoss + first.defenceOdds.pDraw > second.defenceOdds.pLoss + second.defenceOdds.pDraw;
+                return first.defenceOdds.pLoss + first.defenceOdds.pDraw < second.defenceOdds.pLoss + second.defenceOdds.pDraw;
             }
         }
     }
 
-    void UnitPathData::calculate(const CvSelectionGroup* pGroup, const CvPlot* pTargetPlot, const int flags)
+    void UnitPathData::calculate(const CvSelectionGroup* pGroup, const CvPlot* pTargetPlot, const int flags, TeamTypes isVisibleToTeam)
     {
+        if (isVisibleToTeam == NO_TEAM)
+        {
+            isVisibleToTeam = pGroup->getTeam();
+        }
+
         nodes.clear();
         valid = pGroup->generatePath(pGroup->plot(), pTargetPlot, flags, false, &pathTurns);
         if (valid)
-        {            
+        {
             FAStarNode* pNode = pGroup->getPathLastNode();
             while (pNode)
             {
                 XYCoords stepCoords(pNode->m_iX, pNode->m_iY);
                 const CvPlot* thisStepPlot = gGlobals.getMap().plot(pNode->m_iX, pNode->m_iY);
-                const bool plotIsVisible = thisStepPlot->isVisible(pGroup->getTeam(), false);
+                const bool plotIsVisible = thisStepPlot->isVisible(isVisibleToTeam, false);
+                // path plots are in reverse order (end->start)
+                nodes.push_front(Node(pNode->m_iData2, pNode->m_iData1, stepCoords, plotIsVisible));
+                pNode = pNode->m_pParent;
+            }
+        }
+    }
+
+    void UnitPathData::calculate(const std::vector<UnitData>& units, const CvPlot* pStartPlot, const CvPlot* pTargetPlot, const int flags, PlayerTypes playerType, TeamTypes isVisibleToTeam)
+    {
+        nodes.clear();
+
+        FAStar* pStepFinder = gDLL->getFAStarIFace()->create();
+        CvMap& theMap = gGlobals.getMap();
+        gDLL->getFAStarIFace()->Initialize(pStepFinder, theMap.getGridWidth(), theMap.getGridHeight(), theMap.isWrapX(), theMap.isWrapY(), 
+            unitDataPathDestValid, stepHeuristic, unitDataPathCost, stepValid, unitDataPathAdd, NULL, NULL);
+
+        XYCoords startCoords = pStartPlot->getCoords();
+
+        int stepFinderInfo = MAKEWORD((short)playerType, 0);
+        gDLL->getFAStarIFace()->SetData(pStepFinder, &units);
+
+        valid = gDLL->getFAStarIFace()->GeneratePath(pStepFinder, startCoords.iX, startCoords.iY, pTargetPlot->getX(), pTargetPlot->getY(), false, stepFinderInfo, true);
+        if (valid)
+        {
+            FAStarNode* pNode = gDLL->getFAStarIFace()->GetLastNode(pStepFinder);
+            pathTurns = pNode->m_iData2;
+            while (pNode)
+            {
+                XYCoords stepCoords(pNode->m_iX, pNode->m_iY);
+                const CvPlot* thisStepPlot = gGlobals.getMap().plot(pNode->m_iX, pNode->m_iY);
+                const bool plotIsVisible = thisStepPlot->isVisible(isVisibleToTeam, false);
                 // path plots are in reverse order (end->start)
                 nodes.push_front(Node(pNode->m_iData2, pNode->m_iData1, stepCoords, plotIsVisible));
                 pNode = pNode->m_pParent;
@@ -456,7 +502,7 @@ namespace AltAI
 
     XYCoords UnitPathData::getLastVisiblePlotWithMP() const
     {
-        XYCoords coords(-1, -1);
+        XYCoords coords;
         if (nodes.size() > 1)
         {
             std::list<Node>::const_iterator nodeIter = nodes.begin();
@@ -478,7 +524,7 @@ namespace AltAI
 
     XYCoords UnitPathData::getFirstStepCoords() const
     {
-        XYCoords coords(-1, -1);
+        XYCoords coords;
         if (nodes.size() > 1)
         {
             std::list<Node>::const_iterator nodeIter = nodes.begin();
@@ -490,7 +536,7 @@ namespace AltAI
 
     XYCoords UnitPathData::getFirstTurnEndCoords() const
     {
-        XYCoords coords(-1, -1);
+        XYCoords coords;
         for (std::list<Node>::const_iterator nodeIter(nodes.begin()); nodeIter != nodes.end(); ++nodeIter)
         {            
             if (nodeIter->turn > 1)
@@ -500,6 +546,24 @@ namespace AltAI
             coords = nodeIter->coords;
         }
         return coords;
+    }
+
+    int UnitPathData::getLengthToEndFrom(XYCoords coord) const
+    {
+        int length = 0;
+        bool coordOnPath = false;
+        for (std::list<Node>::const_iterator nodeIter(nodes.begin()); nodeIter != nodes.end(); ++nodeIter)
+        {
+            if (coordOnPath)
+            {
+                ++length;
+            }
+            if (nodeIter->coords == coord)
+            {
+                coordOnPath = true;
+            }            
+        }
+        return coordOnPath ? length : -1;
     }
 
     void UnitPathData::debug(std::ostream& os) const
@@ -747,6 +811,7 @@ namespace AltAI
         std::list<StackCombatDataNodePtr> openNodes, endNodes;
 
         StackCombatDataNodePtr pRootNode(new StackCombatDataNode());
+        pRootNode->prob = 1.0f;
         pRootNode->attackers = attackers;
         pRootNode->defenders = defenders;
 
@@ -756,15 +821,16 @@ namespace AltAI
         {
             StackCombatDataNodePtr pCurrentNode = *openNodes.begin();
             // expand node if required
-            if (!pCurrentNode->attackers.empty() && !pCurrentNode->defenders.empty() && stackCanAttack(pCurrentNode->attackers))
+            if (!pCurrentNode->attackers.empty() && !pCurrentNode->defenders.empty() && stackCanAttack(pCurrentNode->attackers, pCurrentNode->defenders))
             {
                 pCurrentNode->data = getBestUnitOdds(player, combatDetails, pCurrentNode->attackers, pCurrentNode->defenders, false);
 
                 // oddsThreshold limits expansion of very unlikely paths - which significantly reduces the no. of nodes for large stack combinations
                 // better than 99.99% (0.9999) (if oddsThreshold is 0.0001) chance of attacker dying
-                bool ignoreAttackerSurvival = pCurrentNode->data.odds.DefenderKillOdds > 1.0 - oddsThreshold;
+                bool ignoreAttackerSurvival = pCurrentNode->prob * pCurrentNode->data.odds.DefenderKillOdds > 1.0 - oddsThreshold || pCurrentNode->prob * pCurrentNode->data.odds.AttackerKillOdds < oddsThreshold;
+                bool onlyRetreat = pCurrentNode->attackers[pCurrentNode->data.attackerIndex].pUnitInfo->getCombatLimit() < 100;
                 // better than 99.99% chance of defender dying
-                bool ignoreDefenderSurvival = pCurrentNode->data.odds.AttackerKillOdds > 1.0 - oddsThreshold;
+                bool ignoreDefenderSurvival = pCurrentNode->prob * pCurrentNode->data.odds.AttackerKillOdds > 1.0 - oddsThreshold || pCurrentNode->prob * pCurrentNode->data.odds.DefenderKillOdds < oddsThreshold ;
                 std::vector<int> unitsCollateralDamage;
                 bool checkCollateral = pCurrentNode->attackers[pCurrentNode->data.attackerIndex].pUnitInfo->getCollateralDamage() > 0;
 
@@ -775,38 +841,42 @@ namespace AltAI
                 }
 
                 // todo - flanking damage
-
-                if (!ignoreAttackerSurvival)
+                if (!onlyRetreat)
                 {
-                    StackCombatDataNodePtr pWinNode(new StackCombatDataNode(pCurrentNode.get()));
-                    pWinNode->attackers = pCurrentNode->attackers;
-                    UnitData& attackingUnitData = pWinNode->attackers[pCurrentNode->data.attackerIndex];
-                    attackingUnitData.hp = std::max<int>(1, (int)pCurrentNode->data.odds.E_HP_Att);  // prevent div by zero errors from rounding down hp to zero
-                    attackingUnitData.hasAttacked = true;
-                    attackingUnitData.moves = std::max<int>(0, attackingUnitData.moves - 1); // todo calc exact movement cost for attack to plot
-                    for (size_t i = 0, count = pCurrentNode->defenders.size(); i < count; ++i)
+                    if (!ignoreAttackerSurvival)
                     {
-                        if (i != pCurrentNode->data.defenderIndex)
+                        StackCombatDataNodePtr pWinNode(new StackCombatDataNode(pCurrentNode.get()));
+                        pWinNode->prob = pWinNode->parentNode->prob * pCurrentNode->data.odds.AttackerKillOdds;
+                        pWinNode->attackers = pCurrentNode->attackers;
+                        UnitData& attackingUnitData = pWinNode->attackers[pCurrentNode->data.attackerIndex];
+                        attackingUnitData.hp = std::max<int>(1, (int)pCurrentNode->data.odds.E_HP_Att);  // prevent div by zero errors from rounding down hp to zero
+                        attackingUnitData.hasAttacked = true;
+                        attackingUnitData.moves = std::max<int>(0, attackingUnitData.moves - 1); // todo calc exact movement cost for attack to plot
+                        for (size_t i = 0, count = pCurrentNode->defenders.size(); i < count; ++i)
                         {
-                            pWinNode->defenders.push_back(pCurrentNode->defenders[i]);
-                            if (checkCollateral)
+                            if (i != pCurrentNode->data.defenderIndex)
                             {
-                                pWinNode->defenders.rbegin()->hp -= unitsCollateralDamage[i];
+                                pWinNode->defenders.push_back(pCurrentNode->defenders[i]);
+                                if (checkCollateral)
+                                {
+                                    pWinNode->defenders.rbegin()->hp -= unitsCollateralDamage[i];
+                                }
                             }
                         }
+                        pCurrentNode->winNode = pWinNode;
+                        openNodes.push_back(pWinNode);  // attacker wins (or survives?)
                     }
-                    pCurrentNode->winNode = pWinNode;
-                    openNodes.push_back(pWinNode);  // attacker wins (or survives?)
-                }
-                else
-                {
-                    pCurrentNode->data.odds.AttackerKillOdds = 0.0;
-                    pCurrentNode->data.odds.DefenderKillOdds = 1.0;
+                    else
+                    {
+                        pCurrentNode->data.odds.AttackerKillOdds = 0.0;
+                        pCurrentNode->data.odds.DefenderKillOdds = 1.0;
+                    }
                 }
 
                 if (!ignoreDefenderSurvival)
                 {
                     StackCombatDataNodePtr pLossNode(new StackCombatDataNode(pCurrentNode.get()));
+                    pLossNode->prob = pLossNode->parentNode->prob * pCurrentNode->data.odds.DefenderKillOdds;
                     pLossNode->defenders = pCurrentNode->defenders;
                     UnitData& defendingUnitData = pLossNode->defenders[pCurrentNode->data.defenderIndex];
                     defendingUnitData.hp = std::max<int>(1, (int)pCurrentNode->data.odds.E_HP_Def);
@@ -814,7 +884,7 @@ namespace AltAI
                     {
                         for (size_t i = 0, count = pLossNode->defenders.size(); i < count; ++i)
                         {
-                            pLossNode->defenders.rbegin()->hp -= unitsCollateralDamage[i];
+                            pLossNode->defenders[i].hp -= unitsCollateralDamage[i];
                         }
                     }
                     for (size_t i = 0, count = pCurrentNode->attackers.size(); i < count; ++i)
@@ -835,20 +905,34 @@ namespace AltAI
 
                 // withdrawal (for units that have a damage max % limit) and retreat (units with chance to withdraw from combat)
                 // in both cases, neither defender nor attacker is killed
-                if (pCurrentNode->data.odds.PullOutOdds + pCurrentNode->data.odds.RetreatOdds > oddsThreshold)
+                float pullOutOrWithdrawOdds = pCurrentNode->data.odds.PullOutOdds + pCurrentNode->data.odds.RetreatOdds;
+                if (pullOutOrWithdrawOdds > oddsThreshold && pCurrentNode->prob * pullOutOrWithdrawOdds > oddsThreshold)
                 {
                     StackCombatDataNodePtr pDrawNode(new StackCombatDataNode(pCurrentNode.get()));
+                    pDrawNode->prob = pDrawNode->parentNode->prob * pullOutOrWithdrawOdds;
                     pDrawNode->attackers = pCurrentNode->attackers;
                     pDrawNode->defenders = pCurrentNode->defenders;
+
                     UnitData& attackingUnitData = pDrawNode->attackers[pCurrentNode->data.attackerIndex];
                     // average of E_HP_Att_Withdraw and E_HP_Att_Retreat weighted by prob
                     // todo - check the expected HP values for retreat and withdrawal as they seem to be always 0 even when retreat odds are non trivial
-                    attackingUnitData.hp = std::max<int>(1, (int)((pCurrentNode->data.odds.PullOutOdds * pCurrentNode->data.odds.E_HP_Att_Withdraw + 
-                        pCurrentNode->data.odds.RetreatOdds * pCurrentNode->data.odds.E_HP_Att_Retreat) / (pCurrentNode->data.odds.PullOutOdds + pCurrentNode->data.odds.RetreatOdds)));
-                    UnitData& defendingUnitData = pDrawNode->defenders[pCurrentNode->data.defenderIndex];
-                    defendingUnitData.hp = std::max<int>(1, (int)pCurrentNode->data.odds.E_HP_Def_Withdraw);  // + average in expected retreat (hp = max damage limit of attacker?)
+                    // values seem to be reversed - for collateral withdrawal E_HP_Att_Retreat 
+                    attackingUnitData.hp = std::max<int>(1, (int)((pCurrentNode->data.odds.PullOutOdds * pCurrentNode->data.odds.E_HP_Att_Retreat + 
+                        pCurrentNode->data.odds.RetreatOdds * pCurrentNode->data.odds.E_HP_Att_Withdraw) / (pCurrentNode->data.odds.PullOutOdds + pCurrentNode->data.odds.RetreatOdds)));
                     attackingUnitData.hasAttacked = true;
                     attackingUnitData.moves = std::max<int>(0, attackingUnitData.moves - 1); // todo calc exact movement cost for attack to plot
+
+                    if (checkCollateral)  // even if attacker died - still apply any collateral damage to defenders
+                    {
+                        for (size_t i = 0, count = pDrawNode->defenders.size(); i < count; ++i)
+                        {
+                            pDrawNode->defenders[i].hp -= unitsCollateralDamage[i];
+                        }
+                    }
+
+                    UnitData& defendingUnitData = pDrawNode->defenders[pCurrentNode->data.defenderIndex];
+                    defendingUnitData.hp = std::max<int>(1, (int)pCurrentNode->data.odds.E_HP_Def_Withdraw);  // + average in expected retreat (hp = max damage limit of attacker?)
+                    
                     pCurrentNode->drawNode = pDrawNode;
                     openNodes.push_back(pDrawNode);  // attacker retreats or withdraws
                 }
@@ -1087,65 +1171,10 @@ namespace AltAI
 
     std::pair<std::vector<UnitTypes>, std::vector<UnitTypes> > getActualAndPossibleCombatUnits(const Player& player, const CvCity* pCity, DomainTypes domainType)
     {
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-#endif
-        std::vector<UnitTypes> combatUnits, possibleCombatUnits;
-
-        boost::shared_ptr<PlayerTactics> pTactics = player.getAnalysis()->getPlayerTactics();
-
-        for (PlayerTactics::UnitTacticsMap::const_iterator ci(pTactics->unitTacticsMap_.begin()), ciEnd(pTactics->unitTacticsMap_.end()); ci != ciEnd; ++ci)
-        {
-            if (ci->first != NO_UNIT)
-            {
-                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(ci->first);
-                if (unitInfo.getDomainType() == domainType && unitInfo.getProductionCost() >= 0 && unitInfo.getCombat() > 0)
-                {
-                    if (ci->second && !isUnitObsolete(player, player.getAnalysis()->getUnitInfo(ci->first)))
-                    {
-#ifdef ALTAI_DEBUG
-                        if (domainType != DOMAIN_LAND)
-                        {
-                            os << "\nChecking unit: " << gGlobals.getUnitInfo(ci->first).getType();
-                        }
-#endif
-                        const boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(ci->first);
-                        bool depsSatisfied = ci->second->areDependenciesSatisfied(player, IDependentTactic::Ignore_None);
-                        bool techDepsSatisfied = ci->second->areTechDependenciesSatisfied(player);
-
-                        if (pCity)
-                        {
-                            CityUnitTacticsPtr pCityTactics = ci->second->getCityTactics(pCity->getIDInfo());
-                            depsSatisfied = pCityTactics && depsSatisfied && pCityTactics->areDependenciesSatisfied(IDependentTactic::Ignore_None);
-                        }
-
-                        bool couldConstruct = (pCity ? couldConstructUnit(player, player.getCity(pCity->getID()), 0, pUnitInfo, false, false) : couldConstructUnit(player, 0, pUnitInfo, false, false));
-#ifdef ALTAI_DEBUG
-                        if (domainType != DOMAIN_LAND)
-                        {
-                            os << " " << (pCity ? narrow(pCity->getName()) : "(none)");
-                            os << " deps = " << depsSatisfied << ", could construct = " << couldConstruct << " tech deps: " << techDepsSatisfied
-                               << " potential construct for player: " << couldConstructUnit(player, 3, player.getAnalysis()->getUnitInfo(ci->first), true, true);
-                        }
-#endif
-                        if (depsSatisfied)
-                        {
-                            combatUnits.push_back(ci->first);
-                            possibleCombatUnits.push_back(ci->first);
-                        }
-                        else if (couldConstructUnit(player, 3, player.getAnalysis()->getUnitInfo(ci->first), true, true))
-                        {
-                            possibleCombatUnits.push_back(ci->first);
-                        }
-                    }
-                }
-            }
-        }
-
-        return std::make_pair(combatUnits, possibleCombatUnits);
+        return player.getAnalysis()->getPlayerTactics()->getActualAndPossibleCombatUnits(pCity ? pCity->getIDInfo() : IDInfo(), domainType);
     }
 
-    StackCombatData getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, bool useCollateral, bool debug)
+    StackCombatData getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, bool debug)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*player.getCvPlayer())->getStream();
@@ -1157,8 +1186,8 @@ namespace AltAI
 
         for (size_t i = 0, count = attackUnitsCount; i < count; ++i)
         {
-            bool isCollateralUnit = attackers[i].pUnitInfo->getCollateralDamage() > 0;
-            if (useCollateral != isCollateralUnit)
+            // caller is responsible for checking that at least one attacker can attack
+            if (attackers[i].hasAttacked && !attackers[i].isBlitz)
             {
                 continue;
             }
@@ -1225,7 +1254,7 @@ namespace AltAI
     }
 
     std::list<StackCombatData> getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, 
-        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, const int oddsThreshold, bool useCollateral, bool debug)
+        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, const int oddsThreshold, bool includeCollateral, bool debug)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = UnitLog::getLog(*player.getCvPlayer())->getStream();
@@ -1238,8 +1267,7 @@ namespace AltAI
 
         for (size_t i = 0, count = attackUnitsCount; i < count; ++i)
         {
-            bool isCollateralUnit = attackers[i].pUnitInfo->getCollateralDamage() > 0;
-            if (useCollateral != isCollateralUnit)
+            if (includeCollateral && !(attackers[i].pUnitInfo->getCollateralDamage() > 0))
             {
                 continue;
             }
@@ -1400,9 +1428,15 @@ namespace AltAI
             }
         }
 
+        if (ourPotentialUnits.empty())
+        {
+            // should prob error if this happens
+            return requiredUnitStack;
+        }
+
         const int maxIterations = 2 * enemyStack.size();  // no point in trying to build a huge stack of outclassed units        
         const int oddsThreshold = 650; // out of 1,000
-        const float minAttackerSurvivalProd = 0.2, targetOverallWinProb = 0.9;
+        const float minAttackerSurvivalProd = 0.2f, targetOverallWinProb = 0.9f;
 
         bool includeCollateral = canBuildCollateralUnits && enemyStack.size() > minStackSizeToIncludeCollateralUnits;
         int iterations = 0, collateralIterations = 0;
@@ -1539,7 +1573,7 @@ namespace AltAI
         while (combatGraph.endStatesData.pWin < targetOverallWinProb && iterations++ < maxIterations)
         {
             // not adding more collateral here atm - may need to refine
-            std::list<StackCombatData> attackData = getBestUnitOdds(player, combatDetails, ourPotentialUnits, hostileUnitsCopy, oddsThreshold, includeCollateral);
+            std::list<StackCombatData> attackData = getBestUnitOdds(player, combatDetails, ourPotentialUnits, hostileUnitsCopy, oddsThreshold, includeCollateral, false);
             attackData.sort(StackCombatDataComp());
             ourUnits.push_back(ourPotentialUnits[attackData.begin()->attackerIndex]);
             requiredUnitStack.unitsToBuild.push_back(std::list<UnitData>(1, ourPotentialUnits[attackData.begin()->attackerIndex]));
@@ -1551,7 +1585,7 @@ namespace AltAI
         os << "\n combat details: ";
         combatDetails.debug(os);        
         combatGraph.debugEndStates(os);
-        os << " winning odds = " << combatGraph.endStatesData.pWin << ", losing odds = " << combatGraph.endStatesData.pLoss;
+        os << "\n winning odds = " << combatGraph.endStatesData.pWin << ", losing odds = " << combatGraph.endStatesData.pLoss;
         if (combatGraph.endStatesData.pDraw > 0)
         {
             os << " draw = " << combatGraph.endStatesData.pDraw;
@@ -1761,10 +1795,13 @@ namespace AltAI
                 ourUnits.push_back(pUnit);
             }
         }
-        return calculate(player, ourUnits);
+        // todo - support passing this in to this version of calculate too
+        PlotUnitDataMap possibleTargetStacks;
+
+        return calculate(player, ourUnits, possibleTargetStacks);
     }
 
-    void GroupCombatData::calculate(const Player& player, const std::vector<const CvUnit*>& units)
+    void GroupCombatData::calculate(const Player& player, const std::vector<const CvUnit*>& units, const PlotUnitDataMap& possibleHostiles)
     {
         attackCombatResultsMap.clear();
         defenceCombatResultsMap.clear();
@@ -1854,12 +1891,23 @@ namespace AltAI
                 }
             }
 
+            PlotUnitDataMap::const_iterator possibleHostilesIter = possibleHostiles.find(plotIter->first);
+            if (possibleHostilesIter != possibleHostiles.end())
+            {
+                for (size_t i = 0, count = possibleHostilesIter->second.size(); i < count; ++i)
+                {
+                    if (std::find_if(enemyUnitData.begin(), enemyUnitData.end(), UnitDataIDInfoP(possibleHostilesIter->second[i].unitId)) == enemyUnitData.end())
+                    {
+                        enemyUnitData.push_back(possibleHostilesIter->second[i]);
+                        combatDetails.unitAttackDirectionsMap[plotIter->second[i]->getIDInfo()] = directionXY(plotIter->second[i]->plot(), plotIter->first);
+                    }
+                }
+            }
+
             CombatGraph combatGraph = getCombatGraph(player, combatDetails, enemyUnitData, ourUnitData);
             combatGraph.analyseEndStates();
             defenceCombatResultsMap[plotIter->first->getCoords()] = combatGraph.endStatesData;
         }
-
-        //const std::map<XYCoords, CombatData>& attackableUnitsMap = player.getAnalysis()->getMilitaryAnalysis()->getAttackableUnitsMap();
 
         for (PlotUnitsMap::const_iterator hi(hostilesLocationMap.begin()), hiEnd(hostilesLocationMap.end());
             hi != hiEnd; ++hi)
@@ -1944,13 +1992,12 @@ namespace AltAI
 
     CombatGraph::Data GroupCombatData::getCombatData(XYCoords coords, bool isAttack) const
     {
-        CombatGraph::Data combatData;
         if (isAttack)
         {
             std::map<XYCoords, CombatGraph::Data>::const_iterator ci(attackCombatResultsMap.find(coords));
             if (ci != attackCombatResultsMap.end())
             {
-                combatData = ci->second;
+                return ci->second;
             }
         }
         else
@@ -1958,10 +2005,10 @@ namespace AltAI
             std::map<XYCoords, CombatGraph::Data>::const_iterator ci(defenceCombatResultsMap.find(coords));
             if (ci != defenceCombatResultsMap.end())
             {
-                combatData = ci->second;
+                return ci->second;
             }
         }
-        return combatData;
+        return CombatGraph::Data();
     }
 
     const CvPlot* getNextMovePlot(const Player& player, const CvSelectionGroup* pGroup, const CvPlot* pTargetPlot)
@@ -1985,7 +2032,7 @@ namespace AltAI
         }
 
         // ok to call this fn on current plot - unit will try to move if danger
-        XYCoords moveToCoords(-1, -1);
+        XYCoords moveToCoords;
         const XYCoords currentCoords = pGroup->plot()->getCoords(), targetCoords(pTargetPlot->getX(), pTargetPlot->getY());
         ReachablePlotsData ourReachablePlotsData;
         getReachablePlotsData(ourReachablePlotsData, player, ourUnits, false, groupCanFight);
@@ -2001,7 +2048,7 @@ namespace AltAI
             if (unitPathData.valid)
             {
                 XYCoords lastVisibleStepWithMP = unitPathData.getLastVisiblePlotWithMP();
-                if (lastVisibleStepWithMP != XYCoords(-1, -1))  // if we have any visible plots with moves - pick the last one as moveCoords
+                if (!isEmpty(lastVisibleStepWithMP))  // if we have any visible plots with moves - pick the last one as moveCoords
                 {
                     moveToCoords = lastVisibleStepWithMP;
                 }
@@ -2034,7 +2081,7 @@ namespace AltAI
             moveToCoords = targetCoords;
         }
 
-        if (moveToCoords != XYCoords(-1, -1))
+        if (!isEmpty(moveToCoords))
         {
             const CvPlot* pMoveToPlot = gGlobals.getMap().plot(moveToCoords.iX, moveToCoords.iY);
             PlotSet moveToPlotSet;

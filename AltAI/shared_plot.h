@@ -6,7 +6,7 @@ namespace AltAI
 {
     struct SharedPlot
     {
-        SharedPlot() : coords(-1, -1) {}
+        SharedPlot() {}
         explicit SharedPlot(XYCoords coords_) : coords(coords_) {}
 
         XYCoords coords;

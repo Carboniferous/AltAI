@@ -1,8 +1,8 @@
 #include "AltAI.h"
 
 #include "./city_simulator.h"
-#include "./building_info_visitors.h"
 #include "./plot_info_visitors.h"
+#include "./building_info_visitors.h"
 #include "./hurry_helper.h"
 #include "./helper_fns.h"
 #include "./civ_log.h"

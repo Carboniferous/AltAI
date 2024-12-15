@@ -103,7 +103,7 @@ namespace AltAI
           : cityProjection_(cityProjection), pCityData_(pCityData)
         {
             initialPop_ = pCityData_->getPopulation();
-            happyCap_ = pCityData_->getHappyHelper()->happyPopulation() - pCityData_->getHappyHelper()->angryPopulation(*pCityData_);
+            happyCap_ = pCityData_->happyPopulation() - pCityData_->angryPopulation();
             healthCap_ = pCityData_->getHealthHelper()->goodHealth() - pCityData_->getHealthHelper()->badHealth();
         }
 

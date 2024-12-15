@@ -35,23 +35,24 @@ namespace AltAI
     // version for use in simulating unit combat between stacks 
     // use to get odds and determine which unit to attack with and which unit will defend
     StackCombatData getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails,
-        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, bool useCollateral, bool debug = false);
+        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, bool debug);
     // version for use to get list of odds of theoretical attack stack
     // use to determine required stack compositions
     std::list<StackCombatData> getBestUnitOdds(const Player& player, const UnitData::CombatDetails& combatDetails, 
-        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, const int oddsThreshold, bool useCollateral, bool debug = false);
+        const std::vector<UnitData>& attackers, const std::vector<UnitData>& defenders, const int oddsThreshold, bool includeCollateral, bool debug);
 
     struct StackCombatDataNode;
     typedef boost::shared_ptr<StackCombatDataNode> StackCombatDataNodePtr;
 
     struct StackCombatDataNode
     {
-        StackCombatDataNode() : parentNode(NULL) {}
-        explicit StackCombatDataNode(const StackCombatDataNode* parentNode_) : parentNode(parentNode_) {}
+        StackCombatDataNode() : parentNode(NULL), prob(0.0f) {}
+        explicit StackCombatDataNode(const StackCombatDataNode* parentNode_) : parentNode(parentNode_), prob(0.0f) {}
         StackCombatData data;
         std::vector<UnitData> attackers, defenders;
         StackCombatDataNodePtr winNode, lossNode, drawNode;
         const StackCombatDataNode* parentNode;
+        float prob;
         StackCombatDataNodePtr getBestOutcome() const { return winNode ? winNode : drawNode ? drawNode : lossNode; }
         StackCombatDataNodePtr getWorstOutcome() const { return lossNode ? lossNode : drawNode ? drawNode : winNode; }
         bool isEndState() const { return !(winNode || drawNode || lossNode); }
@@ -141,17 +142,19 @@ namespace AltAI
     {
         UnitPathData() : pathTurns(-1), valid(false) {}
 
-        void calculate(const CvSelectionGroup* pGroup, const CvPlot* pTargetPlot, const int flags);
+        void calculate(const CvSelectionGroup* pGroup, const CvPlot* pTargetPlot, const int flags, TeamTypes isVisibleToTeam = NO_TEAM);
+        void calculate(const std::vector<UnitData>& units, const CvPlot* pStartPlot, const CvPlot* pTargetPlot, const int flags, PlayerTypes playerType, TeamTypes isVisibleToTeam);
         XYCoords getLastVisiblePlotWithMP() const;
         XYCoords getFirstStepCoords() const;
         XYCoords getFirstTurnEndCoords() const;
+        int getLengthToEndFrom(XYCoords coord) const;
         void debug(std::ostream& os) const;
 
         int pathTurns;
         bool valid;
         struct Node
         {
-            Node() : turn(-1), movesLeft(-1), coords(-1, -1), visible(false) {}
+            Node() : turn(-1), movesLeft(-1), coords(), visible(false) {}
             Node(int turn_, int movesLeft_, XYCoords coords_, bool visible_)
                 : turn(turn_), movesLeft(movesLeft_), coords(coords_), visible(visible_)
             {}
@@ -161,6 +164,22 @@ namespace AltAI
             bool visible;
         };
         std::list<Node> nodes;
+    };
+
+    struct GroupPathComp
+    {
+        bool operator() (const std::pair<CvSelectionGroup*, UnitPathData>& groupPathData1, const std::pair<CvSelectionGroup*, UnitPathData>& groupPathData2) const
+        {
+            return groupPathData1.second.pathTurns < groupPathData2.second.pathTurns;
+        }
+    };
+
+    struct UnitPathDataComp
+    {
+        bool operator() (const UnitPathData& pathData1, const UnitPathData& pathData2) const
+        {
+            return pathData1.pathTurns < pathData2.pathTurns;
+        }
     };
 
     RequiredUnitStack getRequiredAttackStack(const Player& player, const std::vector<UnitTypes>& availableUnits, const CvPlot* pTargetPlot, 
@@ -184,7 +203,7 @@ namespace AltAI
     struct GroupCombatData
     {
         void calculate(const Player& player, const CvSelectionGroup* pGroup);
-        void calculate(const Player& player, const std::vector<const CvUnit*>& units);
+        void calculate(const Player& player, const std::vector<const CvUnit*>& units, const PlotUnitDataMap& possibleHostiles);
         void debug(std::ostream& os) const;
         void debugCombatResultsMap(std::ostream& os, const std::map<XYCoords, CombatGraph::Data>& resultsMap) const;
         CombatGraph::Data getCombatData(XYCoords coords, bool isAttack) const;

@@ -21,6 +21,8 @@ namespace AltAI
         ResearchTech getResearchTech(TechTypes ignoreTechType = NO_TECH);
         ResearchTech getResearchTechData(TechTypes techType) const;
 
+        CivicTypes chooseCivic(CivicOptionTypes civicOptionType);
+
         void updateBuildingTactics();
         void updateTechTactics();
         //void updateUnitTactics();
@@ -30,6 +32,7 @@ namespace AltAI
         void makeSpecialistUnitTactics();
         void makeCivicTactics();
         void makeResourceTactics();
+        void makeReligionTactics();
 
         void updateFirstToTechTactics(TechTypes techType);
 
@@ -58,52 +61,37 @@ namespace AltAI
         void updateCityUnitTactics(TechTypes techType);
         void updateCityUnitTacticsExperience(IDInfo city);
         void updateCityUnitTactics(IDInfo city);
+        void updateCityUnitTactics(const City& city, ReligionTypes religionType);
 
-        void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
+        //todo - void updateCityImprovementTactics(const boost::shared_ptr<TechInfo>& pTechInfo);
 
+        void eraseBuildingTacticSelectionData(IDInfo city, BuildingTypes buildingType);
+
+        TacticSelectionDataMap& getBaseTacticSelectionDataMap();
         TacticSelectionData& getBaseTacticSelectionData();
-        const TacticSelectionData& getBaseTacticSelectionData() const;
+        TacticSelectionDataMap& getCityTacticSelectionDataMap(IDInfo city);
+        TacticSelectionData& getCityTacticSelectionData(IDInfo city);
 
         std::map<int, ICityBuildingTacticsPtr> getCityBuildingTactics(BuildingTypes buildingType) const;
         std::map<int, ICityBuildingTacticsPtr> getCitySpecialBuildingTactics(BuildingTypes buildingType) const;
+        ICityBuildingTacticsPtr getCityBuildingTactics(IDInfo city, BuildingTypes buildingType) const;
 
         ConstructItem getBuildItem(City& city);
         bool getSpecialistBuild(CvUnitAI* pUnit);
 
-        std::map<BuildingTypes, std::vector<BuildingTypes> > getBuildingsCityCanAssistWith(IDInfo city) const;
-        std::map<BuildingTypes, std::vector<BuildingTypes> > getPossibleDependentBuildings(IDInfo city) const;
+        std::map<BuildingTypes, std::set<BuildingTypes> > getBuildingsCityCanAssistWith(IDInfo city) const;
+        std::map<BuildingTypes, std::set<BuildingTypes> > getPossibleDependentBuildings(IDInfo city) const;
 
         UnitAction getConstructedUnitAction(const CvUnit* pUnit) const;
 
-        template <typename DepType>
-            void getUnitsWithDep(std::map<DepType, std::vector<UnitTypes> >& depMap, int depID) const
-        {
-            for (PlayerTactics::UnitTacticsMap::const_iterator iter(unitTacticsMap_.begin()), endIter(unitTacticsMap_.end()); iter != endIter; ++iter)
-            {
-                CityIter cityIter(*player.getCvPlayer());
-                while (CvCity* pCity = cityIter())
-                {
-                    CityUnitTacticsPtr pCityTactics = iter->second->getCityTactics(pCity->getIDInfo());
-                    if (pCityTactics)
-                    {
-                        const std::vector<IDependentTacticPtr>& pDepItems = pCityTactics->getDependencies();
-                        for (size_t i = 0, count = pDepItems.size(); i < count; ++i)
-                        {
-                            const std::vector<DependencyItem>& thisDepItems = pDepItems[i]->getDependencyItems();
-                            for (size_t j = 0, depItemCount = thisDepItems.size(); j < depItemCount; ++j)
-                            {
-                                if (thisDepItems[j].first == depID)
-                                {
-                                    depMap[(DepType)thisDepItems[j].second].push_back(iter->first);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        std::pair<std::vector<UnitTypes>, std::vector<UnitTypes> > getActualAndPossibleCombatUnits(IDInfo city, DomainTypes domainType) const;
 
-        void debugTactics();
+        UnitTacticsPtr getUnitTactics(UnitTypes unitType) const;
+
+        template <typename DepType>
+            void getUnitsWithDep(std::map<DepType, std::vector<UnitTypes> >& depMap, int depID) const;
+
+        void debugTactics(bool inclOutputs = true);
 
         // ordinary buildings tactics, keyed by city IDInfo
         typedef std::map<BuildingTypes, ICityBuildingTacticsPtr> CityBuildingTacticsList;
@@ -140,8 +128,13 @@ namespace AltAI
         typedef std::map<BonusTypes, ResourceTacticsPtr> ResourceTacticsMap;
         ResourceTacticsMap resourceTacticsMap_;
 
+        // religion tactics
+        typedef std::map<ReligionTypes, ReligionTacticsPtr> ReligionTacticsMap;
+        ReligionTacticsMap religionTacticsMap_;
+
         Player& player;
         TacticSelectionDataMap tacticSelectionDataMap;
+        std::map<IDInfo, TacticSelectionDataMap> cityTacticSelectionDataMap;
 
         // save/load functions
         void write(FDataStreamBase* pStream) const;

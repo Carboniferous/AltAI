@@ -20,8 +20,8 @@ namespace AltAI
         virtual const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const;
         virtual void update(Player& player, const CityDataPtr& pCityData);
         virtual void updateDependencies(Player& player, const CvCity* pCity);
-        virtual bool areDependenciesSatisfied(int ignoreFlags) const;
-        virtual void apply(TacticSelectionDataMap& selectionDataMap, int ignoreFlags);
+        virtual bool areDependenciesSatisfied(int depTacticFlags) const;
+        virtual void apply(TacticSelectionDataMap& selectionDataMap, int depTacticFlags);
         virtual void apply(TacticSelectionData& selectionData);
 
         virtual BuildingTypes getBuildingType() const;
@@ -34,7 +34,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int CityBuildingTacticID = 0;
 
     private:
         void apply_(TacticSelectionData& selectionData);
@@ -62,14 +62,14 @@ namespace AltAI
         virtual void updateDependencies(const Player& player);
         virtual ProjectionLadder getProjection(IDInfo city) const;
         virtual ProcessTypes getProcessType() const;
-        virtual bool areDependenciesSatisfied(const Player& player, int ignoreFlags) const;
+        virtual bool areDependenciesSatisfied(const Player& player, int depTacticFlags) const;
 
         virtual void debug(std::ostream& os) const;
 
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int ProcessTacticID = 0;
 
     private:
         std::vector<ResearchTechDependencyPtr> techDependencies_;
@@ -88,10 +88,10 @@ namespace AltAI
         virtual void update(Player& player);
         virtual void update(Player&, const CityDataPtr&);
         virtual void updateDependencies(Player& player);
-        virtual bool areDependenciesSatisfied(IDInfo city, int ignoreFlags) const;
+        virtual bool areDependenciesSatisfied(IDInfo city, int depTacticFlags) const;
         virtual void addCityTactic(IDInfo city, const ICityBuildingTacticsPtr& pCityTactic);
         virtual ICityBuildingTacticsPtr getCityTactics(IDInfo city) const;
-        virtual void apply(TacticSelectionDataMap& selectionDataMap, int ignoreFlags);
+        virtual void apply(TacticSelectionDataMap& selectionDataMap, int depTacticFlags);
         virtual void apply(TacticSelectionData& selectionData);
         virtual void removeCityTactics(IDInfo city);
         virtual bool empty() const;
@@ -105,7 +105,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int LimitedBuildingTacticID = 0;
 
     private:
         TotalOutput getGlobalDelta_(IDInfo builtCity, int buildTime);

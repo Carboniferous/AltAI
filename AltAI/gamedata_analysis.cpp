@@ -5,8 +5,8 @@
 #include "./city.h"
 #include "./unit.h"
 #include "./tech_info_streams.h"
-#include "./building_info_visitors.h"
 #include "./buildings_info.h"
+#include "./building_info_construct_visitors.h"
 #include "./helper_fns.h"
 #include "./civ_log.h"
 
@@ -87,11 +87,13 @@ namespace AltAI
                 if ((gGlobals.getUnitClassInfo((UnitClassTypes)classIndex).getDefaultUnitIndex()) != 
                     gGlobals.getCivilizationInfo(civType).getCivilizationUnits(classIndex))
                 {
+#ifdef ALTAI_DEBUG
                     {
                         std::ostringstream oss;
                         oss << classIndex << gGlobals.getUnitClassInfo((UnitClassTypes)classIndex).getType() << "\n";
                         OutputDebugString(oss.str().c_str());
                     }
+#endif
                     playerData_[playerID].uniqueUnits.push_back(std::make_pair(classIndex, gGlobals.getCivilizationInfo(civType).getCivilizationUnits(classIndex)));
                 }
             }

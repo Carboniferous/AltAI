@@ -7,6 +7,9 @@ namespace AltAI
 {
     class MilitaryAnalysisImpl;
 
+    class MilitaryAnalysis;
+    typedef boost::shared_ptr<MilitaryAnalysis> MilitaryAnalysisPtr;
+
     class MilitaryAnalysis
     {
     public:
@@ -14,7 +17,7 @@ namespace AltAI
 
         void update();
 
-        UnitTypes getUnitRequestBuild(const CvCity* pCity, const TacticSelectionData& tacticSelectionData);
+        UnitRequestData getUnitRequestBuild(const CvCity* pCity, const TacticSelectionData& tacticSelectionData);
         std::pair<IDInfo, UnitTypes> getPriorityUnitBuild(IDInfo city);
 
         void addOurUnit(CvUnitAI* pUnit, const CvUnit* pUpgradingUnit = (const CvUnit*)0);
@@ -39,14 +42,27 @@ namespace AltAI
         bool updateOurUnit(CvUnitAI* pUnit);
         PromotionTypes promoteUnit(CvUnitAI* pUnit);
 
+        const std::map<IDInfo, UnitHistory>& getUnitHistories() const;
+
+        const std::list<MilitaryMissionDataPtr>& getMissions() const;
+
         MilitaryMissionDataPtr getMissionData(CvUnitAI* pUnit);
+        MilitaryMissionDataPtr getCityDefenceMission(IDInfo city);
+
+        const std::map<XYCoords, std::list<IDInfo> >& getEnemyStacks() const;
+        PlotUnitDataMap getEnemyUnitData(int subArea) const;
+
+        const std::map<XYCoords, CombatData>& getAttackCombatMap() const;
+        const std::map<XYCoords, CombatData>& getDefenceCombatMap() const;
+
+        const std::map<XYCoords, CombatGraph::Data>& getAttackCombatData() const;
+        const std::map<XYCoords, CombatGraph::Data>& getDefenceCombatData() const;
 
         boost::shared_ptr<MilitaryAnalysisImpl> getImpl() const;
 
         PlotSet getThreatenedPlots() const;
         std::set<IDInfo> getUnitsThreateningPlots(const PlotSet& plots) const;
         PlotUnitsMap getPlotsThreatenedByUnits(const PlotSet& plots) const;
-        const std::map<XYCoords, CombatData>& getAttackableUnitsMap() const;
         CvUnit* getNextAttackUnit();
 
         std::map<int /* sub area */, std::set<XYCoords> > getLandScoutMissionRefPlots() const;
@@ -55,6 +71,8 @@ namespace AltAI
 
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
+
+        static float attThreshold, defAttackThreshold, defThreshold, hostileAttackThreshold;
 
     private:
         boost::shared_ptr<MilitaryAnalysisImpl> pImpl_;

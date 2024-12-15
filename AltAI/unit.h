@@ -66,7 +66,7 @@ namespace AltAI
             virtual void write(FDataStreamBase* pStream) const;
             virtual void read(FDataStreamBase* pStream);
 
-            static const int ID = 0;
+            static const int ID = IUnitMission::WorkerMissionID;
         };
 
         explicit Unit(CvUnitAI* pUnit);
@@ -126,7 +126,6 @@ namespace AltAI
         CvUnitAI* pUnit_;
         UnitAction action_;
         IUnitEventGeneratorPtr pUnitEventGenerator;
-        UnitHistory unitHistory_;
         std::vector<WorkerMission> workerMissions_;
         std::vector<UnitMissionPtr> missions_;
         size_t missionLength_;

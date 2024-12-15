@@ -4,7 +4,6 @@
 #include "./tech_info.h"
 #include "./tech_info_visitors.h"
 #include "./plot_info_visitors.h"
-#include "./building_info_visitors.h"
 #include "./civic_info_visitors.h"
 #include "./resource_info_visitors.h"
 #include "./tactic_actions.h"
@@ -256,8 +255,8 @@ namespace AltAI
                 pTactics_->addTactic(ITechTacticPtr(new FreeTechTactic()));
             }
 
-            if (node.foundReligion)
-            {
+            if (node.foundReligion && !gGlobals.getGame().isReligionFounded(node.defaultReligionType))
+            {                
                 pTactics_ = makeTactics_();
                 pTactics_->addTactic(ITechTacticPtr(new FoundReligionTechTactic(node.defaultReligionType)));
             }

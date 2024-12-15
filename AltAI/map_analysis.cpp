@@ -9,7 +9,6 @@
 #include "./helper_fns.h"
 #include "./plot_info_visitors.h"
 #include "./plot_info_visitors_streams.h"
-#include "./building_info_visitors.h"
 #include "./game.h"
 #include "./player.h"
 #include "./city.h"
@@ -401,6 +400,9 @@ namespace AltAI
 
     IDInfo MapAnalysis::setImprovementOwningCity(IDInfo city, XYCoords coords)
     {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
         CitySharedPlotsMap::iterator citySharedPlotsIter = citySharedPlots_.find(city);
         if (citySharedPlotsIter != citySharedPlots_.end())
         {
@@ -408,6 +410,10 @@ namespace AltAI
             if (sharedPlotsIter != sharedPlots_.end())
             {
                 IDInfo oldImpCity = sharedPlotsIter->second.assignedImprovementCity;
+#ifdef ALTAI_DEBUG
+                os << "\nsetting shared plot city: " << coords << " was: "
+                   << safeGetCityName(oldImpCity) << " to: " << safeGetCityName(city);
+#endif                
                 sharedPlotsIter->second.assignedImprovementCity = city;
                 return oldImpCity;
             }
@@ -927,6 +933,24 @@ namespace AltAI
 #endif
     }
 
+    void MapAnalysis::reinitPlotKeys()
+    {
+        keyInfoMap_.clear();
+        keyCoordsMap_.clear();
+
+        const CvMap& theMap = gGlobals.getMap();
+        TeamTypes teamType = player_.getTeamID();
+        for (int i = 0, count = theMap.numPlots(); i < count; ++i)
+        {
+            const CvPlot* pPlot = theMap.plotByIndex(i);
+
+            if (pPlot->isRevealed(teamType, false))
+            {
+                updatePlotInfo_(pPlot, true);
+            }
+        }
+    }
+
     void MapAnalysis::recalcPlotInfo()
     {
         PlayerTypes playerType = player_.getPlayerID();
@@ -1362,10 +1386,10 @@ namespace AltAI
         }
         const int key = keyIter->second;
 
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
-        os << "\nRemoving plot: " << coords << ", key = " << key << " from plot values map.";
-#endif        
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+//        os << "\nRemoving plot: " << coords << ", key = " << key << " from plot values map.";
+//#endif
 
         for (int i = 1; i <= CITY_PLOTS_RADIUS; ++i)
         {
@@ -1387,9 +1411,9 @@ namespace AltAI
                                 std::set<XYCoords>::iterator coordsIter = plotKeyIter->second.find(coords);
                                 if (coordsIter != plotKeyIter->second.end())
                                 {
-#ifdef ALTAI_DEBUG
-                                    os << "\nRemoving entry for plot key: " << key << " for potential city plot: " << pLoopPlot->getCoords();
-#endif
+//#ifdef ALTAI_DEBUG
+//                                    os << "\nRemoving entry for plot key: " << key << " for potential city plot: " << pLoopPlot->getCoords();
+//#endif
                                     plotKeyIter->second.erase(coordsIter);
                                 }
 
@@ -1411,17 +1435,17 @@ namespace AltAI
             PlotValues::SubAreaPlotValueMap::iterator plotIter = subAreaIter->second.find(coords);
             if (plotIter != subAreaIter->second.end())
             {
-#ifdef ALTAI_DEBUG
-                os << "\nRemoving entries for potential city plot: " << pPlot->getCoords();
-#endif
+//#ifdef ALTAI_DEBUG
+//                os << "\nRemoving entries for potential city plot: " << pPlot->getCoords();
+//#endif
                 subAreaIter->second.erase(plotIter);
             }
 
             if (subAreaIter->second.empty())
             {
-#ifdef ALTAI_DEBUG
-                os << "\nRemoving entries for sub area: " << pPlot->getSubArea();
-#endif
+//#ifdef ALTAI_DEBUG
+//                os << "\nRemoving entries for sub area: " << pPlot->getSubArea();
+//#endif
                 plotValues_.plotValueMap.erase(subAreaIter);
             }
         }
@@ -1444,7 +1468,7 @@ namespace AltAI
 /*#ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
         os << "\n" << plotInfo.getInfo() << "\n";
-#endif*/        
+#endif*/       
 
         if (isNew)
         {
@@ -1544,15 +1568,15 @@ namespace AltAI
         const int key = keyInfoMap_[coords];
         const TeamTypes teamType = player_.getTeamID();
 
-#ifdef ALTAI_DEBUG
-        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();       
-#endif
+//#ifdef ALTAI_DEBUG
+//        std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();       
+//#endif
         PlayerTypes plotOwner = pPlot->getRevealedOwner(player_.getTeamID(), false);
         if (plotOwner != NO_PLAYER && plotOwner != player_.getPlayerID())
         {
-#ifdef ALTAI_DEBUG
-            os << "\nSkipping plot for dot map: " << coords << ", owner = " << plotOwner;
-#endif
+//#ifdef ALTAI_DEBUG
+//            os << "\nSkipping plot for dot map: " << coords << ", owner = " << plotOwner;
+//#endif
             return;
         }
 

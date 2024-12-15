@@ -4,12 +4,17 @@
 
 namespace AltAI
 {
-    // stores attitude data for playerType_ towards player in owning OpponentsAnalysis object
+    // stores attitude data for fromPlayerType_ towards player in owning OpponentsAnalysis object
     class AttitudeHelper
     {
     public:
         struct AttitudeData
         {
+            AttitudeData() 
+            {
+                attitude.assign(0);
+            }
+
             // todo - defensive pacts and various other diplo stuff
             enum AttitudeT
             {
@@ -22,6 +27,8 @@ namespace AltAI
 
             typedef boost::array<std::string, AttitudeTypeCount> AttitudeStrings;
             static AttitudeStrings attitudeStrings;
+
+            int getAttitude() const;
         };
 
         struct AttitudeChange
@@ -35,15 +42,20 @@ namespace AltAI
             void debug(std::ostream& os) const;
         };
 
-        explicit AttitudeHelper(const CvPlayer* pPlayer);
+        AttitudeHelper(const CvPlayer* pPlayer, PlayerTypes toPlayerType, bool areAttitudesToUs);
 
-        void updateAttitudeTowards(const CvPlayerAI* pToPlayer);
+        void updateAttitude();
+        const AttitudeData& getCurrentAttitude() const { return currentAttitude_; }
+        bool areAttitudesToUs() const { return areAttitudesToUs_; }
+        void debug(std::ostream& os) const;
 
     private:
-        void calcAttitudeTowards_(const CvPlayerAI* pToPlayer);
+        void calcAttitude_();
+
         std::pair<bool, AttitudeData::Attitude> calcAttitudeChange_(const AttitudeData& previousAttitude) const;
 
-        PlayerTypes playerType_;
+        bool areAttitudesToUs_;
+        PlayerTypes fromPlayerType_, toPlayerType_;
         AttitudeData currentAttitude_;
         std::vector<AttitudeChange> attitudeHistory_;
     };

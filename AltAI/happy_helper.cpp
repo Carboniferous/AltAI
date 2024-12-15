@@ -1,6 +1,7 @@
 #include "AltAI.h"
 
 #include "./happy_helper.h"
+#include "./religion_helper.h"
 #include "./city_data.h"
 
 namespace AltAI
@@ -30,9 +31,9 @@ namespace AltAI
         targetNumCities_ = gGlobals.getWorldInfo(gGlobals.getMap().getWorldSize()).getTargetNumCities();
 
         largestCityHappiness_ = pCity_->getLargestCityHappiness();
-        militaryHappiness_ = pCity_->getMilitaryHappiness();
-        currentStateReligionHappiness_ = pCity_->getCurrentStateReligionHappiness();
-
+        militaryHappinessUnitCount_ = pCity_->getMilitaryHappinessUnits();
+        militaryHappinessPerUnit_ = player.getHappyPerMilitaryUnit();
+        
         buildingBadHappiness_ = pCity_->getBuildingBadHappiness();
         buildingGoodHappiness_ = pCity_->getBuildingGoodHappiness();
 
@@ -45,6 +46,10 @@ namespace AltAI
         bonusBadHappiness_ = pCity_->getBonusBadHappiness();
         bonusGoodHappiness_ = pCity_->getBonusGoodHappiness();
 
+        // store these as civics (and buildings?) can affect their values
+        stateReligionHappiness_ = player.getStateReligionHappiness();
+        nonStateReligionHappiness_ = player.getNonStateReligionHappiness();
+        // actual total good/bad religion based happy values - adopting/switching state religion and buildings can affect these totals
         religionBadHappiness_ = pCity_->getReligionBadHappiness();
         religionGoodHappiness_ = pCity_->getReligionGoodHappiness();
 
@@ -70,18 +75,17 @@ namespace AltAI
         return copy;
     }
 
-    int HappyHelper::happyPopulation() const
+    int HappyHelper::happyPopulation(const CityData& data) const
     {
         int iHappiness = 0;
 
         iHappiness += std::max<int>(0, largestCityHappiness_);
-        iHappiness += std::max<int>(0, militaryHappiness_);
-        iHappiness += std::max<int>(0, currentStateReligionHappiness_);
+        iHappiness += std::max<int>(0, militaryHappinessPerUnit_ * militaryHappinessUnitCount_);
+        iHappiness += std::max<int>(0, religionGoodHappiness_);
         iHappiness += std::max<int>(0, buildingGoodHappiness_);
         iHappiness += std::max<int>(0, extraBuildingGoodHappiness_);
         iHappiness += std::max<int>(0, featureGoodHappiness_);
-        iHappiness += std::max<int>(0, bonusGoodHappiness_);
-        iHappiness += std::max<int>(0, religionGoodHappiness_);
+        iHappiness += std::max<int>(0, bonusGoodHappiness_);        
         iHappiness += std::max<int>(0, commerceHappiness_);
         iHappiness += std::max<int>(0, areaBuildingHappiness_);
         iHappiness += std::max<int>(0, playerBuildingHappiness_);
@@ -122,8 +126,8 @@ namespace AltAI
             iUnhappiness = (iAngerPercent * population_) / PERCENT_ANGER_DIVISOR_;
 
             iUnhappiness -= std::min<int>(0, largestCityHappiness_);
-            iUnhappiness -= std::min<int>(0, militaryHappiness_);
-            iUnhappiness -= std::min<int>(0, currentStateReligionHappiness_);
+            iUnhappiness -= std::min<int>(0, militaryHappinessPerUnit_ * militaryHappinessUnitCount_);
+            iUnhappiness -= std::min<int>(0, stateReligionHappiness_);
             iUnhappiness -= std::min<int>(0, buildingBadHappiness_);
             iUnhappiness -= std::min<int>(0, extraBuildingBadHappiness_);
             iUnhappiness -= std::min<int>(0, featureBadHappiness_);
@@ -219,9 +223,14 @@ namespace AltAI
         }
     }
 
-    void HappyHelper::setMilitaryHappiness(int happyPerUnit)
+    void HappyHelper::setMilitaryHappinessPerUnit(int happyPerUnit)
     {
-        militaryHappiness_ = pCity_->getMilitaryHappinessUnits() * happyPerUnit;
+        militaryHappinessPerUnit_ = happyPerUnit;
+    }
+
+    void HappyHelper::changeMilitaryHappinessUnits(int change)
+    {
+        militaryHappinessUnitCount_ += change;
     }
 
     void HappyHelper::changePlayerBuildingHappiness(int change)
@@ -232,6 +241,46 @@ namespace AltAI
     void HappyHelper::changePlayerHappiness(int change)
     {
         playerExtraHappiness_ += change;
+    }
+
+    int HappyHelper::getReligionGoodHappiness() const
+    {
+        return religionGoodHappiness_;
+    }
+
+    int HappyHelper::getReligionBadHappiness() const
+    {
+        return religionBadHappiness_;
+    }
+
+    int HappyHelper::getStateReligionHappiness() const
+    {
+        return stateReligionHappiness_;
+    }
+
+    int HappyHelper::getNonStateReligionHappiness() const
+    {
+        return nonStateReligionHappiness_;
+    }
+
+    void HappyHelper::setReligionGoodHappiness(int value)
+    {
+        religionGoodHappiness_ = value;
+    }
+
+    void HappyHelper::setReligionBadHappiness(int value)
+    {
+        religionBadHappiness_ = value;
+    }
+
+    void HappyHelper::setStateReligionHappiness(int value)
+    {
+        stateReligionHappiness_ = value;
+    }
+
+    void HappyHelper::setNonStateReligionHappiness(int value)
+    {
+        nonStateReligionHappiness_ = value;
     }
 
     void HappyHelper::setNoUnhappiness(bool newState)

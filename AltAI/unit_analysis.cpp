@@ -604,11 +604,11 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         for (size_t i = 0, count = promotions.size(); i < count; ++i)
         {
-            if (i == 0) os << " (";
+            if (i == 0) os << " {";
             else os << ", ";
             os << gGlobals.getPromotionInfo(promotions[i]).getType();
         }
-        if (!promotions.empty()) os << ")";
+        if (!promotions.empty()) os << "}";
 #endif  
     }
 
@@ -876,6 +876,16 @@ namespace AltAI
             {
                 unitData.push_back(UnitData(pUnit));
             }
+        }
+        return unitData;
+    }
+
+    std::vector<UnitData> makeUnitData(const std::vector<const CvUnit*>& units)
+    {
+        std::vector<UnitData> unitData;
+        for (size_t i = 0, count = units.size(); i < count; ++i)
+        {
+            unitData.push_back(UnitData(units[i]));
         }
         return unitData;
     }
@@ -1694,8 +1704,10 @@ namespace AltAI
         std::pair<int, UnitAnalysis::RemainingLevelsAndPromotions> UnitAnalysis::calculateBestPromotions_(const UnitAnalysis::PromotionsMap& promotionsMap, int baseValue,
             const boost::shared_ptr<UnitInfo>& pUnitInfo, ValueF valueF, int level, const Promotions& existingPromotions) const
     {
+#ifdef ALTAI_DEBUG
         // debug
         //std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
 
         Promotions bestPromotions(existingPromotions);
         int currentValue = baseValue;
@@ -1787,8 +1799,10 @@ namespace AltAI
 
     void UnitAnalysis::analyseUnits_()
     {
+#ifdef ALTAI_DEBUG
         // debug
         std::ostream& os = CivLog::getLog(*player_.getCvPlayer())->getStream();
+#endif
 
         cityAttackUnits_.resize(1 + maxPromotionSearchDepth_, UnitValuesMap());
         cityDefenceUnits_.resize(1 + maxPromotionSearchDepth_, UnitValuesMap());

@@ -7,9 +7,11 @@
 #include "./city_unit_tactics.h"
 #include "./tech_tactics_items.h"
 #include "./civic_tactics.h"
+#include "./civic_tactics_items.h"
 #include "./resource_tactics.h"
 #include "./civic_tactics_visitors.h"
 #include "./resource_tactics_visitors.h"
+#include "./religion_tactics.h"
 #include "./building_tactics_items.h"
 #include "./building_tactics_deps.h"
 #include "./tech_tactics.h"
@@ -18,6 +20,8 @@
 #include "./great_people_tactics.h"
 #include "./project_tactics.h"
 #include "./building_tactics_visitors.h"
+#include "./buildings_info_streams.h"
+#include "./building_info_construct_visitors.h"
 #include "./unit_tactics_visitors.h"
 #include "./tech_tactics_visitors.h"
 #include "./tech_info_visitors.h"
@@ -44,10 +48,31 @@ namespace AltAI
         makeInitialUnitTactics();
         makeSpecialistUnitTactics();
         makeResourceTactics();
+        makeReligionTactics();
         makeCivicTactics();
 
+        //bool updateTactics = false;
+        //debugTactics(updateTactics);
+
+        globalBuildingsTacticsMap_.clear();
+        nationalBuildingsTacticsMap_.clear();
+
+        unitTacticsMap_.clear();
+
+        // temp rebuild of city building and unit tactics to pick up impl changes (remove shrines from cities which don't have founded religion prereq)
+        for (CityBuildingTacticsMap::iterator iter(cityBuildingTacticsMap_.begin()), endIter(cityBuildingTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            iter->second.clear();
+            specialCityBuildingsTacticsMap_[iter->first].clear();
+
+            // adds both vanilla and 'special' buildings (ones which only GP can construct) tactics
+            addNewCityBuildingTactics(iter->first);
+
+            addNewCityUnitTactics(iter->first);
+        }
+
         initialised_ = true;
-        //debugTactics();
+        //debugTactics(updateTactics);
     }
 
     void PlayerTactics::deleteCity(const CvCity* pCity)
@@ -205,7 +230,7 @@ namespace AltAI
                                 {
 #ifdef ALTAI_DEBUG
                                     CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__
-                                        << " Adding tactic for building: " << gGlobals.getBuildingInfo(possibleBuildings[i]).getType();
+                                        << " Adding tactic for building: " << gGlobals.getBuildingInfo(possibleBuildings[i]).getType() << " for city: " << safeGetCityName(pCity);
 #endif
                                     cityBuildingTacticsMap_[pCity->getIDInfo()][possibleBuildings[i]] = makeCityBuildingTactics(player, player.getCity(pCity), pBuildingInfo);
                                 }
@@ -234,6 +259,8 @@ namespace AltAI
 
     void PlayerTactics::updateCityBuildingTactics(IDInfo city, BuildingTypes buildingType, int buildingChangeCount)
     {
+        boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(buildingType);
+
         if (buildingChangeCount > 0)
         {
             CityBuildingTacticsMap::iterator iter = cityBuildingTacticsMap_.find(city);
@@ -241,15 +268,31 @@ namespace AltAI
             {
                 iter->second.erase(buildingType);
                 updateCityBuildingTacticsDependencies();
+                eraseBuildingTacticSelectionData(city, buildingType);  // update tactic selection data
             }
 
             updateLimitedBuildingTacticsDependencies();
             updateGlobalBuildingTacticsDependencies();
+
+            if (pBuildingInfo)
+            {                
+                std::vector<UnitTypes> enabledUnitTypes = getEnabledUnits(pBuildingInfo);
+                for (size_t i = 0, count = enabledUnitTypes.size(); i < count; ++i)
+                {
+                    UnitTacticsMap::const_iterator uIter = unitTacticsMap_.find(enabledUnitTypes[i]);
+                    if (uIter != unitTacticsMap_.end())
+                    {
+                        CityUnitTacticsPtr pCityUnitTactics = uIter->second->getCityTactics(city);
+                        if (pCityUnitTactics)
+                        {
+                            pCityUnitTactics->updateDependencies(player, ::getCity(city));
+                        }
+                    }
+                }
+            }
         }
         else if (buildingChangeCount < 0)  // potentially re-add tactic if we lost the building (might not be able to build it anymore though)
         {
-            boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(buildingType);
-
             if (pBuildingInfo)
             {
                 addBuildingTactics_(pBuildingInfo, getCity(city));
@@ -374,6 +417,11 @@ namespace AltAI
             UnitTypes unitType = getPlayerVersion(player.getPlayerID(), (UnitClassTypes)i);
 
             if (unitType == NO_UNIT)
+            {
+                continue;
+            }
+
+            if (gGlobals.getUnitInfo(unitType).isAnimal())
             {
                 continue;
             }
@@ -546,29 +594,62 @@ namespace AltAI
         }
     }
 
+    void PlayerTactics::updateCityUnitTactics(const City& city, ReligionTypes religionType)
+    {
+        ReligionTacticsMap::const_iterator rIter = religionTacticsMap_.find(religionType);
+        if (rIter != religionTacticsMap_.end())
+        {
+            UnitTypes buildUnitType = rIter->second->getSpreadUnitType();
+            if (buildUnitType != NO_UNIT)
+            {
+                boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(buildUnitType);
+                if (pUnitInfo)
+                {
+                    UnitTacticsMap::iterator iter = unitTacticsMap_.find(buildUnitType);
+
+                    if (iter == unitTacticsMap_.end())
+                    {
+                        iter = unitTacticsMap_.insert(std::make_pair(buildUnitType, makeUnitTactics(player, pUnitInfo))).first;
+                    }
+#ifdef ALTAI_DEBUG
+                    CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for unit: "
+                        << gGlobals.getUnitInfo(buildUnitType).getType() << " for city: " << safeGetCityName(city);
+#endif
+                    iter->second->addCityTactic(city.getIDInfo(), makeCityUnitTactics(player, city, pUnitInfo));
+                }
+            }
+        }
+    }
+
+    void PlayerTactics::eraseBuildingTacticSelectionData(IDInfo city, BuildingTypes buildingType)
+    {
+        TacticSelectionData& baseTacticSelectionData = getBaseTacticSelectionData();
+        baseTacticSelectionData.eraseCityBuildingEntries(city, buildingType);
+
+        TacticSelectionData& cityTacticSelectionData = getCityTacticSelectionData(city);
+        cityTacticSelectionData.eraseCityBuildingEntries(city, buildingType);
+    }
+
+    TacticSelectionDataMap& PlayerTactics::getBaseTacticSelectionDataMap()
+    {
+        return tacticSelectionDataMap;
+    }
+
     TacticSelectionData& PlayerTactics::getBaseTacticSelectionData()
     {
         DependencyItemSet di;
-        di.insert(DependencyItem(-1, -1));
-
         return tacticSelectionDataMap[di];
     }
+    
+    TacticSelectionDataMap& PlayerTactics::getCityTacticSelectionDataMap(IDInfo city)
+    {
+        return cityTacticSelectionDataMap[city];
+    }
 
-    const TacticSelectionData& PlayerTactics::getBaseTacticSelectionData() const
+    TacticSelectionData& PlayerTactics::getCityTacticSelectionData(IDInfo city)
     {
         DependencyItemSet di;
-        di.insert(DependencyItem(-1, -1));
-        static TacticSelectionData dummy;
-
-        TacticSelectionDataMap::const_iterator baseTacticIter = tacticSelectionDataMap.find(di);
-        if (baseTacticIter != tacticSelectionDataMap.end())
-        {
-            return baseTacticIter->second;
-        }
-        else
-        {
-            return dummy;
-        }
+        return cityTacticSelectionDataMap[city][di];
     }
 
     std::map<int, ICityBuildingTacticsPtr> PlayerTactics::getCityBuildingTactics(BuildingTypes buildingType) const
@@ -617,10 +698,31 @@ namespace AltAI
         return citySpecialBuildingTactics;
     }
 
+    ICityBuildingTacticsPtr PlayerTactics::getCityBuildingTactics(IDInfo city, BuildingTypes buildingType) const
+    {
+        ICityBuildingTacticsPtr pTactic;
+        CityBuildingTacticsMap::const_iterator iter = cityBuildingTacticsMap_.find(city);
+        if (iter != cityBuildingTacticsMap_.end())
+        {
+            PlayerTactics::CityBuildingTacticsList::const_iterator tlIter = iter->second.find(buildingType);
+
+            if (tlIter != iter->second.end())
+            {
+                pTactic = tlIter->second;
+            }
+        }
+        return pTactic;
+    }
+
     ResearchTech PlayerTactics::getResearchTech(TechTypes ignoreTechType)
     {
         //debugTactics();
         return AltAI::getResearchTech(*this, ignoreTechType);
+    }
+
+    CivicTypes PlayerTactics::chooseCivic(CivicOptionTypes civicOptionType)
+    {
+		return AltAI::chooseCivic(*this, civicOptionType);
     }
 
     ConstructItem PlayerTactics::getBuildItem(City& city)
@@ -633,6 +735,101 @@ namespace AltAI
     {
         return AltAI::getSpecialistBuild(*this, pUnit);
     }
+
+    std::pair<std::vector<UnitTypes>, std::vector<UnitTypes> > PlayerTactics::getActualAndPossibleCombatUnits(IDInfo city, DomainTypes domainType) const
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+#endif
+        std::vector<UnitTypes> combatUnits, possibleCombatUnits;
+
+        for (UnitTacticsMap::const_iterator ci(unitTacticsMap_.begin()), ciEnd(unitTacticsMap_.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->first != NO_UNIT)
+            {
+                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(ci->first);
+                if (unitInfo.getDomainType() == domainType && unitInfo.getProductionCost() >= 0 && unitInfo.getCombat() > 0)
+                {
+                    if (ci->second && !isUnitObsolete(player, player.getAnalysis()->getUnitInfo(ci->first)))
+                    {
+#ifdef ALTAI_DEBUG
+                        if (domainType != DOMAIN_LAND)
+                        {
+                            os << "\nChecking unit: " << gGlobals.getUnitInfo(ci->first).getType();
+                        }
+#endif
+                        const boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(ci->first);
+
+                        bool depsSatisfied = ci->second->areDependenciesSatisfied(player, IDependentTactic::Ignore_None);
+                        bool techDepsSatisfied = ci->second->areTechDependenciesSatisfied(player);
+
+                        if (!isEmpty(city))
+                        {
+                            CityUnitTacticsPtr pCityTactics = ci->second->getCityTactics(city);
+                            depsSatisfied = pCityTactics && depsSatisfied && pCityTactics->areDependenciesSatisfied(IDependentTactic::Ignore_None);
+                        }
+
+                        bool couldConstruct = (isEmpty(city) ? couldConstructUnit(player, 0, pUnitInfo, false, false) : couldConstructUnit(player, player.getCity(city.iID), 0, pUnitInfo, false, false));
+#ifdef ALTAI_DEBUG
+                        if (domainType != DOMAIN_LAND)
+                        {
+                            os << " " << safeGetCityName(city);
+                            os << " deps = " << depsSatisfied << ", could construct = " << couldConstruct << " tech deps: " << techDepsSatisfied
+                               << " potential construct for player: " << couldConstructUnit(player, 3, player.getAnalysis()->getUnitInfo(ci->first), true, true);
+                        }
+#endif
+                        if (depsSatisfied)
+                        {
+                            combatUnits.push_back(ci->first);
+                            possibleCombatUnits.push_back(ci->first);
+                        }
+                        else if (couldConstructUnit(player, 3, player.getAnalysis()->getUnitInfo(ci->first), true, true))
+                        {
+                            possibleCombatUnits.push_back(ci->first);
+                        }
+                    }
+                }
+            }
+        }
+
+        return std::make_pair(combatUnits, possibleCombatUnits);
+    }
+
+    UnitTacticsPtr PlayerTactics::getUnitTactics(UnitTypes unitType) const
+    {
+        PlayerTactics::UnitTacticsMap::const_iterator unitTacticsIter(unitTacticsMap_.find(unitType));
+        return unitTacticsIter == unitTacticsMap_.end() ? UnitTacticsPtr() : unitTacticsIter->second;
+    }
+
+    template <typename DepType>
+        void PlayerTactics::getUnitsWithDep(std::map<DepType, std::vector<UnitTypes> >& depMap, int depID) const
+    {
+        for (PlayerTactics::UnitTacticsMap::const_iterator iter(unitTacticsMap_.begin()), endIter(unitTacticsMap_.end()); iter != endIter; ++iter)
+        {
+            CityIter cityIter(*player.getCvPlayer());
+            while (CvCity* pCity = cityIter())
+            {
+                CityUnitTacticsPtr pCityTactics = iter->second->getCityTactics(pCity->getIDInfo());
+                if (pCityTactics)
+                {
+                    const std::vector<IDependentTacticPtr>& pDepItems = pCityTactics->getDependencies();
+                    for (size_t i = 0, count = pDepItems.size(); i < count; ++i)
+                    {
+                        const std::vector<DependencyItem>& thisDepItems = pDepItems[i]->getDependencyItems();
+                        for (size_t j = 0, depItemCount = thisDepItems.size(); j < depItemCount; ++j)
+                        {
+                            if (thisDepItems[j].first == depID)
+                            {
+                                depMap[(DepType)thisDepItems[j].second].push_back(iter->first);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    template void PlayerTactics::getUnitsWithDep(std::map<BonusTypes, std::vector<UnitTypes> >& depMap, int depID) const;
 
     void PlayerTactics::write(FDataStreamBase* pStream) const
     {
@@ -872,9 +1069,15 @@ namespace AltAI
         }
     }
 
-    std::map<BuildingTypes, std::vector<BuildingTypes> > PlayerTactics::getBuildingsCityCanAssistWith(IDInfo city) const
+    std::map<BuildingTypes, std::set<BuildingTypes> > PlayerTactics::getBuildingsCityCanAssistWith(IDInfo city) const
     {
-        std::map<BuildingTypes, std::vector<BuildingTypes> > buildingsCityCanAssistWith;
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+        os << "\n" << __FUNCTION__ << " for city: " << safeGetCityName(city)
+           << ", count of national wonders: " << nationalBuildingsTacticsMap_.size();
+#endif
+        std::map<BuildingTypes, std::set<BuildingTypes> > buildingsCityCanAssistWith;
+        std::map<BuildingTypes, std::set<UnitTypes> > buildingsCityCanAssistWithUnits;
 
         const CvCity* pCity = getCity(city);
         if (!pCity)
@@ -883,36 +1086,62 @@ namespace AltAI
         }
 
         CityBuildingTacticsMap::const_iterator thisCityBuildingTacticsIter = cityBuildingTacticsMap_.find(city);
+        if (thisCityBuildingTacticsIter == cityBuildingTacticsMap_.end())
+        {
+            return buildingsCityCanAssistWith;
+        }
 
+        // national wonders
         for (LimitedBuildingsTacticsMap::const_iterator ci(nationalBuildingsTacticsMap_.begin()), ciEnd(nationalBuildingsTacticsMap_.end()); ci != ciEnd; ++ci)
         {
             CityIter cityIter(*player.getCvPlayer());
             ICityBuildingTacticsPtr pCityLimitedBuildingTactics = ICityBuildingTacticsPtr();
+#ifdef ALTAI_DEBUG
+            os << "\nchecking: " << safeGetCityName(pCity) << " for helping with national wonder: " << gGlobals.getBuildingInfo(ci->first).getType();
+#endif
 
             while (CvCity* pLoopCity = cityIter())
             {
+                // a city which can't build this national wonder unless we ignore its building dependency (could be the same city as we were called with)
+                // e.g. forbidden palace requires (6) courthouses
                 if (!ci->second->areDependenciesSatisfied(pLoopCity->getIDInfo(), IDependentTactic::Ignore_None) &&
-                    ci->second->areDependenciesSatisfied(pLoopCity->getIDInfo(), IDependentTactic::Ignore_Civ_Buildings))
+                    ci->second->areDependenciesSatisfied(pLoopCity->getIDInfo(), IDependentTactic::Civ_Buildings_Dep))
                 {
-                    // found a city which can build this
+                    // get that city's tactics for this national wonder
                     pCityLimitedBuildingTactics = ci->second->getCityTactics(pLoopCity->getIDInfo());
+#ifdef ALTAI_DEBUG
+                    os << "\nchecking city: " << safeGetCityName(pLoopCity) << " for national wonder: " << gGlobals.getBuildingInfo(ci->first).getType();
+#endif
                     break;
                 }
             }
 
             if (pCityLimitedBuildingTactics)
             {
-                const std::vector<DependencyItem>& civBuildItems = pCityLimitedBuildingTactics->getDepItems(IDependentTactic::Ignore_Civ_Buildings);
+                // get the required building dependencies
+                const std::vector<DependencyItem>& civBuildItems = pCityLimitedBuildingTactics->getDepItems(IDependentTactic::Civ_Buildings_Dep);
                 for (size_t j = 0, depItemCount = civBuildItems.size(); j < depItemCount; ++j)
                 {
+#ifdef ALTAI_DEBUG
+                    os << "\n\tchecking dep item: ";
+                    debugDepItem(civBuildItems[j], os);
+#endif
                     if (civBuildItems[j].first == CivBuildingDependency::ID)
                     {
+                        // see if building dep is in this city's tactics
                         CityBuildingTacticsList::const_iterator li = thisCityBuildingTacticsIter->second.find((BuildingTypes)civBuildItems[j].second);
                         if (li != thisCityBuildingTacticsIter->second.end())
                         {
+#ifdef ALTAI_DEBUG
+                            os << " found...";
+#endif
+                            // and if it can build it...
                             if (li->second->areDependenciesSatisfied(IDependentTactic::Ignore_None))
                             {
-                                buildingsCityCanAssistWith[(BuildingTypes)civBuildItems[j].second].push_back(ci->first);
+#ifdef ALTAI_DEBUG
+                                os << " and can construct.";
+#endif
+                                buildingsCityCanAssistWith[ci->first].insert((BuildingTypes)civBuildItems[j].second);
                             }
                         }
                     }
@@ -920,27 +1149,64 @@ namespace AltAI
             }
         }
 
-        /*for (CityBuildingTacticsMap::const_iterator ci(cityBuildingTacticsMap_.begin()), ciEnd(cityBuildingTacticsMap_.end()); ci != ciEnd; ++ci)
+        std::set<ICityBuildingTacticsPtr, ICityBuildingTacticsBuildingComp> buildingTacticsToAssist;
+        for (CityBuildingTacticsMap::const_iterator ci(cityBuildingTacticsMap_.begin()), ciEnd(cityBuildingTacticsMap_.end()); ci != ciEnd; ++ci)
         {
+            // target city is one we want to aid
             const CvCity* pTargetCity = getCity(ci->first);
             if (pTargetCity && pTargetCity != pCity)
             {
                 for (CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
                 {
-                    if (li->second->areDependenciesSatisfied(IDependentTactic::Ignore_None))
+                    if (!li->second->areDependenciesSatisfied(IDependentTactic::Ignore_None) && li->second->areDependenciesSatisfied(IDependentTactic::Religion_Dep))
                     {
-                        buildingsCityCanAssistWith[ci->first].push_back(li->first);
+                        const std::vector<DependencyItem>& depItems = li->second->getDepItems(IDependentTactic::Religion_Dep);
+                        std::vector<BuildQueueItem > buildItems = li->second->getBuildItems(IDependentTactic::Ignore_None);
+#ifdef ALTAI_DEBUG
+                        os << "\n" << gGlobals.getBuildingInfo(li->first).getType() << " has dep item count: " << depItems.size();
+                        for (size_t depItemIndex = 0, depItemCount = depItems.size(); depItemIndex < depItemCount; ++depItemIndex)
+                        {
+                            debugDepItem(depItems[depItemIndex], os);
+                        }
+
+                        os << "\n" << gGlobals.getBuildingInfo(li->first).getType() << " has build item count: " << buildItems.size();
+                        for (size_t buildItemIndex = 0, buildItemCount = buildItems.size(); buildItemIndex < buildItemCount; ++buildItemIndex)
+                        {
+                            debugBuildItem(buildItems[buildItemIndex], os);
+                        }
+#endif
+
+                        for (size_t depIndex = 0, depCount = depItems.size(); depIndex < depCount; ++depIndex)
+                        {
+                            if (depItems[depIndex].first == ReligiousDependency::ID && pCity->isHasReligion((ReligionTypes)depItems[depIndex].second))
+                            {
+                                
+                                buildingTacticsToAssist.insert(li->second);
+#ifdef ALTAI_DEBUG
+                                os << "\n\t" << safeGetCityName(pTargetCity) << " wants building: " << gGlobals.getBuildingInfo(li->first).getType()
+                                   << " needs religion: " << gGlobals.getReligionInfo((ReligionTypes)depItems[depIndex].second).getType();
+#endif
+                            }
+                        }
                     }
                 }
             }
-        }*/
+        }
+
+        for (std::set<ICityBuildingTacticsPtr, ICityBuildingTacticsBuildingComp>::const_iterator bIter(buildingTacticsToAssist.begin()), bEndIter(buildingTacticsToAssist.end()); bIter != bEndIter; ++bIter)
+        {
+            CityBuildingTacticsList::const_iterator tacticsIter = thisCityBuildingTacticsIter->second.find((*bIter)->getBuildingType());
+            if (tacticsIter != thisCityBuildingTacticsIter->second.end())
+            {
+            }
+        }
 
         return buildingsCityCanAssistWith;
     }
 
-    std::map<BuildingTypes, std::vector<BuildingTypes> > PlayerTactics::getPossibleDependentBuildings(IDInfo city) const
+    std::map<BuildingTypes, std::set<BuildingTypes> > PlayerTactics::getPossibleDependentBuildings(IDInfo city) const
     {
-        std::map<BuildingTypes, std::vector<BuildingTypes> > possibleDependentBuildingsMap;
+        std::map<BuildingTypes, std::set<BuildingTypes> > possibleDependentBuildingsMap;
 
         CityBuildingTacticsMap::const_iterator ci = cityBuildingTacticsMap_.find(city);
         if (ci != cityBuildingTacticsMap_.end())
@@ -951,11 +1217,11 @@ namespace AltAI
                 const std::vector<IDependentTacticPtr>& dependentTactics = li->second->getDependencies();
                 if (dependentTactics.size() == 1)
                 {
-                    const std::pair<BuildQueueTypes, int> buildItem = dependentTactics[0]->getBuildItem();
+                    const BuildQueueItem buildItem = dependentTactics[0]->getBuildItem();
 
                     if (buildItem.first == BuildingItem && ci->second.find((BuildingTypes)buildItem.second) != ci->second.end())
                     {
-                        possibleDependentBuildingsMap[(BuildingTypes)buildItem.second].push_back(li->second->getBuildingType());
+                        possibleDependentBuildingsMap[(BuildingTypes)buildItem.second].insert(li->second->getBuildingType());
                     }
                 }
             }
@@ -964,7 +1230,7 @@ namespace AltAI
         return possibleDependentBuildingsMap;
     }
 
-    void PlayerTactics::debugTactics()
+    void PlayerTactics::debugTactics(bool inclOutputs)
     {
 #ifdef ALTAI_DEBUG
         const int turn = gGlobals.getGame().getGameTurn();
@@ -979,30 +1245,39 @@ namespace AltAI
                 os << "\n\nturn = " << turn << " City: " << narrow(pCity->getName());
                 City& city = player.getCity(pCity);
 
-                TotalOutput base = city.getCurrentOutputProjection().getOutput();
-                os << " \n\tcurrent output projection: ";
-                city.getCurrentOutputProjection().debug(os);
-                os << " \n\tbase output projection: ";
-                city.getBaseOutputProjection().debug(os);
+                if (inclOutputs)
+                {
+                    TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                    os << " \n\tcurrent output projection: ";
+                    city.getCurrentOutputProjection().debug(os);
+                    os << " \n\tbase output projection: ";
+                    city.getBaseOutputProjection().debug(os);
+                }
 
                 for (CityBuildingTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
-                {                    
-                    li->second->update(player, city.getCityData());
+                {
+                    if (inclOutputs)
+                    {
+                        li->second->update(player, city.getCityData());
+                    }
                     li->second->debug(os);
 
-                    const ProjectionLadder& ladder = li->second->getProjection();
-                    if (ladder.buildings.empty())
+                    if (inclOutputs)
                     {
-                        os << "\nBuilding: " << gGlobals.getBuildingInfo(li->second->getBuildingType()).getType() << " not built.";
-                    }
-                    else
-                    {
-                        os << "\nBuilding: " << gGlobals.getBuildingInfo(li->second->getBuildingType()).getType();
-                        os << " delta = " << ladder.getOutput() - gGlobals.getGame().getAltAI()->getPlayer(ci->first.eOwner)->getCity(ci->first.iID).getBaseOutputProjection().getOutput();
-                        /*if (!ladder.comparisons.empty())
+                        const ProjectionLadder& ladder = li->second->getProjection();
+                        if (ladder.buildings.empty())
                         {
-                            os << " delta = " << ladder.getOutput() - ladder.comparisons[0].getOutput();
-                        }*/
+                            os << "\nBuilding: " << gGlobals.getBuildingInfo(li->second->getBuildingType()).getType() << " not built.";
+                        }
+                        else
+                        {
+                            os << "\nBuilding: " << gGlobals.getBuildingInfo(li->second->getBuildingType()).getType();
+                            os << " delta = " << ladder.getOutput() - gGlobals.getGame().getAltAI()->getPlayer(ci->first.eOwner)->getCity(ci->first.iID).getBaseOutputProjection().getOutput();
+                            /*if (!ladder.comparisons.empty())
+                            {
+                                os << " delta = " << ladder.getOutput() - ladder.comparisons[0].getOutput();
+                            }*/
+                        }
                     }
                     os << "\n";
                 }
@@ -1018,16 +1293,16 @@ namespace AltAI
             CityIter iter(*player.getCvPlayer());
             while (CvCity* pCity = iter())
             {                
-                std::map<BuildingTypes, std::vector<BuildingTypes> > buildingsCityCanAssistWith = getBuildingsCityCanAssistWith(pCity->getIDInfo());
+                std::map<BuildingTypes, std::set<BuildingTypes> > buildingsCityCanAssistWith = getBuildingsCityCanAssistWith(pCity->getIDInfo());
 
                 os << "\nCity: " << narrow(pCity->getName()) << " can with: ";
-                for (std::map<BuildingTypes, std::vector<BuildingTypes> >::const_iterator ci(buildingsCityCanAssistWith.begin()), ciEnd(buildingsCityCanAssistWith.end()); ci != ciEnd; ++ci)
+                for (std::map<BuildingTypes, std::set<BuildingTypes> >::const_iterator ci(buildingsCityCanAssistWith.begin()), ciEnd(buildingsCityCanAssistWith.end()); ci != ciEnd; ++ci)
                 {
                     os << "\n\tbuilding: " << gGlobals.getBuildingInfo(ci->first).getType() << " for building(s): ";
-                    for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+                    for (std::set<BuildingTypes>::const_iterator bIter(ci->second.begin()), bEndIter(ci->second.end()); bIter != bEndIter; ++bIter)
                     {
-                        if (i > 0) os << ", ";
-                        os << gGlobals.getBuildingInfo(ci->second[i]).getType();
+                        if (bIter != ci->second.begin()) os << ", ";
+                        os << gGlobals.getBuildingInfo(*bIter).getType();
                     }
                 }
             }
@@ -1038,17 +1313,63 @@ namespace AltAI
             CityIter iter(*player.getCvPlayer());
             while (CvCity* pCity = iter())
             {                
-                std::map<BuildingTypes, std::vector<BuildingTypes> > buildingsMap = getPossibleDependentBuildings(pCity->getIDInfo());
+                std::map<BuildingTypes, std::set<BuildingTypes> > buildingsMap = getPossibleDependentBuildings(pCity->getIDInfo());
 
                 os << "\nCity: " << narrow(pCity->getName()) << " deps:";
-                for (std::map<BuildingTypes, std::vector<BuildingTypes> >::const_iterator ci(buildingsMap.begin()), ciEnd(buildingsMap.end()); ci != ciEnd; ++ci)
+                for (std::map<BuildingTypes, std::set<BuildingTypes> >::const_iterator ci(buildingsMap.begin()), ciEnd(buildingsMap.end()); ci != ciEnd; ++ci)
                 {
                     os << " " << gGlobals.getBuildingInfo(ci->first).getType() << " = ";
-                    for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+                    for (std::set<BuildingTypes>::const_iterator bIter(ci->second.begin()), bEndIter(ci->second.end()); bIter != bEndIter; ++bIter)
                     {
-                        if (i > 0) os << ", ";
-                        os << gGlobals.getBuildingInfo(ci->second[i]).getType();
+                        if (bIter != ci->second.begin()) os << ", ";
+                        os << gGlobals.getBuildingInfo(*bIter).getType();
                     }
+                }
+            }
+        }
+
+        os << "\nCity special building tactics:";
+        for (CityBuildingTacticsMap::iterator ci(specialCityBuildingsTacticsMap_.begin()), ciEnd(specialCityBuildingsTacticsMap_.end()); ci != ciEnd; ++ci)
+        {
+            const CvCity* pCity = getCity(ci->first);
+            if (pCity)
+            {
+                os << "\n\nturn = " << turn << " City: " << narrow(pCity->getName());
+                City& city = player.getCity(pCity);
+
+                if (inclOutputs)
+                {
+                    TotalOutput base = city.getCurrentOutputProjection().getOutput();
+                    os << " \n\tcurrent output projection: ";
+                    city.getCurrentOutputProjection().debug(os);
+                    os << " \n\tbase output projection: ";
+                    city.getBaseOutputProjection().debug(os);
+                }
+
+                for (CityBuildingTacticsList::const_iterator bi(ci->second.begin()), biEnd(ci->second.end()); bi != biEnd; ++bi)
+                {
+                    ICityBuildingTacticsPtr pSpecialBuildingTactic = bi->second;
+
+                    if (inclOutputs)
+                    {
+                        pSpecialBuildingTactic->update(player, city.getCityData());
+                    }
+                    pSpecialBuildingTactic->debug(os);
+
+                    if (inclOutputs)
+                    {
+                        const ProjectionLadder& ladder = pSpecialBuildingTactic->getProjection();
+                        if (ladder.buildings.empty())
+                        {
+                            os << "\nBuilding: " << gGlobals.getBuildingInfo(bi->first).getType() << " not built.";
+                        }
+                        else
+                        {
+                            os << "\nBuilding: " << gGlobals.getBuildingInfo(bi->first).getType();
+                            os << " delta = " << ladder.getOutput() - gGlobals.getGame().getAltAI()->getPlayer(ci->first.eOwner)->getCity(ci->first.iID).getBaseOutputProjection().getOutput();
+                        }
+                    }
+                    os << "\n";
                 }
             }
         }
@@ -1057,8 +1378,16 @@ namespace AltAI
         for (LimitedBuildingsTacticsMap::const_iterator ci(globalBuildingsTacticsMap_.begin()), ciEnd(globalBuildingsTacticsMap_.end()); ci != ciEnd; ++ci)
         {
             os << "\nBuilding: " << gGlobals.getBuildingInfo(ci->first).getType();
-            ci->second->update(player);
+            if (inclOutputs)
+            {
+                ci->second->update(player);
+            }
             ci->second->debug(os);
+
+            if (!inclOutputs)
+            {
+                continue;
+            }
 
             int firstBuiltTurn = MAX_INT;
             IDInfo firstBuiltCity;
@@ -1161,7 +1490,10 @@ namespace AltAI
         for (LimitedBuildingsTacticsMap::const_iterator ci(nationalBuildingsTacticsMap_.begin()), ciEnd(nationalBuildingsTacticsMap_.end()); ci != ciEnd; ++ci)
         {
             os << "\nBuilding: " << gGlobals.getBuildingInfo(ci->first).getType();
-            ci->second->update(player);
+            if (inclOutputs)
+            {
+                ci->second->update(player);
+            }
             ci->second->debug(os);
         }
 
@@ -1194,7 +1526,7 @@ namespace AltAI
         }
 
         std::vector<UnitTypes> combatUnits, possibleCombatUnits;
-        boost::tie(combatUnits, possibleCombatUnits) = getActualAndPossibleCombatUnits(player, NULL, DOMAIN_LAND);
+        boost::tie(combatUnits, possibleCombatUnits) = getActualAndPossibleCombatUnits(IDInfo(), DOMAIN_LAND);
 
         os << "\nPossible units: ";
         for (size_t i = 0, count = possibleCombatUnits.size(); i < count; ++i)
@@ -1239,12 +1571,15 @@ namespace AltAI
         {
             os << "\nProcess: " << gGlobals.getProcessInfo(ci->first).getType();
             ci->second->debug(os);
-            CityIter iter(*player.getCvPlayer());
-            while (CvCity* pCity = iter())
+            if (inclOutputs)
             {
-                ProjectionLadder projection = ci->second->getProjection(pCity->getIDInfo());
-                const City& city = player.getCity(pCity);
-                os << "\nProcess output for city: " << narrow(pCity->getName()) << " = " << projection.getProcessOutput();
+                CityIter iter(*player.getCvPlayer());
+                while (CvCity* pCity = iter())
+                {
+                    ProjectionLadder projection = ci->second->getProjection(pCity->getIDInfo());
+                    const City& city = player.getCity(pCity);
+                    os << "\nProcess output for city: " << narrow(pCity->getName()) << " = " << projection.getProcessOutput();
+                }
             }
         }
 
@@ -1261,9 +1596,12 @@ namespace AltAI
                 for (CityImprovementTacticsList::const_iterator li(ci->second.begin()), liEnd(ci->second.end()); li != liEnd; ++li)
                 {
                     (*li)->debug(os);
-                    (*li)->update(player, city.getCityData());
+                    if (inclOutputs)
+                    {
+                        (*li)->update(player, city.getCityData());
 
-                    os << "\nTotal Delta = " << (*li)->getProjection().getOutput() - (*li)->getBaseProjection().getOutput();
+                        os << "\nTotal Delta = " << (*li)->getProjection().getOutput() - (*li)->getBaseProjection().getOutput();
+                    }
                 }            
             }
             else
@@ -1365,7 +1703,11 @@ namespace AltAI
                 }
 
 #ifdef ALTAI_DEBUG
-                CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for building: " << gGlobals.getBuildingInfo(buildingType).getType();
+                std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+                os << "\n" << __FUNCTION__ << " Adding tactic for building: "
+                   << gGlobals.getBuildingInfo(buildingType).getType() << " for city: " << safeGetCityName(pCity)
+                   << " info: ";
+                streamBuildingInfo(os, pBuildingInfo);
 #endif
                 cityBuildingTacticsMap_[pCity->getIDInfo()][buildingType] = makeCityBuildingTactics(player, player.getCity(pCity), pBuildingInfo);
             }
@@ -1382,7 +1724,8 @@ namespace AltAI
                 
                     cityBuildingTacticsMap_[pCity->getIDInfo()][buildingType] = makeCityBuildingTactics(player, city, pBuildingInfo);
 #ifdef ALTAI_DEBUG
-                    CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for building: " << gGlobals.getBuildingInfo(buildingType).getType();
+                    CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for building: "
+                        << gGlobals.getBuildingInfo(buildingType).getType() << " for city: " << safeGetCityName(pCity);
                     cityBuildingTacticsMap_[pCity->getIDInfo()][buildingType]->debug(CivLog::getLog(*player.getCvPlayer())->getStream());
 #endif
                 }
@@ -1491,6 +1834,11 @@ namespace AltAI
                 continue;
             }
 
+            if (gGlobals.getUnitInfo(unitType).isAnimal())
+            {
+                continue;
+            }
+
             boost::shared_ptr<UnitInfo> pUnitInfo = player.getAnalysis()->getUnitInfo(unitType);
 
             if (!pUnitInfo)
@@ -1516,6 +1864,11 @@ namespace AltAI
             UnitTypes unitType = getPlayerVersion(player.getPlayerID(), (UnitClassTypes)i);
 
             if (unitType == NO_UNIT)
+            {
+                continue;
+            }
+
+            if (gGlobals.getUnitInfo(unitType).isAnimal())
             {
                 continue;
             }
@@ -1571,6 +1924,18 @@ namespace AltAI
 //            ci->second->debug(os);
 //        }
 //#endif
+    }
+
+    void PlayerTactics::makeReligionTactics()
+    {
+        for (int i = 0, count = gGlobals.getNumReligionInfos(); i < count; ++i)
+        {
+            ReligionTacticsPtr pReligionTactics = ReligionTacticsPtr(new ReligionTactics(player.getPlayerID(), (ReligionTypes)i));
+            pReligionTactics->setTechDependency(ResearchTechDependencyPtr(new ResearchTechDependency((TechTypes)gGlobals.getReligionInfo((ReligionTypes)i).getTechPrereq())));;
+            pReligionTactics->addTactic(IReligionTacticPtr(new EconomicReligionTactic()));
+            pReligionTactics->addTactic(IReligionTacticPtr(new UnitReligionTactic()));
+            religionTacticsMap_[(ReligionTypes)i] = pReligionTactics;
+        }
     }
 
     void PlayerTactics::updateFirstToTechTactics(TechTypes techType)

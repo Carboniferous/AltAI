@@ -105,7 +105,7 @@ namespace AltAI
         void hurry(const HurryData& hurryData);
         std::pair<bool, HurryData> canHurry(HurryTypes hurryType) const;
 
-        const std::stack<std::pair<BuildQueueTypes, int> >& getBuildQueue() const
+        const std::stack<BuildQueueItem >& getBuildQueue() const
         {
             return buildQueue_;
         }
@@ -470,7 +470,7 @@ namespace AltAI
 
         SpecialConditions specialConditions_;
 
-        std::stack<std::pair<BuildQueueTypes, int> > buildQueue_;
+        std::stack<BuildQueueItem > buildQueue_;
 
         const CvCity* pCity_;
         PlayerTypes owner_;

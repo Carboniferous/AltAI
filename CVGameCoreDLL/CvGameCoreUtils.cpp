@@ -3365,6 +3365,7 @@ void getMissionAIString(CvWString& szString, MissionAITypes eMissionAI)
     case MISSIONAI_RESERVE: szString = L"MISSIONAI_RESERVE"; break;
     case MISSIONAI_COUNTER_CITY: szString = L"MISSIONAI_COUNTER_CITY"; break;
     case MISSIONAI_MONITOR: szString = L"MISSIONAI_MONITOR"; break;
+    case MISSIONAI_COUNTER_COASTAL: szString = L"MISSIONAI_COUNTER_COASTAL"; break;
 
 	default: szString = CvWString::format(L"UNKNOWN_MISSION_AI(%d)", eMissionAI); break;
 	}

@@ -61,6 +61,12 @@ namespace AltAI
         pCityData_ = pCityData->clone();
         pCityData_->pushBuilding(buildingType_);
 
+        const std::vector<IDependentTacticPtr>& deps = getDependencies();
+        for (size_t depIndex = 0, depCount = deps.size(); depIndex < depCount; ++depIndex)
+        {
+            deps[depIndex]->apply(pCityData_);  // don't need to remove as we are using a copy of city data 
+        }
+
         std::vector<IProjectionEventPtr> events;
         boost::shared_ptr<BuildingInfo> pBuildingInfo = player.getAnalysis()->getBuildingInfo(buildingType_);
         if (!pBuildingInfo)
@@ -103,7 +109,7 @@ namespace AltAI
         techDependencies_.erase(techIter, techDependencies_.end());
     }
 
-    bool CityBuildingTactic::areDependenciesSatisfied(int ignoreFlags) const
+    bool CityBuildingTactic::areDependenciesSatisfied(int depTacticFlags) const
     {
         CvCity* pCity = ::getCity(city_);
         if (!pCity)
@@ -113,7 +119,7 @@ namespace AltAI
 
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {
-            if (dependentTactics_[i]->required(pCity, ignoreFlags))
+            if (dependentTactics_[i]->required(pCity, depTacticFlags))
             {
                 return false;
             }
@@ -121,7 +127,7 @@ namespace AltAI
 
         for (size_t i = 0, count = techDependencies_.size(); i < count; ++i)
         {
-            if (techDependencies_[i]->required(pCity, ignoreFlags))
+            if (techDependencies_[i]->required(pCity, depTacticFlags))
             {
                 return false;
             }
@@ -129,13 +135,16 @@ namespace AltAI
         return true;
     }
 
-    void CityBuildingTactic::apply(TacticSelectionDataMap& selectionDataMap, int ignoreFlags)
+    void CityBuildingTactic::apply(TacticSelectionDataMap& selectionDataMap, int depTacticFlags)
     {
-        if (areDependenciesSatisfied(ignoreFlags))
+        if (areDependenciesSatisfied(depTacticFlags))
         {
-            const std::vector<DependencyItem> depItems = getDepItems(ignoreFlags);
+            const std::vector<DependencyItem> depItems = getDepItems(depTacticFlags);
+            const std::vector<BuildQueueItem> buildItems = getBuildItems(IDependentTactic::Ignore_None);
+
             DependencyItemSet depSet(depItems.begin(), depItems.end());
             apply_(selectionDataMap[depSet]);
+            selectionDataMap[depSet].dependentBuilds.insert(buildItems.begin(), buildItems.end());
         }
     }
 
@@ -202,7 +211,7 @@ namespace AltAI
 
     void CityBuildingTactic::write(FDataStreamBase* pStream) const
     {
-        pStream->Write(ID);
+        pStream->Write(CityBuildingTacticID);
 
         const size_t depCount = dependentTactics_.size();
         pStream->Write(depCount);
@@ -313,11 +322,11 @@ namespace AltAI
         return processType_;
     }
 
-    bool ProcessTactic::areDependenciesSatisfied(const Player& player, int ignoreFlags) const
+    bool ProcessTactic::areDependenciesSatisfied(const Player& player, int depTacticFlags) const
     {
         for (size_t i = 0, count = techDependencies_.size(); i < count; ++i)
         {
-            if (techDependencies_[i]->required(player, ignoreFlags))
+            if (techDependencies_[i]->required(player, depTacticFlags))
             {
                 return false;
             }
@@ -339,7 +348,7 @@ namespace AltAI
 
     void ProcessTactic::write(FDataStreamBase* pStream) const
     {
-        pStream->Write(ID);
+        pStream->Write(ProcessTacticID);
 
         const size_t techDepCount = techDependencies_.size();
         pStream->Write(techDepCount);
@@ -434,7 +443,7 @@ namespace AltAI
         }
     }
 
-    bool LimitedBuildingTactic::areDependenciesSatisfied(IDInfo city, int ignoreFlags) const
+    bool LimitedBuildingTactic::areDependenciesSatisfied(IDInfo city, int depTacticFlags) const
     {
         CityTacticsMap::const_iterator cityTacticsIter = cityTactics_.find(city);
         if (cityTacticsIter == cityTactics_.end())
@@ -443,7 +452,7 @@ namespace AltAI
         }
         else
         {
-            return cityTacticsIter->second->areDependenciesSatisfied(ignoreFlags);
+            return cityTacticsIter->second->areDependenciesSatisfied(depTacticFlags);
         }
     }
 
@@ -513,14 +522,14 @@ namespace AltAI
         return globalDelta;
     }
 
-    void LimitedBuildingTactic::apply(TacticSelectionDataMap& selectionDataMap, int ignoreFlags)
+    void LimitedBuildingTactic::apply(TacticSelectionDataMap& selectionDataMap, int depTacticFlags)
     {
         std::map<IDInfo, TacticSelectionDataMap> cityTacticsMap;
         IDInfo bestCity;
         int bestBuildTime = MAX_INT;
         for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
-            if (iter->second->areDependenciesSatisfied(ignoreFlags))
+            if (iter->second->areDependenciesSatisfied(depTacticFlags))
             {
                 IDInfo thisCity = iter->second->getCity();
                 {
@@ -532,13 +541,16 @@ namespace AltAI
                     }
                 }
 
-                iter->second->apply(cityTacticsMap[thisCity], ignoreFlags);
+                iter->second->apply(cityTacticsMap[thisCity], depTacticFlags);
 
-                const std::vector<DependencyItem> depItems = iter->second->getDepItems(ignoreFlags);
+                const std::vector<DependencyItem> depItems = iter->second->getDepItems(depTacticFlags);
+                const std::vector<BuildQueueItem> buildItems = iter->second->getBuildItems(depTacticFlags);
+
                 DependencyItemSet depSet(depItems.begin(), depItems.end());
 
                 TacticSelectionData& techSelectionData = selectionDataMap[depSet];
                 TacticSelectionData& thisCitysData = cityTacticsMap[thisCity][depSet];
+                thisCitysData.dependentBuilds.insert(buildItems.begin(), buildItems.end());
 
                 if (!thisCitysData.economicBuildings.empty())
                 {
@@ -572,9 +584,9 @@ namespace AltAI
             }
         }
 
-        if (bestCity != IDInfo())
+        if (!isEmpty(bestCity))
         {
-            const std::vector<DependencyItem> depItems = cityTactics_[bestCity]->getDepItems(ignoreFlags);
+            const std::vector<DependencyItem> depItems = cityTactics_[bestCity]->getDepItems(depTacticFlags);
             DependencyItemSet depSet(depItems.begin(), depItems.end());
 
             TotalOutput globalDelta = getGlobalDelta_(bestCity, bestBuildTime);
@@ -707,7 +719,7 @@ namespace AltAI
 
     void LimitedBuildingTactic::write(FDataStreamBase* pStream) const
     {
-        pStream->Write(ID);
+        pStream->Write(LimitedBuildingTacticID);
         pStream->Write(buildingType_);
         pStream->Write(isGlobal_);
 

@@ -109,7 +109,7 @@ namespace AltAI
         int productionModifier = data.getModifiersHelper()->getTotalYieldModifier(data)[OUTPUT_PRODUCTION];
         if (!ignoreBuildQueue)
         {
-            std::pair<BuildQueueTypes, int> buildItem(data.getBuildQueue().top());
+            BuildQueueItem buildItem(data.getBuildQueue().top());
             if (buildItem.first == BuildingItem)
             {
                 hurryCostModifierModifier = gGlobals.getBuildingInfo((BuildingTypes)buildItem.second).getHurryCostModifier();

@@ -18,7 +18,7 @@ namespace AltAI
         explicit HappyHelper(const CvCity* pCity);
         HappyHelperPtr clone() const;
 
-        int happyPopulation() const;
+        int happyPopulation(const CityData& data) const;
         int angryPopulation(const CityData& data) const;
 
         void advanceTurn(CityData& data);
@@ -41,10 +41,21 @@ namespace AltAI
 
         void changeLargestCityHappiness(int change);
 
-        void setMilitaryHappiness(int happyPerUnit);
+        void setMilitaryHappinessPerUnit(int happyPerUnit);
+        void changeMilitaryHappinessUnits(int change);
 
         void changePlayerBuildingHappiness(int change);
         void changePlayerHappiness(int change);
+
+        int getReligionGoodHappiness() const;
+        int getReligionBadHappiness() const;
+        int getStateReligionHappiness() const;
+        int getNonStateReligionHappiness() const;
+
+        void setReligionGoodHappiness(int value);
+        void setReligionBadHappiness(int value);
+        void setStateReligionHappiness(int value);
+        void setNonStateReligionHappiness(int value);
 
         void setNoUnhappiness(bool newState);
         bool isNoUnhappiness() const;
@@ -61,11 +72,12 @@ namespace AltAI
         int conscriptPercentAnger_, defyResolutionPercentAnger_, warWearinessPercentAnger_;
         std::vector<int> civicPercentAnger_;
         
-        int largestCityHappiness_, militaryHappiness_, currentStateReligionHappiness_;
+        int militaryHappinessUnitCount_, militaryHappinessPerUnit_;
+        int largestCityHappiness_, stateReligionHappiness_, nonStateReligionHappiness_;
+        int religionGoodHappiness_, religionBadHappiness_;
 
         int buildingBadHappiness_, buildingGoodHappiness_, extraBuildingBadHappiness_, extraBuildingGoodHappiness_;
         int featureBadHappiness_, featureGoodHappiness_, bonusBadHappiness_, bonusGoodHappiness_;
-        int religionBadHappiness_, religionGoodHappiness_;
         int commerceHappiness_, areaBuildingHappiness_, playerBuildingHappiness_;
         int cityExtraHappiness_, playerExtraHappiness_, levelHappyBonus_;
         int vassalUnhappiness_, vassalHappiness_, espionageHappinessCounter_;

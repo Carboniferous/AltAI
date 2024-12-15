@@ -30,7 +30,7 @@ namespace AltAI
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int CityImprovementTacticsID = 0;
 
     private:
         std::vector<ResearchTechDependencyPtr> dependentTactics_;
@@ -48,7 +48,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int ID = IWorkerBuildTactic::EconomicImprovementTacticID;
     };
 
     class RemoveFeatureTactic : public IWorkerBuildTactic
@@ -59,7 +59,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 1;
+        static const int ID = IWorkerBuildTactic::RemoveFeatureTacticID;
     };
 
     class ProvidesResourceTactic : public IWorkerBuildTactic
@@ -70,7 +70,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 2;
+        static const int ID = IWorkerBuildTactic::ProvidesResourceTacticID;
     };
 
     class HappyImprovementTactic : public IWorkerBuildTactic
@@ -81,7 +81,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 3;
+        static const int ID = IWorkerBuildTactic::HappyImprovementTacticID;
     };
 
     class HealthImprovementTactic : public IWorkerBuildTactic
@@ -92,7 +92,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 4;
+        static const int ID = IWorkerBuildTactic::HealthImprovementTacticID;
     };
 
     class MilitaryImprovementTactic : public IWorkerBuildTactic
@@ -103,7 +103,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 5;
+        static const int ID = IWorkerBuildTactic::MilitaryImprovementTacticID;
     };
 
     class FreeTechTactic : public ITechTactic
@@ -117,7 +117,7 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
         virtual const int getID() const { return ID; }
 
-        static const int ID = 0;
+        static const int ID = ITechTactic::FreeTechTacticID;
     };
 
     class FoundReligionTechTactic : public ITechTactic
@@ -133,7 +133,7 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
         virtual const int getID() const { return ID; }
 
-        static const int ID = 1;
+        static const int ID = ITechTactic::FoundReligionTechTacticID;
         ReligionTypes religionType;
     };
 
@@ -150,7 +150,7 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
         virtual const int getID() const { return ID; }
 
-        static const int ID = 2;
+        static const int ID = ITechTactic::ConnectsResourcesTechTacticID;
         RouteTypes routeType;
     };
 
@@ -167,7 +167,7 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
         virtual const int getID() const { return ID; }
 
-        static const int ID = 3;
+        static const int ID = ITechTactic::ConstructBuildingTechTacticID;
         BuildingTypes buildingType;
     };
 
@@ -184,7 +184,7 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
         virtual const int getID() const { return ID; }
 
-        static const int ID = 4;
+        static const int ID = ITechTactic::ProvidesResourceTechTacticID;
         BonusTypes bonusType;
     };
 
@@ -200,7 +200,7 @@ namespace AltAI
         virtual void read(FDataStreamBase* pStream);
         virtual const int getID() const { return ID; }
 
-        static const int ID = 5;
+        static const int ID = ITechTactic::EconomicTechTacticID;
     };
     
 }

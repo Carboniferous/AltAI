@@ -8,44 +8,48 @@
 #include "./city_unit_tactics.h"
 #include "./player_tech_tactics.h"
 #include "./tech_tactics_items.h"
-#include "./civic_tactics.h"
+#include "./civic_tactics_items.h"
 #include "./resource_tactics.h"
+#include "./religion_tactics.h"
+#include "./city.h"
+#include "./helper_fns.h"
+#include "./civ_log.h"
 
 namespace AltAI
 {
-    std::string ignoreFlagToString(int ignoreFlags)
+    std::string depTacticFlagsToString(int dep_tactic_flags)
     {
         std::ostringstream oss;
-        if (ignoreFlags != 0)
+        if (dep_tactic_flags != 0)
         {
-            if (ignoreFlags & IDependentTactic::Ignore_Techs)
+            if (dep_tactic_flags & IDependentTactic::Tech_Dep)
             {
-                oss << " ignore techs ";
+                oss << " tech dep ";
             }
-            if (ignoreFlags & IDependentTactic::Ignore_City_Buildings)
+            if (dep_tactic_flags & IDependentTactic::City_Buildings_Dep)
             {
-                oss << " ignore city buildings ";
+                oss << " city buildings dep ";
             }
-            if (ignoreFlags & IDependentTactic::Ignore_Civ_Buildings)
+            if (dep_tactic_flags & IDependentTactic::Civ_Buildings_Dep)
             {
-                oss << " ignore civ buildings ";
+                oss << " civ buildings dep ";
             }
-            if (ignoreFlags & IDependentTactic::Ignore_Religions)
+            if (dep_tactic_flags & IDependentTactic::Religion_Dep)
             {
-                oss << " ignore religions ";
+                oss << " religions dep ";
             }
-            if (ignoreFlags & IDependentTactic::Ignore_Resources)
+            if (dep_tactic_flags & IDependentTactic::Resource_Dep)
             {
-                oss << " ignore resources ";
+                oss << " resources dep ";
             }
-            if (ignoreFlags & IDependentTactic::Ignore_CivUnits)
+            if (dep_tactic_flags & IDependentTactic::CivUnits_Dep)
             {
-                oss << " ignore civ units ";
+                oss << " civ units dep ";
             }
         }
         else
         {
-            oss << " none ";
+            oss << " no dep flag ";
         }
         return oss.str();
     }
@@ -80,11 +84,11 @@ namespace AltAI
         case CivUnitDependency::ID:
             pDependentTactic = IDependentTacticPtr(new CivUnitDependency());
             break;
-        case ResouceProductionBonusDependency::ID:
-            pDependentTactic = IDependentTacticPtr(new ResouceProductionBonusDependency());
+        case ResourceProductionBonusDependency::ID:
+            pDependentTactic = IDependentTacticPtr(new ResourceProductionBonusDependency());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in IDependentTactic::factoryRead");
+            FAssertMsg(false, "Unexpected ID in IDependentTactic::factoryRead");
             break;
         }
 
@@ -140,8 +144,11 @@ namespace AltAI
         case FreeTechBuildingTactic::ID:
             pBuildingTactic = ICityBuildingTacticPtr(new FreeTechBuildingTactic());
             break;
+        case CanTrainUnitBuildingTactic::ID:
+            pBuildingTactic = ICityBuildingTacticPtr(new CanTrainUnitBuildingTactic());
+            break;
         default:
-            FAssertMsg(true, "Unexpected ID in ICityBuildingTactic::factoryRead");
+            FAssertMsg(false, "Unexpected ID in ICityBuildingTactic::factoryRead");
             break;
         }
 
@@ -149,46 +156,156 @@ namespace AltAI
         return pBuildingTactic;
     }
 
+    void debugDepItemSet(const DependencyItemSet& depItemSet, std::ostream& os)
+    {
+        for (DependencyItemSet::const_iterator di(depItemSet.begin()), diEnd(depItemSet.end()); di != diEnd; ++di)
+        {
+            if (di != depItemSet.begin()) os << "+";
+            debugDepItem(*di, os);                            
+        }
+    }
+
     void debugDepItem(const DependencyItem& depItem, std::ostream& os)
     {
         switch (depItem.first)
         {
         case ResearchTechDependency::ID:
-            os << "ResearchTechDependency: " << gGlobals.getTechInfo((TechTypes)depItem.second).getType();
+            os << " ResearchTechDependency: " << gGlobals.getTechInfo((TechTypes)depItem.second).getType();
             break;
         case CityBuildingDependency::ID:
-            os << "CityBuildingDependency: " << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
+            os << " CityBuildingDependency: " << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
             break;
         case CivBuildingDependency::ID:
-            os << "CivBuildingDependency: " << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
+            os << " CivBuildingDependency: " << gGlobals.getBuildingInfo((BuildingTypes)depItem.second).getType();
             break;
         case ReligiousDependency::ID:
-            os << "ReligiousDependency: " << gGlobals.getReligionInfo((ReligionTypes)depItem.second).getType();
+            os << " ReligiousDependency: " << gGlobals.getReligionInfo((ReligionTypes)depItem.second).getType();
             break;
         case CityBonusDependency::ID:
-            os << "CityBonusDependency: " << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "none?");
+            os << " CityBonusDependency: " << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "none?");
             break;
         case CivUnitDependency::ID:
-            os << "CivUnitDependency: " << (depItem.second != NO_UNIT ? gGlobals.getUnitInfo((UnitTypes)depItem.second).getType() : "none?");
+            os << " CivUnitDependency: " << (depItem.second != NO_UNIT ? gGlobals.getUnitInfo((UnitTypes)depItem.second).getType() : "none?");
             break;
-        case ResouceProductionBonusDependency::ID:
-            os << "ResouceProductionBonusDependency: " << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "none?");
+        case ResourceProductionBonusDependency::ID:
+            os << " ResourceProductionBonusDependency: " << (depItem.second != NO_BONUS ? gGlobals.getBonusInfo((BonusTypes)depItem.second).getType() : "none?");
             break;
-        case -1:
-            os << "No Dependencies";
-            break;
+        //case -1:
+        //    os << " No Dependencies";
+        //    break;
         default:
-            os << "UNKNOWN Dependency?";
+            FAssertMsg(false, "Unknown Dep Item");
+            os << " UNKNOWN Dependency?";
             break;
         }
         os << ' ';
     }
 
-    // basically - get dependent items for given set of ignore flags
+    void debugBuildItem(const BuildQueueItem& buildQueueItem, std::ostream& os)
+    {
+        switch (buildQueueItem.first)
+        {
+        case NoItem:
+            os << " (no item)";
+            break;
+        case BuildingItem:
+            os << " building: " << gGlobals.getBuildingInfo((BuildingTypes)buildQueueItem.second).getType();
+            break;
+        case UnitItem: 
+            os << " unit: " << gGlobals.getUnitInfo((UnitTypes)buildQueueItem.second).getType();
+            break;
+        case ProjectItem:
+            os << " project: " << gGlobals.getProjectInfo((ProjectTypes)buildQueueItem.second).getType();
+            break;
+        case ProcessItem:
+            os << " process: " << gGlobals.getProcessInfo((ProcessTypes)buildQueueItem.second).getType();
+            break;
+        default:
+            os << " unknown build queue item: " << buildQueueItem.first << ", " << buildQueueItem.second;
+        }
+    }
+
+    DependencyItemSet getUnsatisfiedDeps(const DependencyItemSet& depItemSet, Player& player, City& city)
+    {
+        DependencyItemSet unsatisifedDeps;
+        for (DependencyItemSet::const_iterator di(depItemSet.begin()), diEnd(depItemSet.end()); di != diEnd; ++di)
+        {
+            switch (di->first)
+            {
+            case ResearchTechDependency::ID:
+                if (!CvTeamAI::getTeam(player.getTeamID()).isHasTech((TechTypes)(di->second)))
+                {
+                    unsatisifedDeps.insert(*di);
+                }
+                break;
+            case CityBuildingDependency::ID:
+                if (city.getCvCity()->getNumBuilding((BuildingTypes)(di->second)) == 0)
+                {
+                    unsatisifedDeps.insert(*di);
+                }
+                break;
+            case CivBuildingDependency::ID:
+                // todo - only store require building type - not its count or source building type (e.g. (6) courthouses for forbidden palace)
+                unsatisifedDeps.insert(*di);
+                break;
+            case ReligiousDependency::ID:
+                if (!city.getCvCity()->isHasReligion((ReligionTypes)(di->second)))
+                {
+                    unsatisifedDeps.insert(*di);
+                }
+                break;
+            case CityBonusDependency::ID:
+            case ResourceProductionBonusDependency::ID:
+                if (!city.getCvCity()->hasBonus((BonusTypes)(di->second)))
+                {
+                    unsatisifedDeps.insert(*di);
+                }
+                break;
+            case CivUnitDependency::ID:
+                // todo
+                unsatisifedDeps.insert(*di);
+                break;
+            default:
+                FAssertMsg(false, "Unknown Dep Item");
+                break;
+            }
+        }
+
+        return unsatisifedDeps;
+    }
+
+    bool DependencyItemsComp::operator() (const DependencyItemSet& first, const DependencyItemSet& second) const
+    {
+        if (first.size() != second.size())
+        {
+            return first.size() < second.size();
+        }
+        else
+        {
+            for (DependencyItemSet::const_iterator ci1(first.begin()), ci2(second.begin()), ci1End(first.end());
+                ci1 != ci1End; ++ci1, ++ci2)
+            {
+                if (*ci1 != *ci2)
+                {
+                    return *ci1 < *ci2;
+                }
+            }
+            return false;
+        }
+    }
+
+    bool IsNotRequired::operator() (const IDependentTacticPtr& pDependentTactic) const
+    {
+        return pDependentTactic->removeable() && (pCity ? !pDependentTactic->required(pCity, depTacticFlags) : !pDependentTactic->required(player, depTacticFlags));
+    }
+
+    // basically - get dependent items for given set of flags
     // if ignore flags is set to none then dependent items will be added if not required (i.e. known techs, present dependent buildings)
+    // (they will not exist if they were not required at all) - so all existing deps will be added
     // if ignore flags are set - those items will be added instead as if they were required regardless
-    // a special 'no dep' item is returned if all dependencies are required/satisfied (allowing for ignore flags) but none have been explicitly added
-    std::vector<DependencyItem> ICityBuildingTactics::getDepItems(int ignoreFlags) const
+    // no longer add flag - just return empty list of deps
+    // /*a special 'no dep' item is returned if all dependencies are required/satisfied (allowing for ignore flags) but none have been explicitly added*/
+    std::vector<DependencyItem> ICityBuildingTactics::getDepItems(int depTacticFlags) const
     {
         std::vector<DependencyItem> depItems;
         const CvCity* pCity = ::getCity(getCity());
@@ -196,46 +313,100 @@ namespace AltAI
         {
             return depItems;
         }
+
+#ifdef ALTAI_DEBUG
+        const CvPlayerAI& player = CvPlayerAI::getPlayer(pCity->getOwner());
+        std::ostream& os = CivLog::getLog(player)->getStream();
+        os << "\n\t calling getDepItems with dep flags: " << depTacticFlagsToString(depTacticFlags) << " for city: " << safeGetCityName(pCity)
+           << " and building: " << gGlobals.getBuildingInfo(getBuildingType()).getType();
+#endif
+
         bool allDependenciesSatisfied = true;
 
         const std::vector<IDependentTacticPtr>& deps = getDependencies();      
         for (size_t i = 0, count = deps.size(); i < count; ++i)
         {
-            // e.g. if a dependency such as a religion present in city is not required or relevant ignore flag is set
-            if (!deps[i]->required(pCity, ignoreFlags))
+            if (deps[i]->matches(depTacticFlags))
             {
+#ifdef ALTAI_DEBUG
+                os << " matched dep: ";
+                deps[i]->debug(os);
+#endif
                 const std::vector<DependencyItem> thisDepItems = deps[i]->getDependencyItems();
                 std::copy(thisDepItems.begin(), thisDepItems.end(), std::back_inserter(depItems));
             }
+#ifdef ALTAI_DEBUG
             else
             {
-                allDependenciesSatisfied = false;
+                os << " unmatched dep flags: ";
+                deps[i]->debug(os);
             }
+#endif
         }
 
         const std::vector<ResearchTechDependencyPtr>& techDeps = getTechDependencies();
         for (size_t i = 0, count = techDeps.size(); i < count; ++i)
         {
             // i.e. if tech is not needed (so we know it) or tech ignore flag is set
-            if (!techDeps[i]->required(pCity, ignoreFlags))
+            if (techDeps[i]->matches(depTacticFlags))
             {
+#ifdef ALTAI_DEBUG
+                os << " match tech deps: ";
+                techDeps[i]->debug(os);
+#endif
                 const std::vector<DependencyItem> thisDepItems = techDeps[i]->getDependencyItems();
                 std::copy(thisDepItems.begin(), thisDepItems.end(), std::back_inserter(depItems));
             }
+#ifdef ALTAI_DEBUG
             else
             {
-                allDependenciesSatisfied = false;
+                os << " unmatched tech dep: ";
+                techDeps[i]->debug(os);
+            }
+#endif
+        }
+
+//        if (depItems.empty()) 
+//        {
+//#ifdef ALTAI_DEBUG
+//            os << " no deps matched - adding noItem dep...";
+//#endif
+//            // add a special 'no dependency' dependency so we can use it as a map key with other tactics
+//            depItems.push_back(std::make_pair(-1, -1));
+//        }
+#ifdef ALTAI_DEBUG
+        os << " done.";
+#endif
+
+        return depItems;
+    }
+
+    std::vector<BuildQueueItem > ICityBuildingTactics::getBuildItems(int depTacticFlags) const
+    {
+        std::vector<BuildQueueItem > buildItems;
+
+        const CvCity* pCity = ::getCity(getCity());
+        if (!pCity)
+        {
+            return buildItems;
+        }
+
+        // only do non-tech deps (no build items for tech deps)
+        const std::vector<IDependentTacticPtr>& deps = getDependencies();      
+        for (size_t i = 0, count = deps.size(); i < count; ++i)
+        {
+            // e.g. required() returns true if a dependency such as a another building or city religion is required or false if relevant ignore flag is set
+            if (deps[i]->required(pCity, depTacticFlags))
+            {
+                BuildQueueItem buildItem = deps[i]->getBuildItem();
+                if (buildItem.first != NoItem)
+                {
+                    buildItems.push_back(buildItem);
+                }
             }
         }
 
-        // i.e. for the given ignore flags, all dependencies were satisfied and no dependent items exist for dependencies 
-        if (allDependenciesSatisfied && depItems.empty()) 
-        {
-            // add a special 'no dependency' dependency so we can use it as a map key with other tactics
-            depItems.push_back(std::make_pair(-1, -1));
-        }
-
-        return depItems;
+        return buildItems;
     }
     
     ICityBuildingTacticsPtr ICityBuildingTactics::factoryRead(FDataStreamBase* pStream)
@@ -247,11 +418,11 @@ namespace AltAI
 
         switch (ID)
         {
-        case CityBuildingTactic::ID:
+        case CityBuildingTactic::CityBuildingTacticID:
             pCityBuildingTactics = ICityBuildingTacticsPtr(new CityBuildingTactic());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in ICityBuildingTactics::factoryRead");
+            FAssertMsg(false, "Unexpected ID in ICityBuildingTactics::factoryRead");
             break;
         }
 
@@ -287,7 +458,7 @@ namespace AltAI
             pWorkerBuildTactic = IWorkerBuildTacticPtr(new MilitaryImprovementTactic());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in IWorkerBuildTactic::factoryRead");
+            FAssertMsg(false, "Unexpected ID in IWorkerBuildTactic::factoryRead");
             break;
         }
 
@@ -304,11 +475,11 @@ namespace AltAI
 
         switch (ID)
         {
-        case LimitedBuildingTactic::ID:
+        case LimitedBuildingTactic::LimitedBuildingTacticID:
             pGlobalBuildingTactics = ILimitedBuildingTacticsPtr(new LimitedBuildingTactic());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in IGlobalBuildingTactics::factoryRead");
+            FAssertMsg(false, "Unexpected ID in IGlobalBuildingTactics::factoryRead");
             break;
         }
 
@@ -325,11 +496,11 @@ namespace AltAI
 
         switch (ID)
         {
-        case ProcessTactic::ID:
+        case ProcessTactic::ProcessTacticID:
             pProcessTactics = IProcessTacticsPtr(new ProcessTactic());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in IProcessTactics::factoryRead");
+            FAssertMsg(false, "Unexpected ID in IProcessTactics::factoryRead");
             break;
         }
 
@@ -376,8 +547,11 @@ namespace AltAI
         case ScoutUnitTactic::ID:
             pCityUnitTactic = ICityUnitTacticPtr(new ScoutUnitTactic());
             break;
+        case SpreadReligionUnitTactic::ID:
+            pCityUnitTactic = ICityUnitTacticPtr(new SpreadReligionUnitTactic());
+            break;
         default:
-            FAssertMsg(true, "Unexpected ID in ICityUnitTactic::factoryRead");
+            FAssertMsg(false, "Unexpected ID in ICityUnitTactic::factoryRead");
             break;
         }
 
@@ -413,7 +587,7 @@ namespace AltAI
             pUnitTactic = IBuiltUnitTacticPtr(new HurryBuildingUnitTactic());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in IBuiltUnitTactic::factoryRead");
+            FAssertMsg(false, "Unexpected ID in IBuiltUnitTactic::factoryRead");
             break;
         }
 
@@ -449,7 +623,7 @@ namespace AltAI
             pTechTactic = ITechTacticPtr(new EconomicTechTactic());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in ITechTactic::factoryRead");
+            FAssertMsg(false, "Unexpected ID in ITechTactic::factoryRead");
             break;
         }
 
@@ -468,11 +642,11 @@ namespace AltAI
         {
         case -1:
             return ITechTacticsPtr();  // Null tactic - valid for tech tactics - some techs have no tactics of type ITechTactic
-        case PlayerTechTactics::ID:
+        case PlayerTechTactics::PlayerTechTacticsID:
             pTechTactics = ITechTacticsPtr(new PlayerTechTactics());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in ITechTactics::factoryRead");
+            FAssertMsg(false, "Unexpected ID in ITechTactics::factoryRead");
             break;
         
         }
@@ -496,8 +670,11 @@ namespace AltAI
         case HurryCivicTactic::ID:
             pCivicTactic = ICivicTacticPtr(new HurryCivicTactic());
             break;
+        case HappyPoliceCivicTactic::ID:
+            pCivicTactic = ICivicTacticPtr(new HappyPoliceCivicTactic());
+            break;
         default:
-            FAssertMsg(true, "Unexpected ID in ICivicTactic::factoryRead");
+            FAssertMsg(false, "Unexpected ID in ICivicTactic::factoryRead");
             break;
         }
 
@@ -524,11 +701,40 @@ namespace AltAI
             pResourceTactic = IResourceTacticPtr(new BuildingResourceTactic());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in IResourceTactic::factoryRead");
+            FAssertMsg(false, "Unexpected ID in IResourceTactic::factoryRead");
             break;
         }
 
         pResourceTactic->read(pStream);
         return pResourceTactic;
+    }
+
+    IReligionTacticPtr IReligionTactic::factoryRead(FDataStreamBase* pStream)
+    {
+        IReligionTacticPtr pReligionTactic;
+
+        int ID;
+        pStream->Read(&ID);
+
+        switch (ID)
+        {
+        case EconomicResourceTactic::ID:
+            pReligionTactic = IReligionTacticPtr(new EconomicReligionTactic());
+            break;
+        case UnitResourceTactic::ID:
+            pReligionTactic = IReligionTacticPtr(new UnitReligionTactic());
+            break;
+        default:
+            FAssertMsg(false, "Unexpected ID in IReligionTactic::factoryRead");
+            break;
+        }
+
+        pReligionTactic->read(pStream);
+        return pReligionTactic;
+    }
+
+    bool ICityBuildingTacticsBuildingComp::operator() (const ICityBuildingTacticsPtr& pFirstTactic, const ICityBuildingTacticsPtr& pSecondTactic) const
+    {
+        return pFirstTactic->getBuildingType() < pSecondTactic->getBuildingType();
     }
 }

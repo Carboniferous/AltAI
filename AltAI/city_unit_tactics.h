@@ -17,9 +17,9 @@ namespace AltAI
         const std::vector<IDependentTacticPtr>& getDependencies() const;
         void update(Player& player, const CityDataPtr& pCityData);
         void updateDependencies(const Player& player, const CvCity* pCity);
-        bool areDependenciesSatisfied(int ignoreFlags) const;
-        void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
-        void apply(TacticSelectionData& selectionData, int ignoreFlags);
+        bool areDependenciesSatisfied(int depTacticFlags) const;
+        void apply(TacticSelectionDataMap& tacticSelectionDataMap, int depTacticFlags);
+        void apply(TacticSelectionData& selectionData, int depTacticFlags);
         std::list<ICityUnitTacticPtr> getUnitTactics() const;
 
         UnitTypes getUnitType() const;
@@ -31,11 +31,11 @@ namespace AltAI
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
 
-        std::vector<DependencyItem> getDepItems(int ignoreFlags) const;
+        std::vector<DependencyItem> getDepItems(int depTacticFlags) const;
 
         static CityUnitTacticsPtr factoryRead(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int CityUnitTacticsID = 0;
 
     private:
         void apply_(TacticSelectionData& selectionData);
@@ -63,10 +63,10 @@ namespace AltAI
         void updateDependencies(const Player& player);
         void addCityTactic(IDInfo city, const CityUnitTacticsPtr& pCityTactic);
         CityUnitTacticsPtr getCityTactics(IDInfo city) const;
-        bool areDependenciesSatisfied(const Player& player, int ignoreFlags) const;
+        bool areDependenciesSatisfied(const Player& player, int depTacticFlags) const;
         bool areTechDependenciesSatisfied(const Player& player) const;
         const std::vector<ResearchTechDependencyPtr>& getTechDependencies() const;
-        void apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags);
+        void apply(TacticSelectionDataMap& tacticSelectionDataMap, int depTacticFlags);
         void apply(TacticSelectionData& selectionData);
         void removeCityTactics(IDInfo city);
         bool empty() const;
@@ -79,7 +79,7 @@ namespace AltAI
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int UnitTacticsID = 0;
         static UnitTacticsPtr factoryRead(FDataStreamBase* pStream);
 
     private:

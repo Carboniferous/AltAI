@@ -11,7 +11,9 @@
 namespace AltAI
 {    
     class MilitaryAnalysis;
+    typedef boost::shared_ptr<MilitaryAnalysis> MilitaryAnalysisPtr;
     class GreatPeopleAnalysis;
+    class ReligionAnalysis;
     class UnitAnalysis;
     class UnitInfo;
     class BuildingInfo;
@@ -51,7 +53,12 @@ namespace AltAI
             return pGreatPeopleAnalysis_;
         }
 
-        const boost::shared_ptr<MilitaryAnalysis>& getMilitaryAnalysis() const
+        const boost::shared_ptr<ReligionAnalysis>& getReligionAnalysis() const
+        {
+            return pReligionAnalysis_;
+        }
+
+        const MilitaryAnalysisPtr& getMilitaryAnalysis() const
         {
             return pMilitaryAnalysis_;
         }
@@ -61,6 +68,8 @@ namespace AltAI
         void recalcTechDepths();
         int getTechResearchDepth(TechTypes techType) const;
         std::vector<TechTypes> getTechsWithDepth(int depth) const;
+
+        CivicTypes chooseCivic(CivicOptionTypes civicOptionType);
 
         int getTimeHorizon() const
         {
@@ -129,9 +138,10 @@ namespace AltAI
 
         Player& player_;
         boost::shared_ptr<MapAnalysis> pMapAnalysis_;
-        boost::shared_ptr<MilitaryAnalysis> pMilitaryAnalysis_;
+        MilitaryAnalysisPtr pMilitaryAnalysis_;
         boost::shared_ptr<WorkerAnalysis> pWorkerAnalysis_;
         boost::shared_ptr<GreatPeopleAnalysis> pGreatPeopleAnalysis_;
+        boost::shared_ptr<ReligionAnalysis> pReligionAnalysis_;
         boost::shared_ptr<PlotUpdates> pMapDelta_;
         int timeHorizon_;
         std::vector<int> techDepths_;

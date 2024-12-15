@@ -3,6 +3,7 @@
 #include "./tactic_selection_data.h"
 #include "./city_improvement_projections.h"
 #include "./error_log.h"
+#include "./civ_log.h"
 #include "./city_data.h"
 #include "./helper_fns.h"
 
@@ -53,6 +54,14 @@ namespace AltAI
             }
         };
 
+        struct CityBuildTimePred
+        {
+            bool operator() (const std::pair<IDInfo, int>& firstCityAndBuildTime, const std::pair<IDInfo, int>& secondCityAndBuildTime) const
+            {
+                return firstCityAndBuildTime.second < secondCityAndBuildTime.second;
+            }
+        };
+
         void debugUnitTacticSet(const std::set<UnitTacticValue>& unitTacticValues, std::ostream& os, const std::string& prefix)
         {
             if (!unitTacticValues.empty())
@@ -86,7 +95,7 @@ namespace AltAI
             }
         }
 
-        template <typename TacticValueT>
+        /*template <typename TacticValueT>
             struct IsCityTactic
         {
             explicit IsCityTactic(IDInfo city_) : city(city_) {}
@@ -97,7 +106,7 @@ namespace AltAI
             }
 
             IDInfo city;
-        };
+        };*/
 
         template <typename TacticValueContainer>
             void eraseCityTacticValues(TacticValueContainer& container, IDInfo city)
@@ -114,6 +123,54 @@ namespace AltAI
                     }
                 }
             }
+
+        template <typename TacticValueContainer>
+            void eraseCityBuildingTacticValues(TacticValueContainer& container, IDInfo city, BuildingTypes buildingType)
+            {
+                // inefficient, although these are v. small sets of values and buildings are not constructed that frequently
+                // (same argument applies with above erase city version)
+                // todo - make the TacticValue containers lists as we want flexible sorting anyway
+                for (TacticValueContainer::iterator iter(container.begin()); iter != container.end();)
+                {
+                    if (iter->city == city && iter->buildingType == buildingType)
+                    {
+                        container.erase(iter++);  // building + city is unique
+                        break;
+                    }
+                    else
+                    {
+                        ++iter;
+                    }
+                }
+            }
+
+        void eraseCityUnitTacticValues(std::set<UnitTacticValue>& tacticValues, IDInfo city, UnitTypes unitType)
+        {
+            for (std::set<UnitTacticValue>::iterator iter(tacticValues.begin()); iter != tacticValues.end();)
+            {
+                if (iter->city == city && iter->unitType == unitType)
+                {
+                    tacticValues.erase(iter++);  // unit + city is unique
+                }
+                else
+                {
+                    ++iter;
+                }
+            }
+        }
+
+        template <typename T> 
+            typename T::value_type getBuildingValue(const T& container, BuildingTypes buildingType)
+        {
+            for (T::const_iterator ci(container.begin()), ciEnd(container.end()); ci != ciEnd; ++ci)
+            {
+                if (ci->buildingType == buildingType)
+                {
+                    return *ci;
+                }
+            }
+            return T::value_type();
+        }
     }
 
     void TacticSelectionData::merge(const TacticSelectionData& other)
@@ -150,6 +207,41 @@ namespace AltAI
         }
         resourceOutput += other.resourceOutput;
         // processOutputsMap
+    }
+
+    MilitaryBuildingValue TacticSelectionData::getMilitaryBuildingValue(BuildingTypes buildingType) const
+    {
+        return getBuildingValue(militaryBuildings, buildingType);
+    }
+
+    EconomicBuildingValue TacticSelectionData::getEconomicBuildingValue(BuildingTypes buildingType) const
+    {
+        return getBuildingValue(economicBuildings, buildingType);
+    }
+
+    //template <typename T> 
+    //    typename T::value_type TacticSelectionData::getUnitValue(const T& container, UnitTypes unitType)
+    //{
+    //    for (T::const_iterator ci(container.begin()), ciEnd(container.end()); ci != ciEnd; ++ci)
+    //    {
+    //        if (ci->unitType == unitType)
+    //        {
+    //            return *ci;
+    //        }
+    //    }
+    //    return T::value_type();
+    //}
+
+    UnitTacticValue TacticSelectionData::getUnitValue(const std::set<UnitTacticValue>& unitTacticValues, UnitTypes unitType)
+    {
+        for (std::set<UnitTacticValue>::const_iterator ci(unitTacticValues.begin()), ciEnd(unitTacticValues.end()); ci != ciEnd; ++ci)
+        {
+            if (ci->unitType == unitType)
+            {
+                return *ci;
+            }
+        }
+        return UnitTacticValue();
     }
 
     bool CultureBuildingValue::operator < (const CultureBuildingValue& other) const
@@ -189,12 +281,31 @@ namespace AltAI
         }
     }
 
-    bool EconomicBuildingTacticValueComp::operator () (const EconomicBuildingValue& first, const EconomicBuildingValue& second) const
+    bool EconomicBuildingTacticValueComp::operator () (const EconomicBuildingValue* first, const EconomicBuildingValue* second) const
     {
-        TotalOutputWeights weights = makeOutputW(10, 10, 10, 10, 1, 1);
-        TotalOutputValueFunctor valueF(weights);
+        //TotalOutputWeights weights = makeOutputW(10, 10, 10, 10, 1, 1);
+        //TotalOutputValueFunctor valueF(weights);
 
-        return valueF(first.output) / std::max<int>(1, first.nTurns) > valueF(second.output) / std::max<int>(1, second.nTurns);
+        //return valueF(first.output) / std::max<int>(1, first.nTurns) > valueF(second.output) / std::max<int>(1, second.nTurns);
+
+        return first->getScaledEconomicValue(numSimTurns, timeHorizon, weights) > second->getScaledEconomicValue(numSimTurns, timeHorizon, weights);
+    }
+
+    bool EconomicBuildingValue::hasPositiveEconomicValue(const int numSimTurns, TotalOutputWeights outputWeights) const
+    {
+        return TacticSelectionData::hasEconomicValue(numSimTurns - nTurns, output, outputWeights);
+    }
+
+    int EconomicBuildingValue::getEconomicValue(const int numSimTurns, TotalOutputWeights outputWeights) const
+    {
+        return TacticSelectionData::getEconomicValue(numSimTurns - nTurns, output, outputWeights);
+    }
+
+    int EconomicBuildingValue::getScaledEconomicValue(const int numSimTurns, const int numHorizonTurns, TotalOutputWeights outputWeights) const
+    {
+        // e.g. sim for 30t, building takes 10t to construct, and make horizon = 50t
+        // 30t - 10t is to determine period for which sim has building effective
+        return TacticSelectionData::getScaledEconomicValue(numSimTurns, nTurns, numHorizonTurns, output, outputWeights);
     }
 
     void EconomicBuildingValue::debug(std::ostream& os) const
@@ -385,6 +496,13 @@ namespace AltAI
         }
     }    
 
+    void ReligionUnitRequestData::debug(std::ostream& os) const
+    {
+        os << (unitType != NO_UNIT ? gGlobals.getUnitInfo(unitType).getType() : " no unit") << ' '
+           << (depBuildingType != NO_BUILDING ? gGlobals.getBuildingInfo(depBuildingType).getType() : " no building") << ' '
+           << safeGetCityName(bestCity) << " build time: " << bestCityBuildTime;
+    }
+
     void UnitTacticValue::debug(std::ostream& os) const
     {
         os << " city = " << safeGetCityName(city) << " level = " << level << " turns = " << nTurns << " value = " << unitAnalysisValue;
@@ -416,16 +534,24 @@ namespace AltAI
         return totalBuildValue;
     }
 
-    int WorkerUnitValue::getHighestConsumedBuildValue() const
+    int WorkerUnitValue::getHighestConsumedBuildValue(const std::vector<int>& accessibleSubAreas) const
     {
         TotalOutputWeights weights = makeOutputW(4, 3, 2, 2, 1, 1);
         TotalOutputValueFunctor valueF(weights);
+        const CvMap& theMap = gGlobals.getMap();
 
         int highestConsumedBuildValue = 0;
         for (WorkerUnitValue::BuildsMap::const_iterator ci(consumedBuildsMap.begin()), ciEnd(consumedBuildsMap.end()); ci != ciEnd; ++ci)
         {
             for (size_t i = 0, count = ci->second.size(); i < count; ++i)
             {
+                XYCoords thisBuildCoords = boost::get<0>(ci->second[i]);
+                int subArea = theMap.plot(thisBuildCoords)->getSubArea();
+                if (std::find(accessibleSubAreas.begin(), accessibleSubAreas.end(), subArea) == accessibleSubAreas.end())
+                {
+                    continue;
+                }
+
                 int thisBuildValue = valueF(boost::get<2>(ci->second[i]));
                 if (thisBuildValue > highestConsumedBuildValue)
                 {
@@ -577,7 +703,7 @@ namespace AltAI
 
     bool WorkerUnitValue::operator < (const WorkerUnitValue& other) const
     {
-        return getBuildValue() + getHighestConsumedBuildValue() < other.getBuildValue() + other.getHighestConsumedBuildValue();
+        return getBuildValue() + getHighestConsumedBuildValue(accessibleSubAreas) < other.getBuildValue() + other.getHighestConsumedBuildValue(other.accessibleSubAreas);
     }
 
     BuildImprovementsUnitEventGenerator::BuildImprovementsUnitEventGenerator(bool isLand, bool isConsumed, const std::vector<IDInfo>& targetCities)
@@ -624,6 +750,23 @@ namespace AltAI
             << (specType == NO_SPECIALIST ? " none " : gGlobals.getSpecialistInfo(specType).getType())
             << " city: " << (city == IDInfo() ? " none " : safeGetCityName(city))
             << ", output = " << output;
+    }
+
+    std::vector<std::pair<IDInfo, int> > TacticSelectionData::getCityBuildTimes(BuildingTypes buildingType) const
+    {
+        std::vector<std::pair<IDInfo, int> > cityBuildTimes;
+        for (std::set<EconomicBuildingValue>::const_iterator buildingsIter(economicBuildings.begin()), buildingsEndIter(economicBuildings.end()); 
+            buildingsIter != buildingsEndIter; ++buildingsIter)
+        {
+            if (buildingsIter->buildingType == buildingType)
+            {
+                cityBuildTimes.push_back(std::make_pair(buildingsIter->city, buildingsIter->nTurns));
+            }
+        }
+
+        std::sort(cityBuildTimes.begin(), cityBuildTimes.end(), CityBuildTimePred());
+
+        return cityBuildTimes;
     }
 
     TotalOutput TacticSelectionData::getEconomicBuildingOutput(BuildingTypes buildingType, IDInfo city) const
@@ -678,11 +821,116 @@ namespace AltAI
         return output;
     }
 
+    std::pair<int, int> TacticSelectionData::calculateBestAndTotalEconomicBuildingValues(const int numSimTurns, const int timeHorizon) const
+    {
+        TotalOutputWeights unitWeights = makeOutputW(1, 1, 1, 1, 0, 0);
+        int totalEconomicValue = 0;
+        int bestEconomicScaledValue = 0;
+        for (std::set<EconomicBuildingValue>::const_iterator econBuildingsIter(economicBuildings.begin()), econBuildingsEndIter(economicBuildings.end());
+            econBuildingsIter != econBuildingsEndIter; ++econBuildingsIter)
+        {
+            if (econBuildingsIter->hasPositiveEconomicValue(numSimTurns, unitWeights))
+            {
+                int unitValue = econBuildingsIter->getEconomicValue(numSimTurns, unitWeights);
+                int scaledValue = econBuildingsIter->getScaledEconomicValue(numSimTurns, timeHorizon, unitWeights);
+                bestEconomicScaledValue = std::max<int>(scaledValue, bestEconomicScaledValue);
+
+                totalEconomicValue += unitValue;
+            }
+        }
+        return std::make_pair(bestEconomicScaledValue, totalEconomicValue);
+    }
+
+    std::pair<int, TotalOutput> TacticSelectionData::calculateReligionSpreadValue(ReligionTypes religionType, IDInfo city, const int numSimTurns, const int timeHorizon) const
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(city.eOwner))->getStream();
+#endif
+        TotalOutputWeights unitWeights = makeOutputW(1, 1, 1, 1, 0, 0);
+        TotalOutput baseReligionCityOutput;
+        int scaledValue = 0;
+
+        std::map<ReligionTypes, std::map<IDInfo, std::pair<TotalOutput, TotalOutput> > >::const_iterator baseReligionDiffIter = potentialReligionOutputDeltas.find(religionType);
+        if (baseReligionDiffIter != potentialReligionOutputDeltas.end())
+        {
+            std::map<IDInfo, std::pair<TotalOutput, TotalOutput> >::const_iterator baseReligionDiffCityIter = baseReligionDiffIter->second.find(city);
+            if (baseReligionDiffCityIter != baseReligionDiffIter->second.end())
+            {
+                TotalOutput religionOutputDiff = baseReligionDiffCityIter->second.first - baseReligionDiffCityIter->second.second;
+                baseReligionCityOutput = baseReligionDiffCityIter->second.first;
+
+                if (hasEconomicValue(numSimTurns, religionOutputDiff, unitWeights))
+                {
+                    int unitValue = getEconomicValue(numSimTurns, religionOutputDiff, unitWeights);
+                    scaledValue = getScaledEconomicValue(numSimTurns, 0, timeHorizon, religionOutputDiff, unitWeights);
+                    //cityReligionsValueMap[depReligion] = scaledValue;
+#ifdef ALTAI_DEBUG
+                    os << "\n\tadded base delta for religion: " << gGlobals.getReligionInfo(religionType).getType() << " = "
+                        << religionOutputDiff << " unitValue: " << unitValue << ", scaled: " << scaledValue;
+#endif
+                }
+                else
+                {
+#ifdef ALTAI_DEBUG
+                    os << "\n\t minimal unit value for religion: " << gGlobals.getReligionInfo(religionType).getType() << " = "
+                        << getEconomicValue(numSimTurns, religionOutputDiff, unitWeights);
+#endif
+                }
+            }
+        }
+        return std::make_pair(scaledValue, baseReligionCityOutput);
+    }
+
+    std::pair<BuildingTypes, int> TacticSelectionData::calculateBestAndTotalEconomicReligionBuildingValues(IDInfo city, TotalOutput cityBaseReligionOutputDiff, const int numSimTurns, const int timeHorizon) const
+    {
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(CvPlayerAI::getPlayer(city.eOwner))->getStream();
+#endif
+        TotalOutputWeights unitWeights = makeOutputW(1, 1, 1, 1, 0, 0);
+        int cityReligionsBestBuildingValue = 0;
+        BuildingTypes bestReligionBuildingType = NO_BUILDING;
+
+        for (std::set<EconomicBuildingValue>::const_iterator religionBuildingsIter(economicBuildings.begin()), religionBuildingsEndIter(economicBuildings.end());
+            religionBuildingsIter != religionBuildingsEndIter; ++religionBuildingsIter)
+        {
+            if (religionBuildingsIter->city == city)
+            {
+                int numTurnsActive = numSimTurns - religionBuildingsIter->nTurns;
+                int unitValue = getEconomicValue(numTurnsActive, religionBuildingsIter->output - cityBaseReligionOutputDiff, unitWeights);
+                int scaledValue = getScaledEconomicValue(numSimTurns, religionBuildingsIter->nTurns, timeHorizon, religionBuildingsIter->output - cityBaseReligionOutputDiff, unitWeights);
+
+                if (hasEconomicValue(numTurnsActive, religionBuildingsIter->output - cityBaseReligionOutputDiff, unitWeights))
+                {
+                    if (scaledValue > cityReligionsBestBuildingValue)
+                    {
+                        cityReligionsBestBuildingValue = scaledValue;
+                        bestReligionBuildingType = religionBuildingsIter->buildingType;
+                    }
+                    
+#ifdef ALTAI_DEBUG
+                    os << "\n\tchecked base delta for religion dependent building: " << gGlobals.getBuildingInfo(religionBuildingsIter->buildingType).getType() << " = "
+                        << " t = " << religionBuildingsIter->nTurns << " unitValue: " << unitValue << ", scaled value: " << scaledValue;
+#endif
+                }
+                else
+                {
+#ifdef ALTAI_DEBUG
+                    os << "\n\tskipped religion dependent building: " << gGlobals.getBuildingInfo(religionBuildingsIter->buildingType).getType()
+                        << " t = " << religionBuildingsIter->nTurns << " unitValue: " << unitValue << ", scaled value: " << scaledValue;
+#endif
+                }
+            }
+        }
+
+        return std::make_pair(bestReligionBuildingType, cityReligionsBestBuildingValue);
+    }
+
     void TacticSelectionData::eraseCityEntries(IDInfo city)
     {
         eraseCityTacticValues(smallCultureBuildings, city);
         eraseCityTacticValues(largeCultureBuildings, city);
         eraseCityTacticValues(economicBuildings, city);
+        eraseCityTacticValues(militaryBuildings, city);
         eraseCityTacticValues(cityDefenceUnits, city);
         eraseCityTacticValues(thisCityDefenceUnits, city);
         eraseCityTacticValues(cityAttackUnits, city);
@@ -691,6 +939,26 @@ namespace AltAI
         eraseCityTacticValues(collateralUnits, city);
         eraseCityTacticValues(scoutUnits, city);
         eraseCityTacticValues(seaCombatUnits, city);
+    }
+
+    void TacticSelectionData::eraseCityBuildingEntries(IDInfo city, BuildingTypes buildingType)
+    {
+        eraseCityBuildingTacticValues(smallCultureBuildings, city, buildingType);
+        eraseCityBuildingTacticValues(largeCultureBuildings, city, buildingType);
+        eraseCityBuildingTacticValues(economicBuildings, city, buildingType);
+        eraseCityBuildingTacticValues(militaryBuildings, city, buildingType);
+    }
+
+    void TacticSelectionData::eraseCityUnitEntries(IDInfo city, UnitTypes unitType)
+    {
+        eraseCityUnitTacticValues(cityDefenceUnits, city, unitType);
+        eraseCityUnitTacticValues(thisCityDefenceUnits, city, unitType);
+        eraseCityUnitTacticValues(cityAttackUnits, city, unitType);
+        eraseCityUnitTacticValues(fieldAttackUnits, city, unitType);
+        eraseCityUnitTacticValues(fieldDefenceUnits, city, unitType);
+        eraseCityUnitTacticValues(collateralUnits, city, unitType);
+        eraseCityUnitTacticValues(scoutUnits, city, unitType);
+        eraseCityUnitTacticValues(seaCombatUnits, city, unitType);        
     }
 
     bool TacticSelectionData::isSignificantTacticItem(const EconomicBuildingValue& tacticItemValue, TotalOutput currentOutput, const int numTurns, const std::vector<OutputTypes>& outputTypes)
@@ -705,6 +973,31 @@ namespace AltAI
             }
         }
         return isSignificant;
+    }
+
+    bool TacticSelectionData::hasEconomicValue(const int numTurns, TotalOutput outputChange, TotalOutputWeights outputWeights)
+    {
+        return getEconomicValue(numTurns, outputChange, outputWeights) > 100;
+    }
+
+    // numTurns is the number of turns the output delta applied for
+    int TacticSelectionData::getEconomicValue(const int numTurns, TotalOutput outputChange, TotalOutputWeights outputWeights)
+    {
+        if (numTurns == 0)
+        {
+            return 0;
+        }
+        else
+        {
+            TotalOutput perTurnOutput = outputChange / numTurns;
+            return TotalOutputValueFunctor(outputWeights)(perTurnOutput);
+        }
+    }
+
+    int TacticSelectionData::getScaledEconomicValue(const int numSimTurns, const int numBuildTurns, const int numHorizonTurns, TotalOutput outputChange, TotalOutputWeights outputWeights)
+    {
+        int unitValue = getEconomicValue(numSimTurns - numBuildTurns, outputChange, outputWeights);
+        return ((numHorizonTurns - numBuildTurns) * unitValue) / 100;
     }
 
     int TacticSelectionData::getUnitTacticValue(const std::set<UnitTacticValue>& unitValues)
@@ -730,7 +1023,7 @@ namespace AltAI
         return mIter;
     }
 
-    std::list<std::pair<IDInfo, size_t> > TacticSelectionData::getCityBuildTimes(const std::set<UnitTacticValue>& unitValues, UnitTypes unitType)
+    /*std::list<std::pair<IDInfo, size_t> > TacticSelectionData::getCityBuildTimes(const std::set<UnitTacticValue>& unitValues, UnitTypes unitType)
     {
         std::list<std::pair<IDInfo, size_t> > buildTimes;
         for (std::set<UnitTacticValue>::const_iterator ci(unitValues.begin()), ciEnd(unitValues.end()); ci != ciEnd; ++ci)
@@ -741,7 +1034,7 @@ namespace AltAI
             }
         }
         return buildTimes;
-    }
+    }*/
 
     std::list<std::pair<UnitTypes, int> > TacticSelectionData::getUnitValueDiffs(const std::set<UnitTacticValue>& tacticUnitValues, const std::set<UnitTacticValue>& refUnitValues)
     {
@@ -762,6 +1055,29 @@ namespace AltAI
     void TacticSelectionData::debug(std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
+        if (!potentialReligionOutputDeltas.empty())
+        {
+            for (std::map<ReligionTypes, std::map<IDInfo, std::pair<TotalOutput, TotalOutput> > >::const_iterator rIter(potentialReligionOutputDeltas.begin()), rEndIter(potentialReligionOutputDeltas.end());
+                rIter != rEndIter; ++rIter)
+            {
+                os << "\n\t potential religion city adoption deltas: " << gGlobals.getReligionInfo(rIter->first).getType();
+                for (std::map<IDInfo, std::pair<TotalOutput, TotalOutput> >::const_iterator cIter(rIter->second.begin()), cEndIter(rIter->second.end()); cIter != cEndIter; ++cIter)
+                {
+                    os << "\n\t " << safeGetCityName(cIter->first) << ": delta = " << cIter->second.first << ", base = " << cIter->second.second
+                       << ", diff = " << cIter->second.first - cIter->second.second;
+                }
+            }
+        }
+
+        if (!dependentBuilds.empty())
+        {
+            os << "\ndep build items: ";
+            for (std::set<BuildQueueItem>::const_iterator bIter(dependentBuilds.begin()), bEndIter(dependentBuilds.end()); bIter != bEndIter; ++bIter)
+            {
+                debugBuildItem(*bIter, os);
+            }
+        }
+
         if (!smallCultureBuildings.empty())
         {
             os << "\n\tSmall culture buildings: ";
@@ -795,6 +1111,15 @@ namespace AltAI
             ci->debug(os);
         }
 
+        if (!spreadReligionUnits.empty())
+        {
+            os << "\n\tSpread religion Units: ";
+            for (std::map<UnitTypes, ReligionUnitValue>::const_iterator rIter(spreadReligionUnits.begin()), rEndIter(spreadReligionUnits.end()); rIter != rEndIter; ++rIter)
+            {
+                os << "\n\t" << gGlobals.getUnitInfo(rIter->first).getType() << " t = " << rIter->second.nTurns;
+            }
+        }
+
         if (!settledSpecialists.empty())
         {
             os << "\n\tSettled specialists: ";
@@ -805,25 +1130,25 @@ namespace AltAI
             ci->debug(os);
         }
 
-        for (std::map<BuildingTypes, std::vector<BuildingTypes> >::const_iterator ci(buildingsCityCanAssistWith.begin()), ciEnd(buildingsCityCanAssistWith.end());
+        for (std::map<BuildingTypes, std::set<BuildingTypes> >::const_iterator ci(buildingsCityCanAssistWith.begin()), ciEnd(buildingsCityCanAssistWith.end());
             ci != ciEnd; ++ci)
         {
             os << "\n\t can build: " << gGlobals.getBuildingInfo(ci->first).getType() << " to assist with: ";
-            for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+            for (std::set<BuildingTypes>::const_iterator bIter(ci->second.begin()), bEndIter(ci->second.end()); bIter != bEndIter; ++bIter)
             {
-                if (i > 0) os << ", ";
-                os << gGlobals.getBuildingInfo(ci->second[i]).getType();
+                if (bIter != ci->second.begin()) os << ", ";
+                os << gGlobals.getBuildingInfo(*bIter).getType();
             }
         }
 
-        for (std::map<BuildingTypes, std::vector<BuildingTypes> >::const_iterator ci(dependentBuildings.begin()), ciEnd(dependentBuildings.end());
+        for (std::map<BuildingTypes, std::set<BuildingTypes> >::const_iterator ci(dependentBuildings.begin()), ciEnd(dependentBuildings.end());
             ci != ciEnd; ++ci)
         {
             os << "\n\t can build: " << gGlobals.getBuildingInfo(ci->first).getType() << " which is depended on by: ";
-            for (size_t i = 0, count = ci->second.size(); i < count; ++i)
+            for (std::set<BuildingTypes>::const_iterator bIter(ci->second.begin()), bEndIter(ci->second.end()); bIter != bEndIter; ++bIter)
             {
-                if (i > 0) os << ", ";
-                os << gGlobals.getBuildingInfo(ci->second[i]).getType();
+                if (bIter != ci->second.begin()) os << ", ";
+                os << gGlobals.getBuildingInfo(*bIter).getType();
             }
         }
 
@@ -902,22 +1227,24 @@ namespace AltAI
         for (std::map<BonusTypes, std::pair<TotalOutput, TotalOutput> >::const_iterator ci(potentialResourceOutputDeltas.begin()), ciEnd(potentialResourceOutputDeltas.end());
             ci != ciEnd; ++ci)
         {
-            os << " " << gGlobals.getBonusInfo(ci->first).getType() << " delta = " << ci->second.first << ", %age = " << ci->second.second;
+            os << "\n\t " << gGlobals.getBonusInfo(ci->first).getType() << " base = " << ci->second.first << ", delta = " << ci->second.second;
         }
 
-        if (!potentialAcceleratedBuildings.empty())
+        /*if (!potentialAcceleratedBuildings.empty())
         {
             os << "\n\tPotentially accelerated buildings: ";
         }
         for (std::map<BonusTypes, std::vector<BuildingTypes> >::const_iterator ci(potentialAcceleratedBuildings.begin()), ciEnd(potentialAcceleratedBuildings.end());
             ci != ciEnd; ++ci)
         {
-            os << " for resource: " << gGlobals.getBonusInfo(ci->first).getType() << " - buildings: ";
+            os << "\n\t for resource: " << gGlobals.getBonusInfo(ci->first).getType() << " - buildings: ";
             for (size_t i = 0, count = ci->second.size(); i < count; ++i)
             {
-                os << " " << gGlobals.getBuildingInfo(ci->second[i]).getType();
+                if (i > 0) os << ", ";
+                if (!(i % 10)) os << "\n\t";
+                os << gGlobals.getBuildingInfo(ci->second[i]).getType();
             }
-        }
+        }*/
 
         for (size_t i = 0, count = cultureSources.size(); i < count; ++i)
         {
@@ -931,6 +1258,15 @@ namespace AltAI
         for (std::set<BuildingTypes>::const_iterator ci(exclusions.begin()), ciEnd(exclusions.end()); ci != ciEnd; ++ci)
         {
             os << gGlobals.getBuildingInfo(*ci).getType() << ", ";
+        }
+
+        if (!enabledUnits.empty())
+        {
+            os << "\n\tEnabled units: ";
+        }
+        for (std::set<UnitTypes>::const_iterator ci(enabledUnits.begin()), ciEnd(enabledUnits.end()); ci != ciEnd; ++ci)
+        {
+            os << gGlobals.getUnitInfo(*ci).getType() << ", ";
         }
        
         if (!isEmpty(cityImprovementsDelta))
@@ -964,6 +1300,7 @@ namespace AltAI
         {
             os << "\n\tResource output = " << resourceOutput;
         }
+        os << "\n tactic selection data end.";
 #endif
     }
 }

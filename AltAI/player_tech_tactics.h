@@ -23,7 +23,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int PlayerTechTacticsID = 0;
 
     private:
         TechTypes techType_;

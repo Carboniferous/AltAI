@@ -37,9 +37,15 @@ namespace AltAI
             int minimumSize;
         };
 
+        struct IsHolyCity
+        {
+            explicit IsHolyCity(ReligionTypes religionType_) : religionType(religionType_) {}
+            ReligionTypes religionType;
+        };
+
         struct BuildOrCondition;
 
-        typedef boost::variant<NullNode, RequiredBuildings, IsRiver, MinArea, boost::recursive_wrapper<BuildOrCondition> > BuildCondition;
+        typedef boost::variant<NullNode, RequiredBuildings, IsRiver, MinArea, IsHolyCity, boost::recursive_wrapper<BuildOrCondition> > BuildCondition;
 
         struct BuildOrCondition
         {
@@ -109,6 +115,12 @@ namespace AltAI
             PromotionTypes freePromotion;
 
             bool operator == (const UnitExpNode& other) const;
+        };
+
+        struct UnitNode
+        {
+            UnitNode() : enabledUnitType(NO_UNIT) {}
+            UnitTypes enabledUnitType;
         };
 
         struct SpecialistSlotNode
@@ -186,7 +198,7 @@ namespace AltAI
         };
 
         typedef boost::variant<NullNode, boost::recursive_wrapper<BaseNode>, YieldNode, CommerceNode, 
-            TradeNode, BonusNode, SpecialistNode, PowerNode, UnitExpNode, CityDefenceNode, SpecialistSlotNode,
+            TradeNode, BonusNode, SpecialistNode, PowerNode, UnitExpNode, UnitNode, CityDefenceNode, SpecialistSlotNode,
             AreaEffectNode, ReligionNode, HurryNode, MiscEffectNode> BuildingInfoNode;
 
         struct BaseNode

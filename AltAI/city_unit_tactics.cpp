@@ -62,13 +62,13 @@ namespace AltAI
         dependentTactics_.erase(iter, dependentTactics_.end());
     }
 
-    bool CityUnitTactics::areDependenciesSatisfied(int ignoreFlags) const
+    bool CityUnitTactics::areDependenciesSatisfied(int depTacticFlags) const
     {
         const CvCity* pCity = ::getCity(city_);
 
         for (size_t i = 0, count = dependentTactics_.size(); i < count; ++i)
         {            
-            if (pCity && dependentTactics_[i]->required(pCity, ignoreFlags))
+            if (pCity && dependentTactics_[i]->required(pCity, depTacticFlags))
             {
                 return false;
             }
@@ -76,31 +76,33 @@ namespace AltAI
         return true;
     }
 
-    void CityUnitTactics::apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags)
+    void CityUnitTactics::apply(TacticSelectionDataMap& tacticSelectionDataMap, int depTacticFlags)
     {
-        const std::vector<DependencyItem> depItems = getDepItems(ignoreFlags);
+        const std::vector<DependencyItem> depItems = getDepItems(depTacticFlags);
         DependencyItemSet depSet(depItems.begin(), depItems.end());
 
         apply_(tacticSelectionDataMap[depSet]);
 
-        //const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner);
-        //std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-        //os << "\nunit tactics deps: ";
-        //for (size_t i = 0, depCount = depItems.size(); i < depCount; ++i)
-        //{
-            //debugDepItem(depItems[i], os);
-        //}
-        //debug(os);
+#ifdef ALTAI_DEBUG
+        const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner);
+        std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+        os << "\nunit tactics deps: ";
+        for (size_t i = 0, depCount = depItems.size(); i < depCount; ++i)
+        {
+            debugDepItem(depItems[i], os);
+        }
+        debug(os);
+#endif
     }
 
-    void CityUnitTactics::apply(TacticSelectionData& selectionData, int ignoreFlags)
+    void CityUnitTactics::apply(TacticSelectionData& selectionData, int depTacticFlags)
     {
-        if (areDependenciesSatisfied(ignoreFlags))
+        if (areDependenciesSatisfied(depTacticFlags))
         {
             const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner);
 #ifdef ALTAI_DEBUG
             std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
-            os << "\n\tCityUnitTactics::apply: ignore flags = " << ignoreFlagToString(ignoreFlags);
+            os << "\n\tCityUnitTactics::apply: ignore flags = " << depTacticFlagsToString(depTacticFlags);
             debug(os);
 #endif
             apply_(selectionData);
@@ -120,7 +122,7 @@ namespace AltAI
         return unitTactics_;
     }
 
-    std::vector<DependencyItem> CityUnitTactics::getDepItems(int ignoreFlags) const
+    std::vector<DependencyItem> CityUnitTactics::getDepItems(int depTacticFlags) const
     {
         std::vector<DependencyItem> depItems;
         const CvCity* pCity = ::getCity(getCity());
@@ -128,26 +130,30 @@ namespace AltAI
         {
             return depItems;
         }
-        bool allDependenciesSatisfied = true;
+        //bool allDependenciesSatisfied = true;
 
         const std::vector<IDependentTacticPtr> deps = getDependencies();      
         for (size_t i = 0, count = deps.size(); i < count; ++i)
         {
-            if (!deps[i]->required(pCity, ignoreFlags))
+            // if we have a dependency of a type encoded in depTacticFlags, this check will be true for that dep
+            // and we will return it. E.g., if unit requires a resource - that will be listed in deps and extracted here
+            // if IDependentTactic::Resource_Dep is set.
+            if (!deps[i]->required(pCity, depTacticFlags))
             {
                 const std::vector<DependencyItem>& thisDepItems = deps[i]->getDependencyItems();
                 std::copy(thisDepItems.begin(), thisDepItems.end(), std::back_inserter(depItems));
             }
-            else
-            {
-                allDependenciesSatisfied = false;
-            }
+            //else
+            //{
+            //    // a dependency is required when taking into account the tactics to ignore
+            //    allDependenciesSatisfied = false;
+            //}
         }
 
-        if (allDependenciesSatisfied && depItems.empty())
-        {
-            depItems.push_back(std::make_pair(-1, -1));
-        }
+        //if (allDependenciesSatisfied && depItems.empty())
+        //{
+        //    depItems.push_back(std::make_pair(-1, -1));
+        //}
 
         return depItems;
     }
@@ -196,7 +202,7 @@ namespace AltAI
             pCityUnitTactics = CityUnitTacticsPtr(new CityUnitTactics());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in CityUnitTactics::factoryRead");
+            FAssertMsg(false, "Unexpected ID in CityUnitTactics::factoryRead");
             break;
         }
 
@@ -206,7 +212,7 @@ namespace AltAI
 
     void CityUnitTactics::write(FDataStreamBase* pStream) const
     {
-        pStream->Write(ID);
+        pStream->Write(CityUnitTacticsID);
 
         const size_t depCount = dependentTactics_.size();
         pStream->Write(depCount);
@@ -264,7 +270,7 @@ namespace AltAI
             pUnitTactics = UnitTacticsPtr(new UnitTactics());
             break;
         default:
-            FAssertMsg(true, "Unexpected ID in UnitTactics::factoryRead");
+            FAssertMsg(false, "Unexpected ID in UnitTactics::factoryRead");
             break;
         }
 
@@ -344,16 +350,16 @@ namespace AltAI
         return CityUnitTacticsPtr();
     }
 
-    bool UnitTactics::areDependenciesSatisfied(const Player& player, int ignoreFlags) const
+    bool UnitTactics::areDependenciesSatisfied(const Player& player, int depTacticFlags) const
     {
-        if (!(ignoreFlags & IDependentTactic::Ignore_Techs) && !areTechDependenciesSatisfied(player))
+        if (!(depTacticFlags & IDependentTactic::Tech_Dep) && !areTechDependenciesSatisfied(player))
         {
             return false;
         }
 
         for (CityTacticsMap::const_iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
         {
-            if (iter->second->areDependenciesSatisfied(ignoreFlags))
+            if (iter->second->areDependenciesSatisfied(depTacticFlags))
             {
                 return true;
             }
@@ -380,7 +386,7 @@ namespace AltAI
         return techDependencies_;
     }
 
-    void UnitTactics::apply(TacticSelectionDataMap& tacticSelectionDataMap, int ignoreFlags)
+    void UnitTactics::apply(TacticSelectionDataMap& tacticSelectionDataMap, int depTacticFlags)
     {
         const CvCity* pCity = NULL;
         if (!cityTactics_.empty())
@@ -393,8 +399,9 @@ namespace AltAI
             return;
         }
 
-        if (ignoreFlags & IDependentTactic::Ignore_Techs)
+        if (depTacticFlags & IDependentTactic::Tech_Dep)
         {
+            PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
             DependencyItemSet techDeps;
             for (size_t i = 0, count = techDependencies_.size(); i < count; ++i)
             {
@@ -404,23 +411,23 @@ namespace AltAI
 
             // can't build, but no tech required - get resource deps and check if any of them are techs we don't have yet
             // if so - add the unit as dep on that tech
-            if (techDeps.empty() && !areDependenciesSatisfied(*gGlobals.getGame().getAltAI()->getPlayer(playerType_), IDependentTactic::Ignore_None))
+            if (techDeps.empty() && !areDependenciesSatisfied(*pPlayer, IDependentTactic::Ignore_None))
             {
                 PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType_);
 
-                if (areDependenciesSatisfied(*gGlobals.getGame().getAltAI()->getPlayer(playerType_), ignoreFlags))
+                if (areDependenciesSatisfied(*pPlayer, depTacticFlags))
                 {
-                    const std::vector<DependencyItem>& thisDepBonusItems = cityTactics_.begin()->second->getDepItems(IDependentTactic::Ignore_Resources);
+                    const std::vector<DependencyItem>& thisDepBonusItems = cityTactics_.begin()->second->getDepItems(IDependentTactic::Resource_Dep);
 
                     for (size_t j = 0, depItemCount = thisDepBonusItems.size(); j < depItemCount; ++j)
                     {
-                        // todo - maybe use Ignore_Resource_Techs flag instead to allow 
+                        // todo - maybe use Resource_Tech_Dep flag instead to allow 
                         // finer distinction between needing the tech for the unit and the tech(s) for (a) required resource(s)
                         TechTypes resourceRevealTech = getTechForResourceReveal(pPlayer->getAnalysis()->getResourceInfo((BonusTypes)thisDepBonusItems[j].second));
                         if (resourceRevealTech != NO_TECH && pPlayer->getAnalysis()->getTechResearchDepth(resourceRevealTech) > 0)
                         {
                             techDeps.insert(DependencyItem(ResearchTechDependency::ID, resourceRevealTech));
-                            ignoreFlags |= IDependentTactic::Ignore_Resources;
+                            depTacticFlags |= IDependentTactic::Resource_Dep;
                         }
                     }
                 }
@@ -430,7 +437,7 @@ namespace AltAI
             {
                 for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
                 {
-                    iter->second->apply(tacticSelectionDataMap[techDeps], ignoreFlags);
+                    iter->second->apply(tacticSelectionDataMap[techDeps], depTacticFlags);
                 }
             }
         }
@@ -438,7 +445,7 @@ namespace AltAI
         {
             for (CityTacticsMap::iterator iter(cityTactics_.begin()), endIter(cityTactics_.end()); iter != endIter; ++iter)
             {
-                iter->second->apply(tacticSelectionDataMap, ignoreFlags);
+                iter->second->apply(tacticSelectionDataMap, depTacticFlags);
             }
         }
     }
@@ -502,7 +509,7 @@ namespace AltAI
 
     void UnitTactics::write(FDataStreamBase* pStream) const
     {
-        pStream->Write(ID);
+        pStream->Write(UnitTacticsID);
         pStream->Write(unitType_);
         pStream->Write(playerType_);
 

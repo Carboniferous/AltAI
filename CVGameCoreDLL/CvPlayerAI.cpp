@@ -9209,6 +9209,15 @@ CivicTypes CvPlayerAI::AI_bestCivic(CivicOptionTypes eCivicOption) const
 	iBestValue = MIN_INT;
 	eBestCivic = NO_CIVIC;
 
+    if (isUsingAltAI())
+    {
+        eBestCivic = gGlobals.getGame().getAltAI()->getPlayer(getID())->chooseCivic(eCivicOption);
+        if (eBestCivic != NO_CIVIC)
+        {
+            return eBestCivic;
+        }
+    }
+
 	for (iI = 0; iI < GC.getNumCivicInfos(); iI++)
 	{
 		if (GC.getCivicInfo((CivicTypes)iI).getCivicOptionType() == eCivicOption)

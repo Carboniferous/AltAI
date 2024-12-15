@@ -4,6 +4,8 @@
 
 namespace AltAI
 {
+    class City;
+
     std::string getLogDirectory();
 
     PlotYield getSpecialistYield(const CvPlayer& player, SpecialistTypes specialistType);
@@ -34,6 +36,9 @@ namespace AltAI
 
     std::string safeGetCityName(IDInfo city);
     std::string safeGetCityName(const CvCity* pCity);
+    std::string safeGetCityName(const City& city);
+
+    std::string safeGetPlayerName(PlayerTypes playerType);
 
     std::string getUnitAIString(UnitAITypes eUnitAI);
     std::string getMissionAIString(MissionAITypes eMissionAI);

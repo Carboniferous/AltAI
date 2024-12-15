@@ -153,6 +153,10 @@ namespace AltAI
 
         void operator() (const UnitInfo::ReligionNode& node)
         {
+            if (!node.religionSpreads.empty())
+            {
+                pTactic_->addTactic(ICityUnitTacticPtr(new SpreadReligionUnitTactic(node.religionSpreads)));
+            }
         }
         
         void operator() (const UnitInfo::MiscAbilityNode& node)
@@ -234,7 +238,7 @@ namespace AltAI
                 boost::apply_visitor(*this, node.nodes[i]);
             }            
         }
-       
+
         void operator() (const UnitInfo::MiscAbilityNode& node)
         {
             if (node.canBuildSpecialBuilding)
@@ -405,19 +409,25 @@ namespace AltAI
             while (CvCity* pCity = iter())
             {
                 const City& city = player.getCity(pCity);
+#ifdef ALTAI_DEBUG
+                std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
+#endif
                 // this does the area check for units which have min area reqs
                 if (!couldEverConstructUnit(player, city, pUnitInfo, lookAheadDepth))
                 {
 #ifdef ALTAI_DEBUG
-                    CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Skipping tactic for unit: " << unitInfo.getType() << " for city: " << narrow(pCity->getName());
+                    os << "\n" << __FUNCTION__ << " Skipping tactic for unit: " << unitInfo.getType() << " for city: " << narrow(pCity->getName());
 #endif
                     continue;
                 }
 #ifdef ALTAI_DEBUG
-                CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__ << " Adding tactic for unit: " << unitInfo.getType() << " for city: " << narrow(pCity->getName());
+                os << "\n" << __FUNCTION__ << " Adding tactic for unit: " << unitInfo.getType() << " for city: " << narrow(pCity->getName());
 #endif
                 
-                pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, city, pUnitInfo));               
+                pTactic->addCityTactic(pCity->getIDInfo(), makeCityUnitTactics(player, city, pUnitInfo));
+#ifdef ALTAI_DEBUG
+                pTactic->debug(os);
+#endif
             }
 
             MakeUnitTacticsDependenciesVisitor dependentTacticsVisitor(player, NULL);

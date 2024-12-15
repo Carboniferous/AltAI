@@ -35,6 +35,12 @@
 #define NUM_COMMERCE_TYPES 4
 #define NUM_YIELD_TYPES 3
 
+#ifdef ALTAI_DEBUG
+    #define DEBUG_LOG_STREAM(x) std::ostream& x
+#else
+    #define DEBUG_LOG_STREAM(x) (void*)
+#endif
+
 namespace boost
 {
     template <typename T, std::size_t N> std::ostream& operator << (std::ostream& os, boost::array<T, N> arr)
@@ -605,6 +611,8 @@ namespace AltAI
 
     typedef std::set<const CvPlot*, CvPlotOrderF> PlotSet;
     typedef std::map<const CvPlot*, std::vector<const CvUnit*>, CvPlotOrderF> PlotUnitsMap;
+	struct UnitData;
+    typedef std::map<const CvPlot*, std::vector<UnitData>, CvPlotOrderF> PlotUnitDataMap;
 
     struct LessThanZero
     {
@@ -742,5 +750,22 @@ namespace AltAI
     enum BuildQueueTypes
     {
         NoItem = -1, BuildingItem, UnitItem, ProjectItem, ProcessItem
+    };
+
+    typedef std::pair<BuildQueueTypes, int> BuildQueueItem;
+
+    inline bool operator < (const BuildQueueItem& first, const BuildQueueItem& second)
+    {
+        return first.first == second.first ? first.second < second.second : first.first < second.first;
+    }
+
+    struct IsBuildItemType
+    {
+        explicit IsBuildItemType(BuildQueueTypes buildQueueType_) : buildQueueType(buildQueueType_) {}
+        bool operator() (const BuildQueueItem& buildQueueItem) const
+        {
+            return buildQueueItem.first == buildQueueType;
+        }
+        BuildQueueTypes buildQueueType;
     };
 }

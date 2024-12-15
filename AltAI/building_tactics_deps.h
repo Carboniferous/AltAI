@@ -12,10 +12,11 @@ namespace AltAI
         explicit ResearchTechDependency(TechTypes techType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
-        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool required(const CvCity* pCity, int depTacticFlags) const;
+        virtual bool required(const Player& player, int depTacticFlags) const;
         virtual bool removeable() const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual bool matches(int depTacticFlags) const;
+        virtual BuildQueueItem getBuildItem() const;
         virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
@@ -24,7 +25,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int ID = IDependentTactic::ResearchTechDependencyID;
 
         TechTypes getResearchTech() const { return techType_; }
 
@@ -39,10 +40,11 @@ namespace AltAI
         explicit CityBuildingDependency(BuildingTypes buildingType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
-        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool required(const CvCity* pCity, int depTacticFlags) const;
+        virtual bool required(const Player& player, int depTacticFlags) const;
         virtual bool removeable() const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual bool matches(int depTacticFlags) const;
+        virtual BuildQueueItem getBuildItem() const;
         virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
@@ -50,7 +52,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 1;
+        static const int ID = IDependentTactic::CityBuildingDependencyID;
 
     private:
         BuildingTypes buildingType_;
@@ -63,10 +65,11 @@ namespace AltAI
         CivBuildingDependency(BuildingTypes buildingType, int count, BuildingTypes sourcebuildingType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
-        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool required(const CvCity* pCity, int depTacticFlags) const;
+        virtual bool required(const Player& player, int depTacticFlags) const;
         virtual bool removeable() const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual bool matches(int depTacticFlags) const;
+        virtual BuildQueueItem getBuildItem() const;
         virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
@@ -74,7 +77,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 2;
+        static const int ID = IDependentTactic::CivBuildingDependencyID;
 
     private:        
         BuildingTypes buildingType_, sourceBuildingType_;
@@ -88,10 +91,11 @@ namespace AltAI
         explicit ReligiousDependency(ReligionTypes religionType, UnitTypes unitType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
-        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool required(const CvCity* pCity, int depTacticFlags) const;
+        virtual bool required(const Player& player, int depTacticFlags) const;
         virtual bool removeable() const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual bool matches(int depTacticFlags) const;
+        virtual BuildQueueItem getBuildItem() const;
         virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
@@ -99,7 +103,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 3;
+        static const int ID = IDependentTactic::ReligiousDependencyID;
 
     private:        
         ReligionTypes religionType_;
@@ -112,10 +116,11 @@ namespace AltAI
         StateReligionDependency() {}
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
-        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool required(const CvCity* pCity, int depTacticFlags) const;
+        virtual bool required(const Player& player, int depTacticFlags) const;
         virtual bool removeable() const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual bool matches(int depTacticFlags) const;
+        virtual BuildQueueItem getBuildItem() const;
         virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
@@ -123,7 +128,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 4;
+        static const int ID = IDependentTactic::StateReligionDependencyID;
 
     private:        
     };
@@ -137,10 +142,11 @@ namespace AltAI
             const std::map<BonusTypes, TechTypes>& bonusTypesRevealTechsMap, UnitTypes unitType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
-        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool required(const CvCity* pCity, int depTacticFlags) const;
+        virtual bool required(const Player& player, int depTacticFlags) const;
         virtual bool removeable() const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual bool matches(int depTacticFlags) const;
+        virtual BuildQueueItem getBuildItem() const;
         virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
@@ -148,7 +154,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 5;
+        static const int ID = IDependentTactic::CityBonusDependencyID;
 
     private:        
         std::vector<BonusTypes> andBonusTypes_, orBonusTypes_;
@@ -163,10 +169,11 @@ namespace AltAI
         explicit CivUnitDependency(UnitTypes unitType);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
-        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool required(const CvCity* pCity, int depTacticFlags) const;
+        virtual bool required(const Player& player, int depTacticFlags) const;
         virtual bool removeable() const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual bool matches(int depTacticFlags) const;
+        virtual BuildQueueItem getBuildItem() const;
         virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
@@ -174,23 +181,24 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 6;
+        static const int ID = IDependentTactic::CivUnitDependencyID;
 
     private:        
         UnitTypes unitType_;
     };
 
-    class ResouceProductionBonusDependency : public IDependentTactic
+    class ResourceProductionBonusDependency : public IDependentTactic
     {
     public:
-        ResouceProductionBonusDependency() : bonusType_(NO_BONUS), productionModifier_(0) {}
-        ResouceProductionBonusDependency(BonusTypes bonusType, int productionModifier);
+        ResourceProductionBonusDependency() : bonusType_(NO_BONUS), productionModifier_(0) {}
+        ResourceProductionBonusDependency(BonusTypes bonusType, int productionModifier);
         virtual void apply(const CityDataPtr& pCityData);
         virtual void remove(const CityDataPtr& pCityData);
-        virtual bool required(const CvCity* pCity, int ignoreFlags) const;
-        virtual bool required(const Player& player, int ignoreFlags) const;
+        virtual bool required(const CvCity* pCity, int depTacticFlags) const;
+        virtual bool required(const Player& player, int depTacticFlags) const;
         virtual bool removeable() const;
-        virtual std::pair<BuildQueueTypes, int> getBuildItem() const;
+        virtual bool matches(int depTacticFlags) const;
+        virtual BuildQueueItem getBuildItem() const;
         virtual std::vector<DependencyItem> getDependencyItems() const;
 
         virtual void debug(std::ostream& os) const;
@@ -198,7 +206,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 7;
+        static const int ID = IDependentTactic::ResouceProductionBonusDependencyID;
 
     private:        
         BonusTypes bonusType_;

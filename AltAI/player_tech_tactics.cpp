@@ -49,7 +49,7 @@ namespace AltAI
 
     void PlayerTechTactics::write(FDataStreamBase* pStream) const
     {
-        pStream->Write(ID);
+        pStream->Write(PlayerTechTacticsID);
 
         pStream->Write(techType_);
         pStream->Write(playerType_);

@@ -70,6 +70,7 @@ namespace AltAI
         }
 
         void applyCombatTactic(const CityUnitTacticsPtr& pCityUnitTactics, 
+            const ICityUnitTactic* pUnitTactic,
             std::set<UnitTacticValue>& unitSelectionData, 
             IDInfo cityID, 
             const UnitData::CombatDetails& combatDetails,
@@ -110,7 +111,7 @@ namespace AltAI
                 const int level = player.getAnalysis()->getUnitLevel(experience);
                 tacticValue.level = level;
 
-                UnitData ourUnit(pCityUnitTactics->getUnitType());
+                UnitData ourUnit(unitType);
                 // todo - get any free promotions from city data unit helper
                 player.getAnalysis()->getUnitAnalysis()->promote(ourUnit, combatDetails, isAttacker, level, Promotions());
                 std::vector<int> odds = player.getAnalysis()->getUnitAnalysis()->getOdds(ourUnit, possibleCombatUnits, 0, combatDetails, isAttacker);
@@ -119,7 +120,8 @@ namespace AltAI
                 {
                     std::ostream& os = CivLog::getLog(*player.getCvPlayer())->getStream();
                     os << "\n" << unitInfo.getType();
-                    ourUnit.debugPromotions(os);
+                    pUnitTactic->debug(os);
+
                     os << "\n\t " << (isAttacker ? "attack" : "defence") << " odds =";
                     for (size_t i = 0, count = odds.size(); i < count; ++i)
                     {
@@ -141,7 +143,7 @@ namespace AltAI
 
                 UnitValueHelper unitValueHelper;
                 UnitValueHelper::MapT unitValueData;
-                unitValueHelper.addMapEntry(unitValueData, pCityUnitTactics->getUnitType(), possibleCombatUnits, odds);
+                unitValueHelper.addMapEntry(unitValueData, unitType, possibleCombatUnits, odds);
 
                 tacticValue.unitAnalysisValue = unitValueHelper.getValue(unitValueData[pCityUnitTactics->getUnitType()]);
 
@@ -165,7 +167,7 @@ namespace AltAI
     {
         UnitData::CombatDetails combatDetails;
         combatDetails.flags = UnitData::CombatDetails::CityAttack;
-        applyCombatTactic(pCityUnitTactics, selectionData.cityDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
+        applyCombatTactic(pCityUnitTactics, this, selectionData.cityDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
     }
 
     std::vector<XYCoords> CityDefenceUnitTactic::getPossibleTargets(Player& player, IDInfo city)
@@ -217,7 +219,7 @@ namespace AltAI
         combatDetails.cultureDefence = gGlobals.getCultureLevelInfo(pCityUnitTactics->getCityData()->getCultureHelper()->getCultureLevel()).getCityDefenseModifier();
         combatDetails.buildingDefence = pCityUnitTactics->getCityData()->getUnitHelper()->getBuildingDefence();
 
-        applyCombatTactic(pCityUnitTactics, selectionData.thisCityDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
+        applyCombatTactic(pCityUnitTactics, this, selectionData.thisCityDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
     }
 
     std::vector<XYCoords> ThisCityDefenceUnitTactic::getPossibleTargets(Player& player, IDInfo city)
@@ -254,7 +256,7 @@ namespace AltAI
     {
         UnitData::CombatDetails combatDetails;
         combatDetails.flags = UnitData::CombatDetails::CityAttack;
-        applyCombatTactic(pCityUnitTactics, selectionData.cityAttackUnits, pCityUnitTactics->getCity(), combatDetails, true);
+        applyCombatTactic(pCityUnitTactics, this, selectionData.cityAttackUnits, pCityUnitTactics->getCity(), combatDetails, true);
     }
 
     std::vector<XYCoords> CityAttackUnitTactic::getPossibleTargets(Player& player, IDInfo city)
@@ -292,7 +294,7 @@ namespace AltAI
     {
         UnitData::CombatDetails combatDetails;
         combatDetails.flags = UnitData::CombatDetails::CityAttack;
-        applyCombatTactic(pCityUnitTactics, selectionData.collateralUnits, pCityUnitTactics->getCity(), combatDetails, true);
+        applyCombatTactic(pCityUnitTactics, this, selectionData.collateralUnits, pCityUnitTactics->getCity(), combatDetails, true);
     }
 
     std::vector<XYCoords> CollateralUnitTactic::getPossibleTargets(Player& player, IDInfo city)
@@ -329,7 +331,7 @@ namespace AltAI
     void FieldDefenceUnitTactic::apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData)
     {
         UnitData::CombatDetails combatDetails;
-        applyCombatTactic(pCityUnitTactics, selectionData.fieldDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
+        applyCombatTactic(pCityUnitTactics, this, selectionData.fieldDefenceUnits, pCityUnitTactics->getCity(), combatDetails, false);
     }
 
     std::vector<XYCoords> FieldDefenceUnitTactic::getPossibleTargets(Player& player, IDInfo city)
@@ -366,7 +368,7 @@ namespace AltAI
     void FieldAttackUnitTactic::apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData)
     {
         UnitData::CombatDetails combatDetails;
-        applyCombatTactic(pCityUnitTactics, selectionData.fieldAttackUnits, pCityUnitTactics->getCity(), combatDetails, true);
+        applyCombatTactic(pCityUnitTactics, this, selectionData.fieldAttackUnits, pCityUnitTactics->getCity(), combatDetails, true);
     }
 
     std::vector<XYCoords> FieldAttackUnitTactic::getPossibleTargets(Player& player, IDInfo city)
@@ -559,6 +561,7 @@ namespace AltAI
             WorkerUnitValue unitValue;
             unitValue.unitType = pCityUnitTactics->getUnitType();
             unitValue.nTurns = estimatedTurns;
+            unitValue.accessibleSubAreas = city.getAccessibleSubAreas(gGlobals.getUnitInfo(unitValue.unitType).getDomainType() == DOMAIN_SEA);
 
             if (gGlobals.getUnitInfo(pCityUnitTactics->getUnitType()).isFoodProduction())
             {
@@ -706,7 +709,7 @@ namespace AltAI
     void SeaAttackUnitTactic::apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData)
     {
         UnitData::CombatDetails combatDetails;
-        applyCombatTactic(pCityUnitTactics, selectionData.seaCombatUnits, pCityUnitTactics->getCity(), combatDetails, true);
+        applyCombatTactic(pCityUnitTactics, this, selectionData.seaCombatUnits, pCityUnitTactics->getCity(), combatDetails, true);
     }
 
     std::vector<XYCoords> SeaAttackUnitTactic::getPossibleTargets(Player& player, IDInfo city)
@@ -819,6 +822,66 @@ namespace AltAI
     void ScoutUnitTactic::read(FDataStreamBase* pStream)
     {
         readSet<PromotionTypes, int>(pStream, promotions_);
+    }
+
+
+    SpreadReligionUnitTactic::SpreadReligionUnitTactic(const std::vector<std::pair<ReligionTypes, int> >& religionSpreads)
+        : religionSpreads_(religionSpreads)
+    {
+    }
+
+    void SpreadReligionUnitTactic::apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData)
+    {
+        IDInfo cityInfo = pCityUnitTactics->getCity();
+        Player& player = *gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner);
+        City& city = gGlobals.getGame().getAltAI()->getPlayer(cityInfo.eOwner)->getCity(cityInfo.iID);
+        UnitTypes unitType = pCityUnitTactics->getUnitType();
+        const CvUnitInfo& unitInfo = gGlobals.getUnitInfo(unitType);
+
+        int estimatedTurns = city.getBaseOutputProjection().getExpectedTurnBuilt(player.getCvPlayer()->getProductionNeeded(unitType), 
+            city.getCityData()->getModifiersHelper()->getUnitProductionModifier(unitType),
+            city.getCityData()->getModifiersHelper()->getTotalYieldModifier(*city.getCityData())[YIELD_PRODUCTION]);
+
+        if (estimatedTurns < player.getAnalysis()->getNumSimTurns())
+        {
+            ReligionUnitValue unitValue;
+            unitValue.unitType = pCityUnitTactics->getUnitType();
+            unitValue.nTurns = estimatedTurns;
+            selectionData.spreadReligionUnits[pCityUnitTactics->getUnitType()] = unitValue;
+        }
+        else
+        {
+            selectionData.spreadReligionUnits.erase(pCityUnitTactics->getUnitType());
+        }
+    }
+
+    std::vector<XYCoords> SpreadReligionUnitTactic::getPossibleTargets(Player& player, IDInfo city)
+    {
+        // todo - return cities in area which this unit can spread its religion to
+        const CvCity* pCity = getCity(city);
+        return std::vector<XYCoords>(1, pCity->plot()->getCoords());
+    }
+
+    void SpreadReligionUnitTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tSpread religion with unit tactic ";
+        for (size_t i = 0, count = religionSpreads_.size(); i < count; ++i)
+        {
+            os << gGlobals.getReligionInfo(religionSpreads_[i].first).getType() << ", base prob: " << religionSpreads_[i].second;
+        }
+#endif
+    }    
+
+    void SpreadReligionUnitTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+        writePairVector(pStream, religionSpreads_);
+    }
+
+    void SpreadReligionUnitTactic::read(FDataStreamBase* pStream)
+    {
+        readPairVector<ReligionTypes, int, int>(pStream, religionSpreads_);
     }
 
 
@@ -1032,4 +1095,6 @@ namespace AltAI
         pStream->Read(&baseHurry_);
         pStream->Read(&multiplier_);
     }
+
+
 }

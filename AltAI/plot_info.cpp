@@ -173,23 +173,19 @@ namespace AltAI
             {
                 isValid = true;
             }
-
-            if (improvementInfo.isFreshWaterMakesValid() && pPlot->isFreshWater())
+            else if (improvementInfo.isFreshWaterMakesValid() && pPlot->isFreshWater())
             {
                 isValid = true;
             }
-
-            if (improvementInfo.isRiverSideMakesValid() && requestData.isRiver)
+            else if (improvementInfo.isRiverSideMakesValid() && requestData.isRiver)
             {
                 isValid = true;
             }
-
-            if (improvementInfo.getTerrainMakesValid(requestData.terrainType))
+            else if (improvementInfo.getTerrainMakesValid(requestData.terrainType))
             {
                 isValid = true;
             }
-
-            if (requestData.featureType != NO_FEATURE && improvementInfo.getFeatureMakesValid(requestData.featureType))
+            else if (requestData.featureType != NO_FEATURE && improvementInfo.getFeatureMakesValid(requestData.featureType))
             {
                 isValid = true;
             }

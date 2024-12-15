@@ -13,6 +13,25 @@ namespace AltAI
 
     struct ProjectionLadder
     {
+        struct PlotDiff
+        {
+            PlotDiff() : improvementType(NO_IMPROVEMENT), isWorked(false), wasWorked(false)
+            {
+            }
+
+            PlotDiff(const PlotData& plotData, bool isNewWorked_, bool isOldWorked_);
+
+            void debug(std::ostream& os) const;
+
+            XYCoords coords;
+            ImprovementTypes improvementType;
+            PlotYield plotYield;
+            TotalOutput actualOutput;
+            bool isWorked, wasWorked;
+        };
+
+        typedef std::list<PlotDiff> PlotDiffList;
+
         struct ConstructedUnit
         {
             ConstructedUnit() : unitType(NO_UNIT), turns(-1), level(0), experience(0)
@@ -62,6 +81,7 @@ namespace AltAI
             void read(FDataStreamBase* pStream);
         };
         std::vector<Entry> entries;
+        std::vector<PlotDiffList> workedPlotDiffs;
 
         TotalOutput getOutput() const;
         TotalOutput getProcessOutput() const;
@@ -77,6 +97,7 @@ namespace AltAI
         int getExpectedTurnBuilt(int cost, int itemProductionModifier, int baseModifier) const;
 
         void debug(std::ostream& os) const;
+        void debugDiffs(std::ostream& os) const;
 
         void write(FDataStreamBase* pStream) const;
         void read(FDataStreamBase* pStream);

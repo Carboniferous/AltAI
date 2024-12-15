@@ -88,7 +88,7 @@ namespace AltAI
         pImpl_->updateCity(pCity, remove);
     }
 
-        bool getSpecialistBuild(const PlayerTactics& playerTactics, CvUnitAI* pUnit)
+    bool getSpecialistBuild(const PlayerTactics& playerTactics, CvUnitAI* pUnit)
     {
 #ifdef ALTAI_DEBUG
         std::ostream& os = CivLog::getLog(*playerTactics.player.getCvPlayer())->getStream();

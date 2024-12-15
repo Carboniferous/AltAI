@@ -3552,6 +3552,14 @@ void CvUnitAI::AI_missionaryMove()
 {
 	PROFILE_FUNC();
 
+	if (GET_PLAYER(getOwnerINLINE()).isUsingAltAI())
+	{
+		if (AltAI::doUnitAnalysis(*gGlobals.getGame().getAltAI()->getPlayer(getOwnerINLINE()), this))
+		{
+			return;
+		}
+	}
+
 	if (AI_spreadReligion())
 	{
 		return;

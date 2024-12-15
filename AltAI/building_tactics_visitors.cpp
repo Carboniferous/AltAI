@@ -1,7 +1,7 @@
 #include "AltAI.h"
 
 #include "./building_tactics_visitors.h"
-#include "./building_info_visitors.h"
+#include "./building_info_construct_visitors.h"
 #include "./building_tactics_items.h"
 #include "./city_building_tactics.h"
 #include "./building_tactics_deps.h"
@@ -247,7 +247,7 @@ namespace AltAI
         {
             if (node.prodModifier != 0)
             {
-                depItems_.push_back(IDependentTacticPtr(new ResouceProductionBonusDependency(node.bonusType, node.prodModifier)));
+                depItems_.push_back(IDependentTacticPtr(new ResourceProductionBonusDependency(node.bonusType, node.prodModifier)));
             }
             if (node.freeBonusCount > 0)
             {
@@ -292,6 +292,15 @@ namespace AltAI
             if (node.globalFreeExperience != 0)
             {
                 isGlobal_ = true;
+            }
+        }
+
+        void operator() (const BuildingInfo::UnitNode& node)
+        {
+            if (node.enabledUnitType != NO_UNIT)  // should always be true
+            {
+                tacticsItems_.push_back(ICityBuildingTacticPtr(
+                    new CanTrainUnitBuildingTactic(node.enabledUnitType)));
             }
         }
 
@@ -345,7 +354,7 @@ namespace AltAI
                         depItems_.push_back(IDependentTacticPtr(new ReligiousDependency(node.prereqReligion, unitType)));
                         break;
                     }
-                }                
+                }
             }
         }
 
@@ -585,7 +594,7 @@ namespace AltAI
                 {
 #ifdef ALTAI_DEBUG
                     CivLog::getLog(*player.getCvPlayer())->getStream() << "\n" << __FUNCTION__
-                        << " Adding tactic for building: " << gGlobals.getBuildingInfo(pBuildingInfo->getBuildingType()).getType();
+                        << " Adding tactic for building: " << gGlobals.getBuildingInfo(pBuildingInfo->getBuildingType()).getType() << " for city: " << safeGetCityName(pCity);
 #endif
                     pTactic->addCityTactic(pCity->getIDInfo(), makeCityBuildingTactics(player, player.getCity(pCity), pBuildingInfo));
                 }

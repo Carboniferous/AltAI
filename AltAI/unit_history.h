@@ -2,20 +2,17 @@
 
 #include "./utils.h"
 
-#include "../CvGameCoreDLL/CvUnitAI.h"
-
 namespace AltAI
 {
     struct UnitHistory
     {
-        explicit UnitHistory(const CvUnitAI* pUnit);
+        UnitHistory() {}
+        UnitHistory(const IDInfo& unit_, XYCoords coords);
 
-        UnitTypes unitType;
-        int unitID;
+        void write(FDataStreamBase* pStream) const;
+        void read(FDataStreamBase* pStream);
 
-        bool operator < (const UnitHistory& other) const
-        {
-            return unitID < other.unitID;
-        }
+        IDInfo unit;
+        std::list<std::pair<int, XYCoords> > locationHistory;
     };
 }

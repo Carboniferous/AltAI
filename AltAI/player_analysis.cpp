@@ -12,6 +12,7 @@
 #include "./project_info_visitors.h"
 #include "./spec_info_visitors.h"
 #include "./player_analysis.h"
+#include "./religion_tactics.h"
 #include "./military_tactics.h"
 #include "./map_analysis.h"
 #include "./worker_tactics.h"
@@ -58,9 +59,10 @@ namespace AltAI
         pMapDelta_ = boost::shared_ptr<PlotUpdates>(new PlotUpdates(player_));
         playerTactics_ = boost::shared_ptr<PlayerTactics>(new PlayerTactics(player_));
         pWorkerAnalysis_ = boost::shared_ptr<WorkerAnalysis>(new WorkerAnalysis(player));
-        pMilitaryAnalysis_ = boost::shared_ptr<MilitaryAnalysis>(new MilitaryAnalysis(player));
+        pMilitaryAnalysis_ = MilitaryAnalysisPtr(new MilitaryAnalysis(player));
         pUnitAnalysis_ = boost::shared_ptr<UnitAnalysis>(new UnitAnalysis(player_));
         pGreatPeopleAnalysis_ = boost::shared_ptr<GreatPeopleAnalysis>(new GreatPeopleAnalysis(player_));
+        pReligionAnalysis_ = boost::shared_ptr<ReligionAnalysis>(new ReligionAnalysis(player_));
     }
 
     // init 'static' data, i.e. xml based stuff
@@ -86,6 +88,7 @@ namespace AltAI
         pUnitAnalysis_->debug();
 
         playerTactics_->init();
+        pReligionAnalysis_->init();
     }
 
     void PlayerAnalysis::analyseUnits_()
@@ -624,6 +627,11 @@ namespace AltAI
             }
         }
         return techs;
+    }
+
+    CivicTypes PlayerAnalysis::chooseCivic(CivicOptionTypes civicOptionType)
+    {
+        return playerTactics_->chooseCivic(civicOptionType);
     }
 
     int PlayerAnalysis::getNumSimTurns() const

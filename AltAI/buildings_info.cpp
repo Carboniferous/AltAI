@@ -219,6 +219,21 @@ namespace AltAI
             }
         }
 
+        void getUnitNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo, const BuildingInfoRequestData& requestData)
+        {
+            for (int i = 0, count = gGlobals.getNumUnitInfos(); i < count; ++i)
+            {
+                const CvUnitInfo& unitInfo = gGlobals.getUnitInfo((UnitTypes)i);
+                BuildingTypes preReqBuilding = (BuildingTypes)unitInfo.getPrereqBuilding();
+                if (preReqBuilding == requestData.buildingType)
+                {
+                    BuildingInfo::UnitNode node;
+                    node.enabledUnitType = (UnitTypes)i;
+                    baseNode.nodes.push_back(node);
+                }
+            }
+        }
+
         void getCityDefenceNode(BuildingInfo::BaseNode& baseNode, const CvBuildingInfo& buildingInfo)
         {
             BuildingInfo::CityDefenceNode node;
@@ -462,6 +477,11 @@ namespace AltAI
                 node.buildConditions.push_back(requiredBuildings);
             }
 
+            if (buildingInfo.getHolyCity() != NO_RELIGION)
+            {
+                node.buildConditions.push_back(BuildingInfo::IsHolyCity((ReligionTypes)buildingInfo.getHolyCity()));
+            }
+
             getYieldNode(node, buildingInfo);
             getCommerceNode(node, buildingInfo);
             getTradeNode(node, buildingInfo);
@@ -472,6 +492,7 @@ namespace AltAI
             getMiscEffectNode(node, buildingInfo, requestData);
             getCityDefenceNode(node, buildingInfo);
             getUnitExpNode(node, buildingInfo);
+            getUnitNode(node, buildingInfo, requestData);
             getReligionNode(node, buildingInfo);
             getHurryNode(node, buildingInfo);
             getAreaEffectNode(node, buildingInfo);

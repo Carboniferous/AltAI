@@ -2,6 +2,7 @@
 
 #include "./helper_fns.h"
 #include "./iters.h"
+#include "./city.h"
 
 namespace AltAI
 {
@@ -303,15 +304,7 @@ namespace AltAI
 
     std::string safeGetCityName(IDInfo city)
     {
-        const CvCity* pCity = ::getCity(city);
-        if (pCity)
-        {
-            return narrow(pCity->getName());
-        }
-        else
-        {
-            return "none?";
-        }
+        return safeGetCityName(::getCity(city));
     }
 
     std::string safeGetCityName(const CvCity* pCity)
@@ -324,6 +317,16 @@ namespace AltAI
         {
             return "none";
         }
+    }
+
+    std::string safeGetCityName(const City& city)
+    {
+        return safeGetCityName(city.getCvCity());
+    }
+
+    std::string safeGetPlayerName(PlayerTypes playerType)
+    {
+        return narrow(CvPlayerAI::getPlayer(playerType).getName());
     }
 
     std::string getUnitAIString(UnitAITypes eUnitAI)

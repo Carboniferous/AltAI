@@ -10,10 +10,9 @@
 #include "./iters.h"
 #include "./helper_fns.h"
 #include "./city_optimiser.h"
-#include "./building_info_visitors.h"
-#include "./buildings_info.h"
 #include "./plot_info_visitors.h"
 #include "./tech_info_visitors.h"
+#include "./building_info_construct_visitors.h"
 #include "./city_simulator.h"
 #include "./irrigatable_area.h"
 #include "./civ_helper.h"
@@ -121,7 +120,7 @@ namespace AltAI
         PlayerTypes playerType = pCity->getOwner();
         PlayerPtr pPlayer = gGlobals.getGame().getAltAI()->getPlayer(playerType);
 
-        std::vector<ConditionalPlotYieldEnchancingBuilding> conditionalEnhancements = GameDataAnalysis::getInstance()->getConditionalPlotYieldEnhancingBuildings(playerType, pCity);        
+        CityConditionYieldHelper conditionalYieldHelper(playerType);
         
         //DotMapItem dotMapItem(XYCoords(pCity->getX(), pCity->getY()), pCity->plot()->getYield());
         boost::shared_ptr<MapAnalysis> pMapAnalysis = gGlobals.getGame().getAltAI()->getPlayer(playerType)->getAnalysis()->getMapAnalysis();
@@ -141,7 +140,7 @@ namespace AltAI
                 {
                     // todo - allow global buildings which change yield to be counted here (e.g. colossus)
                     // this seems to include potential buildings - probably should just be actual
-                    PlotYield extraYield = getExtraConditionalYield(dotMapItem.coords, plotIter->coords, conditionalEnhancements);
+                    PlotYield extraYield = conditionalYieldHelper.getExtraConditionalYield(dotMapItem.coords, plotIter->coords);
                     if (!isEmpty(extraYield))
                     {
                         for (size_t i = 0, count = plotData.possibleImprovements.size(); i < count; ++i)
@@ -256,7 +255,7 @@ namespace AltAI
                 os << " yieldTypes[" << i << "] = " << yieldTypes[i];
             }*/
         }
-        dotMapItem.debugOutputs(*gGlobals.getGame().getAltAI()->getPlayer(city_.eOwner), CityLog::getLog(pCity)->getStream());
+        dotMapItem.debugOutputs(*pPlayer->getCvPlayer(), CityLog::getLog(pCity)->getStream());
 #endif
 
         improvements_.clear();
@@ -550,7 +549,7 @@ namespace AltAI
         }
         else
         {
-            return boost::make_tuple(XYCoords(-1, -1), NO_FEATURE, NO_IMPROVEMENT, 0);
+            return boost::make_tuple(XYCoords(), NO_FEATURE, NO_IMPROVEMENT, 0);
         }
     }
 
@@ -927,7 +926,7 @@ namespace AltAI
 
         std::map<int, XYCoords> pathCostMap;
         int lowestCost = MAX_INT, shortestLength = MAX_INT;
-        XYCoords bestCoords(-1, -1);
+        XYCoords bestCoords;
 
         for (int i = 1; i <= MAX_IRRIGATION_CHAIN_SEARCH_RADIUS; ++i)
         {
@@ -1116,7 +1115,7 @@ namespace AltAI
                 pNode = pNode->m_pParent;
             }
         }
-        return boost::make_tuple(MAX_INT, MAX_INT, XYCoords(-1, -1));
+        return boost::make_tuple(MAX_INT, MAX_INT, XYCoords());
     }
 
     void CityImprovementManager::write(FDataStreamBase* pStream) const

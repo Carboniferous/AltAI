@@ -21,7 +21,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int ID = ICityUnitTactic::CityDefenceUnitTacticID;
 
     private:
         Promotions promotions_;
@@ -40,7 +40,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 1;
+        static const int ID = ICityUnitTactic::ThisCityDefenceUnitTacticID;
 
     private:
         Promotions promotions_;
@@ -59,7 +59,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 2;
+        static const int ID = ICityUnitTactic::CityAttackUnitTacticID;
 
     private:
         Promotions promotions_;
@@ -78,7 +78,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 3;
+        static const int ID = ICityUnitTactic::CollateralUnitTacticID;
 
     private:
         Promotions promotions_;
@@ -97,7 +97,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 4;
+        static const int ID = ICityUnitTactic::FieldDefenceUnitTacticID;
 
     private:
         Promotions promotions_;
@@ -116,7 +116,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 5;
+        static const int ID = ICityUnitTactic::FieldAttackUnitTacticID;
 
     private:
         Promotions promotions_;
@@ -132,7 +132,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 6;
+        static const int ID = ICityUnitTactic::BuildCityUnitTacticID;
     };   
 
     struct WorkerUnitValue;
@@ -149,7 +149,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 7;
+        static const int ID = ICityUnitTactic::BuildImprovementsUnitTacticID;
 
     private:
         void applyBuilds_(WorkerUnitValue& unitValue, IDInfo city, const std::vector<PlotImprovementData>& improvements, 
@@ -171,7 +171,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 8;
+        static const int ID = ICityUnitTactic::SeaAttackUnitTacticID;
 
     private:
         Promotions promotions_;
@@ -189,10 +189,28 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 9;
+        static const int ID = ICityUnitTactic::ScoutUnitTacticID;
 
     private:
         Promotions promotions_;
+    };
+
+    class SpreadReligionUnitTactic : public ICityUnitTactic
+    {
+    public:
+        SpreadReligionUnitTactic() {}
+        SpreadReligionUnitTactic(const std::vector<std::pair<ReligionTypes, int> >& religionSpreads);
+
+        virtual void debug(std::ostream& os) const;
+        virtual void apply(const CityUnitTacticsPtr& pCityUnitTactics, TacticSelectionData& selectionData);
+        virtual std::vector<XYCoords> getPossibleTargets(Player& player, IDInfo city);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = ICityUnitTactic::SpreadReligionUnitTacticID;
+    private:
+        std::vector<std::pair<ReligionTypes, int> > religionSpreads_;
     };
 
     // specialist tactics:
@@ -208,13 +226,13 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int ID = IBuiltUnitTactic::DiscoverTechUnitTacticID;
     };
 
     class BuildSpecialBuildingUnitTactic : public IBuiltUnitTactic
     {
     public:
-        BuildSpecialBuildingUnitTactic() {}
+        BuildSpecialBuildingUnitTactic() : buildingType_(NO_BUILDING) {}
         explicit BuildSpecialBuildingUnitTactic(BuildingTypes buildingType);
 
         virtual void debug(std::ostream& os) const;
@@ -223,7 +241,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 1;
+        static const int ID = IBuiltUnitTactic::BuildSpecialBuildingUnitTacticID;
 
     private:
         BuildingTypes buildingType_;
@@ -240,7 +258,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 2;
+        static const int ID = IBuiltUnitTactic::CreateGreatWorkUnitTacticID;
     };
 
     class TradeMissionUnitTactic : public IBuiltUnitTactic
@@ -254,13 +272,13 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 3;
+        static const int ID = IBuiltUnitTactic::TradeMissionUnitTacticID;
     };
 
     class JoinCityUnitTactic : public IBuiltUnitTactic
     {
     public:
-        JoinCityUnitTactic() {}
+        JoinCityUnitTactic() : specType_(NO_SPECIALIST) {}
         explicit JoinCityUnitTactic(SpecialistTypes specType);
 
         virtual void debug(std::ostream& os) const;
@@ -269,7 +287,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 4;
+        static const int ID = IBuiltUnitTactic::JoinCityUnitTacticID;
     private:
         SpecialistTypes specType_;
     };
@@ -277,7 +295,7 @@ namespace AltAI
     class HurryBuildingUnitTactic : public IBuiltUnitTactic
     {
     public:
-        HurryBuildingUnitTactic() {}
+        HurryBuildingUnitTactic() : baseHurry_(0), multiplier_(0) {}
         HurryBuildingUnitTactic(int baseHurry, int multiplier);
 
         virtual void debug(std::ostream& os) const;
@@ -286,8 +304,10 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 5;
+        static const int ID = IBuiltUnitTactic::HurryBuildingUnitTacticID;
     private:
         int baseHurry_, multiplier_;
     };
+
+    
 }

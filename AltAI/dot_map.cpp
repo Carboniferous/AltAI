@@ -72,7 +72,7 @@ namespace AltAI
         return ci != plotDataSet.end() ? *ci : DotMapPlotData();
     }
 
-    PlotYield DotMapItem::DotMapPlotData::getProjectedPlotYield(const Player& player, const int timeHorizon) const
+    PlotYield DotMapItem::DotMapPlotData::getProjectedPlotYield(const CvPlayer& player, const int timeHorizon) const
     {
         if (workedImprovement == -1)
         {
@@ -85,7 +85,7 @@ namespace AltAI
                 (ImprovementTypes)gGlobals.getImprovementInfo(possibleImprovements[workedImprovement].second).getImprovementUpgrade() != NO_IMPROVEMENT)
             {
                 ImprovementTypes currentImpType = possibleImprovements[workedImprovement].second, nextImpType = NO_IMPROVEMENT;
-                const int upgradeRate = player.getCvPlayer()->getImprovementUpgradeRate();
+                const int upgradeRate = player.getImprovementUpgradeRate();
                 int remainingTurns = timeHorizon;
                 // upgrade time > 0 means we can upgrade
                 int upgradeTime = gGlobals.getGame().getImprovementUpgradeTime(currentImpType);
@@ -144,7 +144,7 @@ namespace AltAI
 
     DotMapItem::DotMapItem(XYCoords coords_, PlotYield cityPlotYield_, bool isFreshWater_, BonusTypes bonusType)
         : coords(coords_), cityPlotYield(cityPlotYield_), isFreshWater(isFreshWater_), numDeadLockedBonuses(0), 
-          areaID(-1), subAreaID(-1), selectedPlots(makePlotSet()), projectedTurns(-1)
+          areaID(-1), subAreaID(-1), selectedPlots(makePlotSet()), positiveFoodTotal(0), projectedTurns(-1)
     {
         if (bonusType != NO_BONUS)
         {
@@ -156,7 +156,7 @@ namespace AltAI
     {
         selectedPlots.clear();
         selectedPlots.insert(plotDataSet.begin(), plotDataSet.end());
-        projectedYield = getUsablePlots(player, selectedPlots, baseHealthyPop, lookAheadTurns, debug);
+        boost::tie(projectedYield, positiveFoodTotal) = getUsablePlots(player, selectedPlots, baseHealthyPop, lookAheadTurns, debug);
         projectedTurns = lookAheadTurns;
     }
 
@@ -261,7 +261,7 @@ namespace AltAI
         return baseFeatureHealth / 100;
     }
 
-    std::vector<int> DotMapItem::getGrowthRates(const CvPlayer& player, size_t maxPop, int baseHealthyPop, int cultureLevel)
+    std::vector<int> DotMapItem::getGrowthRates(const CvPlayer& player, size_t maxPop, int baseHealthyPop, int cultureLevel) const
     {
         std::vector<int> growthTurns(1, 1);
         static const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
@@ -323,7 +323,45 @@ namespace AltAI
         return growthTurns;
     }
 
-    void DotMapItem::debugOutputs(const Player& player, std::ostream& os) const
+    std::pair<int, int> DotMapItem::calculateGrowthRateData(const CvPlayer& player, XYCoords coords, int baseHealthyPop, const int timeHorizon) const
+    {
+        std::vector<int> firstRingGrowthTurns = getGrowthRates(player, plotDataSet.size(), baseHealthyPop, 1), 
+            secondRingGrowthTurns = getGrowthRates(player, plotDataSet.size(), baseHealthyPop, 2);
+
+        int firstRingValue = 0, secondRingValue = 0;
+        for (size_t i = 0, count = firstRingGrowthTurns.size(); i < count; ++i)
+        {
+            firstRingValue += (i + 1) * std::max<int>(0, timeHorizon - firstRingGrowthTurns[i]);
+        }
+        for (size_t i = 0, count = secondRingGrowthTurns.size(); i < count; ++i)
+        {
+            secondRingValue += (i + 1) * std::max<int>(0, timeHorizon - secondRingGrowthTurns[i]);
+        }
+
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(player)->getStream();
+        os << "\nDotmap for: " << coords;
+        debugOutputs(player, os);
+        os << "\n\tgrowth at turns: (c1)";
+        for (size_t i = 0, count = firstRingGrowthTurns.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            os << firstRingGrowthTurns[i];
+        }
+        os << "\n\tgrowth at turns: (c2)";
+        for (size_t i = 0, count = secondRingGrowthTurns.size(); i < count; ++i)
+        {
+            if (i > 0) os << ", ";
+            os << secondRingGrowthTurns[i];
+        }
+        os << "\ngrowth rate values = " << firstRingValue << ", " << secondRingValue;
+#endif
+
+
+        return std::make_pair(firstRingValue, secondRingValue);
+    }
+
+    void DotMapItem::debugOutputs(const CvPlayer& player, std::ostream& os) const
     {
 #ifdef ALTAI_DEBUG
         int surplusFood = cityPlotYield[YIELD_FOOD];
@@ -331,12 +369,16 @@ namespace AltAI
 
         size_t pop = 0, consumedWorkerCount = 0, improvablePlotCount = 0;
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
-        int currentFood = 0, foodRate = cityPlotYield[YIELD_FOOD], remainingTurns = projectedTurns;
-
+        int currentFood = 0, foodRate = cityPlotYield[YIELD_FOOD], remainingTurns = projectedTurns, positiveFoodTotal = 0;
+        
         for (SortedPlots::const_iterator it(selectedPlots.begin()), itEnd(selectedPlots.end()); it != itEnd; ++it)
         {
             PlotYield thisYield = it->getPlotYield();
             surplusFood += thisYield[YIELD_FOOD] - foodPerPop;
+            // want to weight strongly positive food outputs - add surplus, with extra +1 for each food per pop matched (i.e. every two extra)
+            // e.g. 5 food, with foodPerPop = 2: ((1 + 2) * max(0, 5 - 2)) / 2 = (3 * 3) / 2 = 4
+            // yield, result {0 : 0, 1 : 0, 2 : 0, 3 : 1, 4 : 3, 5 : 4, 6 : 6, 7 : 7}
+            positiveFoodTotal += ((1 + foodPerPop) * (std::max<int>(0, thisYield[YIELD_FOOD] - foodPerPop))) / foodPerPop;
             totalYield += thisYield;
             totalConditionalYield += it->conditionalYield;
 
@@ -409,7 +451,7 @@ namespace AltAI
                 break;
             }
 
-            int growthThreshold = player.getCvPlayer()->getGrowthThreshold(pop);
+            int growthThreshold = player.getGrowthThreshold(pop);
             int growthRate = (growthThreshold - currentFood) / foodRate;
             int growthDelta = (growthThreshold - currentFood) % foodRate;            
             int turnsToGrowth = growthRate + (growthDelta ? 1 : 0);
@@ -423,7 +465,7 @@ namespace AltAI
         }
         os << "\n\ttotal yield = " << totalYield;
         if (totalYield != totalProjectedYield) os << ", total projected yield = " << totalProjectedYield;
-        os << " improvable plots = " << improvablePlotCount;
+        os << " improvable plots = " << improvablePlotCount << " +ve food yield = " << positiveFoodTotal;
         if (!requiredAdditionalYieldBuildings.empty())
         {
             os << "\n\trequired buildings: ";
@@ -442,7 +484,7 @@ namespace AltAI
 #endif
     }
 
-    void DotMapItem::getBuildTimesData(DotMapItem::BuildTimesData& impBuildData, PlayerTypes playerType, int cultureLevel, int baseHealthyPop)
+    void DotMapItem::getBuildTimesData(DotMapItem::BuildTimesData& impBuildData, PlayerTypes playerType, int cultureLevel, int baseHealthyPop) const
     {
         const Player& player = *gGlobals.getGame().getAltAI()->getPlayer(playerType);
 
@@ -486,7 +528,7 @@ namespace AltAI
         }
     }
 
-    PlotYield DotMapItem::getUsablePlots(const Player& player, SortedPlots& sortedPlots, int baseHealthyPop, int lookAheadTurns, bool debug)
+    std::pair<PlotYield, int> DotMapItem::getUsablePlots(const Player& player, SortedPlots& sortedPlots, int baseHealthyPop, int lookAheadTurns, bool debug) const
     {
         //bool doBreak = coords == XYCoords(48, 14);
 #ifdef ALTAI_DEBUG
@@ -498,6 +540,7 @@ namespace AltAI
         int currentFood = 0;
         int lostFood = 0;
         int foodRate = cityPlotYield[YIELD_FOOD], remainingTurns = lookAheadTurns;
+        int positiveFoodTotal = 0;
         
         const int foodPerPop = gGlobals.getFOOD_CONSUMPTION_PER_POPULATION();
 
@@ -514,11 +557,12 @@ namespace AltAI
             }
             foodRate += pi->getPlotYield()[YIELD_FOOD];
             foodRate -= foodPerPop;
+            positiveFoodTotal += ((1 + foodPerPop) * (std::max<int>(0, pi->getPlotYield()[YIELD_FOOD] - foodPerPop))) / foodPerPop;
 
             ++pop;
             lostFood = std::max<int>(0, pop - baseHealthyPop);
 
-            PlotYield projectedYield = pi->getProjectedPlotYield(player, remainingTurns);
+            PlotYield projectedYield = pi->getProjectedPlotYield(*player.getCvPlayer(), remainingTurns);
             totalYield += projectedYield;
 
 #ifdef ALTAI_DEBUG            
@@ -560,6 +604,6 @@ namespace AltAI
 #ifdef ALTAI_DEBUG
         os << "\n\tfinal pop = " << pop << ", final yield = " << totalYield;
 #endif
-        return totalYield;
+        return std::make_pair(totalYield, positiveFoodTotal);
     }
 }

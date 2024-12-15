@@ -193,14 +193,15 @@ namespace AltAI
 
         const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
 
-        if (estimatedTurns >= 0)
+        //if (estimatedTurns >= 0)
+        if (!ladder.buildings.empty())  // should have a comparison ladder
         {
             CultureBuildingValue cultureValue;
 
             cultureValue.buildingType = pCityBuildingTactics->getBuildingType();
             cultureValue.city = pCityBuildingTactics->getCity();
             cultureValue.output = ladder.getOutput() - city.getBaseOutputProjection().getOutput();
-            cultureValue.nTurns = estimatedTurns;
+            cultureValue.nTurns = ladder.buildings[0].first; // estimatedTurns;
 
             bool needCulture = pCity->getCultureLevel() == 1 && pCity->getCommerceRate(COMMERCE_CULTURE) == 0;
             bool culturePressure = pCityData->getNumUncontrolledPlots(true) > 0;
@@ -591,6 +592,36 @@ namespace AltAI
     }
 
     void FreeTechBuildingTactic::read(FDataStreamBase* pStream)
+    {
+    }
+
+
+    void CanTrainUnitBuildingTactic::apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData)
+    {
+        const ProjectionLadder& ladder = pCityBuildingTactics->getProjection();
+        if (ladder.buildings.empty())
+        {
+            return;
+        }
+
+        selectionData.enabledUnits.insert(enabledUnitType_);
+    }
+
+    void CanTrainUnitBuildingTactic::debug(std::ostream& os) const
+    {
+#ifdef ALTAI_DEBUG
+        os << "\n\tCan train unit: ";
+        if (enabledUnitType_!= NO_UNIT) os << gGlobals.getUnitInfo(enabledUnitType_).getType();
+        else os << " none? ";
+#endif
+    }
+
+    void CanTrainUnitBuildingTactic::write(FDataStreamBase* pStream) const
+    {
+        pStream->Write(ID);
+    }
+
+    void CanTrainUnitBuildingTactic::read(FDataStreamBase* pStream)
     {
     }
 

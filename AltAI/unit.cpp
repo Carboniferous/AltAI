@@ -398,7 +398,7 @@ namespace AltAI
         }
     }
 
-    Unit::Unit(CvUnitAI* pUnit) : pUnit_(pUnit), unitHistory_(pUnit)
+    Unit::Unit(CvUnitAI* pUnit) : pUnit_(pUnit)
     {
     }
 
@@ -428,10 +428,19 @@ namespace AltAI
         }
         else if (missionType == MISSION_MOVE_TO)
         {
-            UnitPathData unitPathData;
-            // todo - add flags if have escort
-            unitPathData.calculate(pUnit_->getGroup(), pTargetPlot, iFlags);
-            thisMissionLength = unitPathData.pathTurns;
+            if (stepDistance(pTargetPlot->getX(), pTargetPlot->getY(), startCoords.iX, startCoords.iY) <= 1)
+            {
+                thisMissionLength = 1;
+            }
+            else
+            {
+                // todo - add flags if have escort
+                UnitPathData unitPathData;
+                unitPathData.calculate(pUnit_->getGroup(), pTargetPlot, iFlags);
+                // try and pick out the steps from startCoords
+                int length = unitPathData.getLengthToEndFrom(startCoords);
+                thisMissionLength = length == -1 ? unitPathData.pathTurns : length;
+            }
         }
         else if (missionType == MISSION_BUILD)
         {
@@ -621,14 +630,14 @@ namespace AltAI
     }
 
     Unit::WorkerMission::WorkerMission() :
-        targetCoords(-1, -1), missionType(NO_MISSION), buildType(NO_BUILD), iFlags(0), length(-1), startCoords(-1, -1)
+        targetCoords(), missionType(NO_MISSION), buildType(NO_BUILD), iFlags(0), length(-1), startCoords()
     {
     }
 
     Unit::WorkerMission::WorkerMission(const CvUnitAI* pUnit)
         : unit(pUnit->getIDInfo()), 
-          targetCoords(-1, -1), 
-          missionType(NO_MISSION), buildType(NO_BUILD), iFlags(0), length(-1), startCoords(-1, -1)
+          targetCoords(), 
+          missionType(NO_MISSION), buildType(NO_BUILD), iFlags(0), length(-1), startCoords()
     {
     }
 
@@ -860,9 +869,10 @@ namespace AltAI
             }
             else if (missionType == MISSION_ROUTE_TO)
             {
-                UnitPathData unitPathData;
-                unitPathData.calculate(pUnit->getGroup(), pTargetPlot, iFlags);
-                length = unitPathData.pathTurns; // calculateRouteToMissionLength(pUnit, pUnit->plot(), pTargetPlot, (RouteTypes)gGlobals.getBuildInfo(buildType).getRoute());
+                //UnitPathData unitPathData;
+                //unitPathData.calculate(pUnit->getGroup(), pTargetPlot, iFlags);
+                //length = unitPathData.pathTurns; // calculateRouteToMissionLength(pUnit, pUnit->plot(), pTargetPlot, (RouteTypes)gGlobals.getBuildInfo(buildType).getRoute());
+                length = calculateRouteToMissionLength(pUnit, pUnit->plot(), pTargetPlot, (RouteTypes)gGlobals.getBuildInfo(buildType).getRoute());
             }
             else if (missionType == MISSION_MOVE_TO)
             {
@@ -879,8 +889,16 @@ namespace AltAI
         const CvCity* pTargetCity = ::getCity(city);
 
         os << "\n\t WorkerMission: unit: " << unit << " city = " << (pTargetCity ? narrow(pTargetCity->getName()) : "none")
-           << " target = " << targetCoords << " mission = " << narrow(missionTypeString)
-           << " build = " << (buildType == NO_BUILD ? "none" : gGlobals.getBuildInfo(buildType).getType()) << " mission length = " << length;
+           << " target = " << targetCoords << " mission = " << narrow(missionTypeString);
+        if (missionType == MISSION_MOVE_TO)
+        {
+            os << " coords = " << targetCoords;
+        }
+        else if (missionType == MISSION_BUILD)
+        {
+            os << " build = " << (buildType == NO_BUILD ? "none" : gGlobals.getBuildInfo(buildType).getType());
+        }
+        os << " mission length = " << length;
     }
 
     void Unit::WorkerMission::write(FDataStreamBase* pStream) const
@@ -924,11 +942,11 @@ namespace AltAI
         {
             if (pUnit->isHasPromotion((PromotionTypes)i))
             {
-                if (!hasPromotions) { hasPromotions = true; os << "("; } else { os << " "; }
+                if (!hasPromotions) { hasPromotions = true; os << "{"; } else { os << " "; }
                 os << gGlobals.getPromotionInfo((PromotionTypes)i).getType();
             }
         }
-        if (hasPromotions) os << ")";
+        if (hasPromotions) os << "}";
     }
 
     void debugUnitVector(std::ostream& os, const std::vector<const CvUnit*>& units)

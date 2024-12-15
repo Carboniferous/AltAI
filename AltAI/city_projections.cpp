@@ -72,15 +72,25 @@ namespace AltAI
                 TotalOutput output = pCityData->getOutput(), processOutput = pCityData->getProcessOutput();
                 output[OUTPUT_FOOD] -= pCityData->getLostFood();
 
+                // round down food and production to a whole number (internally stored to 2dp by dint of being 100* its actual value)
+                // to account for it being applied at a city level each turn - unlike commerce outputs
+                // todo - check if this needs production which goes towards building research or wealth (processOutput is calculated separately here)
+                output[OUTPUT_FOOD] /= 100;  // in the vanilla game there are no yield modifiers which apply to food - so we should always have a multiple of 100 here anyway
+                output[OUTPUT_FOOD] *= 100;
+
+                output[OUTPUT_PRODUCTION] /= 100;
+                output[OUTPUT_PRODUCTION] *= 100;
+
+                // also round current production to multiple of 100 here
                 ladder.entries.push_back(ProjectionLadder::Entry(pCityData->getPopulation(), std::min<int>(nTurns, turnsToFirstEvent),
-                    pCityData->getStoredFood(), pCityData->getCurrentProduction() * std::min<int>(nTurns, turnsToFirstEvent),
+                    pCityData->getStoredFood(), 100 * (pCityData->getCurrentProduction() / 100) * std::min<int>(nTurns, turnsToFirstEvent),
                     output, processOutput, 
                     pCityData->getMaintenanceHelper()->getMaintenance(), pCityData->getGPP()));
 
-                // add in production from hurrying - if not building anything
+                // ?? add in production from hurrying - if not building anything
                 if (constructItem.isEmpty() && pCityData->getAccumulatedProduction() > 0)
                 {
-                    // 100 is from dummy hammer to allow hurry calc to not think hurrying on first turn
+                    // ?? 100 is from dummy hammer to allow hurry calc to not think hurrying on first turn
                     ladder.entries.rbegin()->accumulatedProduction += (pCityData->getAccumulatedProduction() - 100);
                     pCityData->setAccumulatedProduction(0);
                 }
@@ -91,9 +101,84 @@ namespace AltAI
                     if (plotIter->isWorked)
                     {
                         ladder.entries.rbegin()->workedPlots.push_back(*plotIter);
+                    }                    
+                }
+                ladder.entries.rbegin()->workedPlots.sort(PlotDataOrderF());
+
+#ifdef ALTAI_DEBUG
+                if (debug)
+                {
+                    const int ladderSize = ladder.entries.size();
+                    if (ladderSize == 1)  // base line
+                    {
+                        ladder.workedPlotDiffs.push_back(ProjectionLadder::PlotDiffList());
+                        ProjectionLadder::PlotDiffList& plotDiffs = *ladder.workedPlotDiffs.rbegin();
+                        std::vector<ProjectionLadder::Entry>::const_reverse_iterator entryIter = ladder.entries.rbegin();
+
+                        for (PlotDataList::const_iterator currentPlotsIter(entryIter->workedPlots.begin()), currentPlotsEndIter(entryIter->workedPlots.end());
+                            currentPlotsIter != currentPlotsEndIter; ++currentPlotsIter)
+                        {
+                            plotDiffs.push_back(ProjectionLadder::PlotDiff(*currentPlotsIter, true, false));
+                        }
+                    }                
+                    else if (ladderSize > 1) // construct diff of worked 'plots'
+                    {
+                        ladder.workedPlotDiffs.push_back(ProjectionLadder::PlotDiffList());
+                        ProjectionLadder::PlotDiffList& plotDiffs = *ladder.workedPlotDiffs.rbegin();
+
+                        std::vector<ProjectionLadder::Entry>::const_reverse_iterator entryIter = ladder.entries.rbegin();
+                        PlotDataList::const_iterator currentPlotsIter(entryIter->workedPlots.begin()), currentPlotsEndIter(entryIter->workedPlots.end());  // current set of worked plots
+                        ++entryIter;
+                        PlotDataList::const_iterator prevPlotsIter(entryIter->workedPlots.begin()), prevPlotsEndIter(entryIter->workedPlots.end());  // previous set of worked plots
+
+                        for (; currentPlotsIter != currentPlotsEndIter && prevPlotsIter != prevPlotsEndIter;)
+                        {
+                            if (currentPlotsIter->coords != prevPlotsIter->coords)
+                            {
+                                if (currentPlotsIter->coords < prevPlotsIter->coords)
+                                {
+                                    plotDiffs.push_back(ProjectionLadder::PlotDiff(*currentPlotsIter, true, false));
+                                    ++currentPlotsIter;
+                                    continue;
+                                }
+                                else
+                                {
+                                    plotDiffs.push_back(ProjectionLadder::PlotDiff(*prevPlotsIter, false, true));
+                                    ++prevPlotsIter;
+                                    continue;
+                                }
+                            }
+                            else  // // matched coords
+                            {
+                                // but output changed
+                                if (currentPlotsIter->actualOutput != prevPlotsIter->actualOutput)
+                                {
+                                    ProjectionLadder::PlotDiff plotDiff;
+                                    plotDiff.coords = currentPlotsIter->coords;
+                                    plotDiff.improvementType = currentPlotsIter->improvementType;
+                                    plotDiff.plotYield = currentPlotsIter->plotYield - prevPlotsIter->plotYield;
+                                    plotDiff.actualOutput = currentPlotsIter->actualOutput - prevPlotsIter->actualOutput;
+                                    plotDiff.isWorked = plotDiff.wasWorked = true;
+                                    plotDiffs.push_back(plotDiff);
+                                }
+                            }
+                        
+                            ++currentPlotsIter;
+                            ++prevPlotsIter;
+                        }
+
+                        for (; currentPlotsIter != currentPlotsEndIter; ++currentPlotsIter)
+                        {
+                            plotDiffs.push_back(ProjectionLadder::PlotDiff(*currentPlotsIter, true, false));
+                        }
+
+                        for (; prevPlotsIter != prevPlotsEndIter; ++prevPlotsIter)
+                        {
+                            plotDiffs.push_back(ProjectionLadder::PlotDiff(*prevPlotsIter, false, true));
+                        }
                     }
                 }
-
+#endif
                 /*for (size_t hurryIndex = 0, hurryCount = gGlobals.getNumHurryInfos(); hurryIndex < hurryCount; ++hurryIndex)
                 {
                     if (player.getCvPlayer()->canHurry((HurryTypes)hurryIndex))

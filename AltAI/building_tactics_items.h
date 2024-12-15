@@ -14,7 +14,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 0;
+        static const int ID = ICityBuildingTactic::EconomicBuildingTacticID;
     };
 
     class FoodBuildingTactic : public ICityBuildingTactic
@@ -26,7 +26,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 1;
+        static const int ID = ICityBuildingTactic::FoodBuildingTacticID;
     };
 
     class HappyBuildingTactic : public ICityBuildingTactic
@@ -38,7 +38,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 2;
+        static const int ID = ICityBuildingTactic::HappyBuildingTacticID;
     };
 
     class HealthBuildingTactic : public ICityBuildingTactic
@@ -50,7 +50,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 3;
+        static const int ID = ICityBuildingTactic::HealthBuildingTacticID;
     };
 
     class ScienceBuildingTactic : public ICityBuildingTactic
@@ -62,7 +62,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 4;
+        static const int ID = ICityBuildingTactic::ScienceBuildingTacticID;
     };
 
     class GoldBuildingTactic : public ICityBuildingTactic
@@ -74,7 +74,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 5;
+        static const int ID = ICityBuildingTactic::GoldBuildingTacticID;
     };
 
     class CultureBuildingTactic : public ICityBuildingTactic
@@ -91,7 +91,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 6;
+        static const int ID = ICityBuildingTactic::CultureBuildingTacticID;
         int baseCommerce, baseGlobalCommerce;
     };
 
@@ -104,7 +104,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 7;
+        static const int ID = ICityBuildingTactic::EspionageBuildingTacticID;
     };
 
     class SpecialistBuildingTactic : public ICityBuildingTactic
@@ -116,7 +116,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 8;
+        static const int ID = ICityBuildingTactic::SpecialistBuildingTacticID;
     };
 
     class GovCenterTactic : public ICityBuildingTactic
@@ -130,7 +130,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 9;
+        static const int ID = ICityBuildingTactic::GovCenterTacticID;
 
     private:
         bool isNewCenter_;
@@ -151,7 +151,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 10;
+        static const int ID = ICityBuildingTactic::UnitExperienceTacticID;
 
     private:
         int freeExperience, globalFreeExperience;
@@ -175,7 +175,7 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 11;
+        static const int ID = ICityBuildingTactic::CityDefenceBuildingTacticID;
 
     private:
         int cityDefence, globalCityDefence, bombardDefence;
@@ -192,6 +192,24 @@ namespace AltAI
         virtual void write(FDataStreamBase* pStream) const;
         virtual void read(FDataStreamBase* pStream);
 
-        static const int ID = 12;
+        static const int ID = ICityBuildingTactic::FreeTechBuildingTacticID;
+    };
+
+    class CanTrainUnitBuildingTactic : public ICityBuildingTactic
+    {
+    public:
+        CanTrainUnitBuildingTactic() : enabledUnitType_(NO_UNIT) {}
+        explicit CanTrainUnitBuildingTactic(UnitTypes enabledUnitType) : enabledUnitType_(enabledUnitType) {}
+
+        virtual void debug(std::ostream& os) const;
+        virtual void apply(const ICityBuildingTacticsPtr& pCityBuildingTactics, TacticSelectionData& selectionData);
+
+        virtual void write(FDataStreamBase* pStream) const;
+        virtual void read(FDataStreamBase* pStream);
+
+        static const int ID = ICityBuildingTactic::CanTrainUnitBuildingTacticID;
+
+    private:
+        UnitTypes enabledUnitType_;
     };
 }

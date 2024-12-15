@@ -32,6 +32,8 @@ namespace AltAI
                 // since the town has a -ve value for remaining turns, its potential value is ignored for the purpose of choosing the improvment (until at least 14 turns have passed of being worked)
                 // after four turns the first entry becomes {IMPROVEMENT_HAMLET, 50, (0, 0, 1)}, so upgrades and is removed from the list
                 // todo - call remainingTurns something more logical, or better make it count down not up!
+                // todo - maybe just store whole time for upgrades beyond current improvement so we don't have to iterate over the whole list each turn
+                // todo - also deal with civic change affecting upgrade rate
                 Upgrade() : improvementType(NO_IMPROVEMENT), remainingTurns(-MAX_INT) {}
                 Upgrade(ImprovementTypes improvementType_, int remainingTurns_, PlotYield extraYield_) :
                     improvementType(improvementType_), remainingTurns(remainingTurns_), extraYield(extraYield_) {}
@@ -167,6 +169,14 @@ namespace AltAI
         }
 
         const XYCoords coords;
+    };
+
+    struct PlotDataOrderF
+    {
+        bool operator() (const PlotData& first, const PlotData& second) const
+        {
+            return first.coords < second.coords;
+        }
     };
 
     std::ostream& operator << (std::ostream& os, const GreatPersonOutput& output);

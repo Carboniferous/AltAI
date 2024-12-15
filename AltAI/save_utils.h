@@ -15,6 +15,18 @@ namespace AltAI
         }
     }
 
+    template <typename T, typename U>
+        void writePairVector(FDataStreamBase* pStream, const std::vector<std::pair<T, U> >& v)
+    {
+        const size_t size = v.size();
+        pStream->Write(size);
+        for (size_t i = 0; i < size; ++i)
+        {
+            pStream->Write(v[i].first);
+            pStream->Write(v[i].second);
+        }
+    }
+
     template <typename T>
         void writeComplexVector(FDataStreamBase* pStream, const std::vector<T>& v)
     {
@@ -47,6 +59,23 @@ namespace AltAI
             T value;
             pStream->Read((C*)&value);
             v.push_back(value);
+        }
+    }
+
+    template <typename T, typename U, typename C>
+        void readPairVector(FDataStreamBase* pStream, std::vector<std::pair<T, U> >& v)
+    {
+        size_t size;
+        pStream->Read(&size);
+        v.clear();
+
+        for (size_t i = 0; i < size; ++i)
+        {
+            T first;
+            pStream->Read((C*)&first);
+            U second;
+            pStream->Read(&second);
+            v.push_back(std::make_pair(first, second));
         }
     }
 

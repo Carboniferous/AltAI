@@ -2,7 +2,7 @@
 
 #include "./civic_tactics_visitors.h"
 #include "./civic_info.h"
-#include "./civic_tactics.h"
+#include "./civic_tactics_items.h"
 #include "./building_tactics_deps.h"
 #include "./player.h"
 
@@ -127,8 +127,8 @@ namespace AltAI
             if (node.happyPerUnit > 0)
             {
                 isEconomic_ = true;
+                tacticsItems_.push_back(ICivicTacticPtr(new HappyPoliceCivicTactic(node.happyPerUnit)));
             }
-            // todo: node.happyPerUnit
         }
 
         void operator() (const CivicInfo::MiscEffectNode& node)

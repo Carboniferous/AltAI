@@ -104,7 +104,6 @@ namespace AltAI
             std::vector<RequiredUnitStack::UnitDataChoices> requiredUnits;
 
             DependencyItemSet di;
-            di.insert(DependencyItem(-1, -1));
             TacticSelectionData& currentSelectionData = player_.getAnalysis()->getPlayerTactics()->tacticSelectionDataMap[di];
 
             std::map<int, std::set<UnitTypes>, std::greater<int> > unitValuesMap;

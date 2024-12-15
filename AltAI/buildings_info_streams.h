@@ -15,6 +15,7 @@ namespace AltAI
     std::ostream& operator << (std::ostream& os, const BuildingInfo::TradeNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::PowerNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::UnitExpNode& node);
+    std::ostream& operator << (std::ostream& os, const BuildingInfo::UnitNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::SpecialistSlotNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::BonusNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::CityDefenceNode& node);
@@ -22,4 +23,6 @@ namespace AltAI
     std::ostream& operator << (std::ostream& os, const BuildingInfo::ReligionNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::HurryNode& node);
     std::ostream& operator << (std::ostream& os, const BuildingInfo::MiscEffectNode& node);
+
+    void streamBuildingInfo(std::ostream& os, const boost::shared_ptr<BuildingInfo>& pBuildingInfo);
 }

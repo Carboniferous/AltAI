@@ -10,6 +10,7 @@
 #include "./game.h"
 #include "./gamedata_analysis.h"
 #include "./player_analysis.h"
+#include "./religion_tactics.h"
 #include "./map_analysis.h"
 #include "./city_simulator.h"
 #include "./plot_info_visitors.h"
@@ -79,6 +80,12 @@ namespace AltAI
         {
             calcImprovements();
         }
+    }
+
+    void City::setHasReligion(ReligionTypes religionIndex, bool newValue)
+    {
+        player_.getAnalysis()->getReligionAnalysis()->addReligion(pCity_, religionIndex, newValue);
+        player_.getAnalysis()->getPlayerTactics()->updateCityUnitTactics(*this, religionIndex);
     }
 
     void City::setFlag(int flags)
@@ -514,6 +521,12 @@ namespace AltAI
         pBaseProjectionCityData_ = pCityData->clone();
         baseOutputProjection_ = getProjectedOutput(*player, pBaseProjectionCityData_, numSimTurns, events, ConstructItem(), __FUNCTION__, false, true);
 
+#ifdef ALTAI_DEBUG
+        std::ostream& os = CivLog::getLog(*player->getCvPlayer())->getStream();
+        os << "\n" << __FUNCTION__ << " for city: " << safeGetCityName(pCity_);
+        os << " current = " << currentOutputProjection_.getOutput() << ", base = " << baseOutputProjection_.getOutput();
+#endif
+
         flags_ &= ~NeedsProjectionCalcs;
     }
 
@@ -576,6 +589,11 @@ namespace AltAI
     int City::getID() const
     {
         return pCity_->getID();
+    }
+
+    IDInfo City::getIDInfo() const
+    {
+        return pCity_->getIDInfo();
     }
 
     XYCoords City::getCoords() const
@@ -948,7 +966,7 @@ namespace AltAI
                         os << "\n" << narrow(pCity_->getName()) << " Checking for irrigation path from: " << coords << " to: " << buildCoords;
                     }
 #endif
-                    if (buildCoords != XYCoords(-1, -1))  // found an irrigation source
+                    if (!isEmpty(buildCoords))  // found an irrigation source
                     {
                         pPlot = gGlobals.getMap().plot(buildCoords.iX, buildCoords.iY);
                         if (!CvPlayerAI::getPlayer(pCity_->getOwner()).AI_getPlotDanger(pPlot, 2))
@@ -1459,7 +1477,7 @@ namespace AltAI
 
                 std::pair<XYCoords, BuildTypes> coordsAndBuildType = getImprovementBuildOrder_(coords, improvements[i].improvement);
 
-                if (coordsAndBuildType.first != XYCoords(-1, -1))
+                if (!isEmpty(coordsAndBuildType.first))
                 {
                     CvPlot* pBuildPlot = gGlobals.getMap().plot(coordsAndBuildType.first.iX, coordsAndBuildType.first.iY);
 #ifdef ALTAI_DEBUG
@@ -1527,6 +1545,28 @@ namespace AltAI
     int City::getNumWorkersTargetingPlot(XYCoords targetCoords) const
     {
         return player_.getNumWorkersTargetingPlot(targetCoords);
+    }
+
+    std::vector<int> City::getAccessibleSubAreas(bool isWater) const
+    {
+        std::vector<int> subAreas;
+        NeighbourPlotIter plotIter(pCity_->plot());
+
+        while (IterPlot pLoopPlot = plotIter())
+        {
+            if (pLoopPlot.valid())
+            {
+                bool plotIsWater = pLoopPlot->isWater();
+                if (isWater == plotIsWater)
+                {
+                    if (std::find(subAreas.begin(), subAreas.end(), pLoopPlot->getSubArea()) == subAreas.end())
+                    {
+                        subAreas.push_back(pLoopPlot->getSubArea());
+                    }
+                }
+            }
+        }
+        return subAreas;
     }
 
     TotalOutput City::getMaxOutputs() const
